@@ -22,7 +22,10 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+    "paths": {
+      "@enhance-kit": ["./src/enhance-kit.tsx"]
+    }
   },
   "include": ["src", "../**/*.tsx", "../**/*.ts"],
   "exclude": ["../learn-dashboard"]

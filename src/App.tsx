@@ -1,17 +1,55 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import CodeMirror from '@uiw/react-codemirror'
+import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
+import { EditorView } from '@codemirror/view'
 import mermaid from 'mermaid'
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
 import {
   BookOpen, ChevronRight, FileText, FolderOpen,
   Search, Save, Plus, FolderPlus, Eye, Code2,
   Columns2, Layers, Minus, ZoomIn, ZoomOut, Maximize2,
-  Moon, Sun
+  Moon, Sun, Pencil, Trash2, FolderInput, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react'
 import './index.css'
+
+// Slug & TOC helpers
+function slugify(text: string): string {
+  return text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-')
+}
+
+function textContent(node: React.ReactNode): string {
+  if (!node) return ''
+  if (typeof node === 'string') return node
+  if (typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(textContent).join('')
+  if (typeof node === 'object' && 'props' in node) return textContent((node as any).props.children)
+  return ''
+}
+
+interface TocItem { level: number; text: string; id: string }
+
+function extractToc(md: string): TocItem[] {
+  const cleaned = md.replace(/```[\s\S]*?```/g, '')
+  const items: TocItem[] = []
+  const regex = /^(#{1,4})\s+(.+)$/gm
+  let match
+  while ((match = regex.exec(cleaned)) !== null) {
+    const text = match[2].trim()
+    items.push({ level: match[1].length, text, id: slugify(text) })
+  }
+  return items
+}
+
+function findHeadingLine(md: string, headingId: string): number {
+  const lines = md.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(/^#{1,4}\s+(.+)$/)
+    if (match && slugify(match[1].trim()) === headingId) return i + 1
+  }
+  return 1
+}
 
 // Types
 interface TreeNode {
@@ -22,7 +60,6 @@ interface TreeNode {
 }
 
 interface EnhancerModule {
-  default?: React.ComponentType<{ children: React.ReactNode }>
   widgets?: Record<string, React.FC>
 }
 
@@ -40,12 +77,14 @@ function useEnhancer(filePath: string) {
     const enhancerPath = `../../${filePath.replace(/\.md$/, '.tsx')}`
     const loader = enhancerModules[enhancerPath]
 
-    if (!loader) {
-      setEnhancer(null)
-      return
+    if (loader) {
+      loader().then(mod => setEnhancer(mod)).catch(() => setEnhancer(null))
+    } else {
+      // Fallback: dynamic import for renamed/moved files not yet in the glob map
+      import(/* @vite-ignore */ enhancerPath)
+        .then(mod => setEnhancer(mod))
+        .catch(() => setEnhancer(null))
     }
-
-    loader().then(mod => setEnhancer(mod)).catch(() => setEnhancer(null))
   }, [filePath])
 
   return enhancer
@@ -227,9 +266,28 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path })
     }).then(r => r.json()),
+  rename: (path: string, newName: string) =>
+    fetch('/api/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, newName })
+    }).then(r => r.json()),
+  del: (path: string) =>
+    fetch('/api/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path })
+    }).then(r => r.json()),
+  move: (from: string, to: string) =>
+    fetch('/api/move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to })
+    }).then(r => r.json()),
 }
 
 function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('learn-sidebar') !== 'closed')
   const [tree, setTree] = useState<TreeNode[]>([])
   const [activeFile, setActiveFile] = useState<string | null>(null)
   const [content, setContent] = useState('')
@@ -245,9 +303,54 @@ function App() {
     return saved ? Number(saved) : 16
   })
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('learn-theme') === 'dark')
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: TreeNode } | null>(null)
+  const [renameModal, setRenameModal] = useState<TreeNode | null>(null)
+  const [deleteModal, setDeleteModal] = useState<TreeNode | null>(null)
+  const [moveModal, setMoveModal] = useState<TreeNode | null>(null)
+  const [renameInput, setRenameInput] = useState('')
+  const [moveTarget, setMoveTarget] = useState('')
+  const [activeHeading, setActiveHeading] = useState<string | null>(null)
+  const editorRef = useRef<ReactCodeMirrorRef>(null)
+  const toc = useMemo(() => extractToc(content), [content])
+
+  // Switch view with scroll sync (preview → edit)
+  const switchView = useCallback((newView: 'preview' | 'edit' | 'split') => {
+    const wasPreview = view === 'preview'
+    setView(newView)
+    if (wasPreview && (newView === 'edit' || newView === 'split') && activeHeading) {
+      const headingId = activeHeading
+      setTimeout(() => {
+        const ev = editorRef.current?.view
+        if (!ev) return
+        const lineNum = findHeadingLine(content, headingId)
+        if (lineNum > 0) {
+          const pos = ev.state.doc.line(lineNum).from
+          ev.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: 20 }) })
+        }
+      }, 50)
+    }
+  }, [view, activeHeading, content])
+
+  // TOC click handler
+  const handleTocClick = useCallback((id: string) => {
+    const el = document.getElementById(id)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (view === 'edit' || view === 'split') {
+      const ev = editorRef.current?.view
+      if (ev) {
+        const lineNum = findHeadingLine(content, id)
+        if (lineNum > 0) {
+          const pos = ev.state.doc.line(lineNum).from
+          ev.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: 20 }) })
+        }
+      }
+    }
+  }, [view, content])
+
+  // Synchronous: children see correct data-theme (and CSS vars) during their render.
+  document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
     localStorage.setItem('learn-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
 
@@ -327,6 +430,85 @@ function App() {
     setModalInput('')
   }
 
+  // Context menu handler
+  const handleContextMenu = useCallback((e: React.MouseEvent, node: TreeNode) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ x: e.clientX, y: e.clientY, node })
+  }, [])
+
+  // Dismiss context menu on click or escape
+  useEffect(() => {
+    if (!contextMenu) return
+    const dismiss = () => setContextMenu(null)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') dismiss() }
+    window.addEventListener('click', dismiss)
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('click', dismiss); window.removeEventListener('keydown', onKey) }
+  }, [contextMenu])
+
+  // Rename
+  const handleRename = async () => {
+    if (!renameModal || !renameInput.trim()) return
+    const result = await api.rename(renameModal.path, renameInput)
+    if (result.ok) {
+      if (activeFile === renameModal.path) setActiveFile(result.newPath)
+      else if (activeFile?.startsWith(renameModal.path + '/')) {
+        setActiveFile(activeFile.replace(renameModal.path, result.newPath))
+      }
+      await loadTree()
+      showToast('Renamed')
+    }
+    setRenameModal(null)
+  }
+
+  // Delete
+  const handleDelete = async () => {
+    if (!deleteModal) return
+    const result = await api.del(deleteModal.path)
+    if (result.ok) {
+      if (activeFile === deleteModal.path || activeFile?.startsWith(deleteModal.path + '/')) {
+        setActiveFile(null)
+        setContent('')
+        setSavedContent('')
+      }
+      await loadTree()
+      showToast('Deleted')
+    }
+    setDeleteModal(null)
+  }
+
+  // Move
+  const handleMove = async () => {
+    if (!moveModal) return
+    const result = await api.move(moveModal.path, moveTarget)
+    if (result.ok) {
+      if (activeFile === moveModal.path) setActiveFile(result.newPath)
+      else if (activeFile?.startsWith(moveModal.path + '/')) {
+        setActiveFile(activeFile.replace(moveModal.path, result.newPath))
+      }
+      await loadTree()
+      showToast('Moved')
+    }
+    setMoveModal(null)
+    setMoveTarget('')
+  }
+
+  // Collect all folder paths for the move picker
+  const collectFolders = (nodes: TreeNode[]): { name: string; path: string; depth: number }[] => {
+    const result: { name: string; path: string; depth: number }[] = [{ name: '/ (root)', path: '', depth: 0 }]
+    function walk(items: TreeNode[], depth: number) {
+      for (const n of items) {
+        if (n.type === 'dir') {
+          result.push({ name: n.name, path: n.path, depth })
+          if (n.children) walk(n.children, depth + 1)
+        }
+      }
+    }
+    walk(nodes, 1)
+    return result
+  }
+
   // Filter tree
   const filterTree = (nodes: TreeNode[], query: string): TreeNode[] => {
     if (!query) return nodes
@@ -353,52 +535,71 @@ function App() {
 
   const fileName = activeFile?.split('/').pop() || ''
 
+  const toggleSidebar = () => {
+    setSidebarOpen(prev => {
+      localStorage.setItem('learn-sidebar', prev ? 'closed' : 'open')
+      return !prev
+    })
+  }
+
   return (
-    <div className="app-layout">
+    <div className={`app-layout ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
       {/* Sidebar */}
       <div className="sidebar">
-        <div className="sidebar-header">
-          <div className="sidebar-logo">
-            <Layers size={22} strokeWidth={1.8} />
-            Learn
-          </div>
-          <div className="sidebar-subtitle">Knowledge Base</div>
-        </div>
+        {sidebarOpen ? (
+          <>
+            <div className="sidebar-header">
+              <div className="sidebar-logo">
+                <Layers size={22} strokeWidth={1.8} />
+                Learn
+              </div>
+              <div className="sidebar-subtitle">Knowledge Base</div>
+              <button className="sidebar-collapse-btn" onClick={toggleSidebar} title="Collapse sidebar">
+                <PanelLeftClose size={16} />
+              </button>
+            </div>
 
-        <div className="search-box">
-          <div className="search-wrapper">
-            <Search />
-            <input
-              className="search-input"
-              placeholder="Search files…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-        </div>
+            <div className="search-box">
+              <div className="search-wrapper">
+                <Search />
+                <input
+                  className="search-input"
+                  placeholder="Search files…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                />
+              </div>
+            </div>
 
-        <div className="sidebar-actions">
-          <button className="btn-action" onClick={() => { setModal('file'); setModalInput('') }}>
-            <Plus size={14} /> File
+            <div className="sidebar-actions">
+              <button className="btn-action" onClick={() => { setModal('file'); setModalInput('') }}>
+                <Plus size={14} /> File
+              </button>
+              <button className="btn-action" onClick={() => { setModal('folder'); setModalInput('') }}>
+                <FolderPlus size={14} /> Folder
+              </button>
+            </div>
+
+            <div className="sidebar-tree">
+              {displayTree.map(node => (
+                <TreeItem
+                  key={node.path}
+                  node={node}
+                  activeFile={activeFile}
+                  openFolders={openFolders}
+                  toggleFolder={toggleFolder}
+                  onSelect={openFile}
+                  onContextMenu={handleContextMenu}
+                  depth={0}
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          <button className="sidebar-expand-btn" onClick={toggleSidebar} title="Expand sidebar">
+            <PanelLeftOpen size={16} />
           </button>
-          <button className="btn-action" onClick={() => { setModal('folder'); setModalInput('') }}>
-            <FolderPlus size={14} /> Folder
-          </button>
-        </div>
-
-        <div className="sidebar-tree">
-          {displayTree.map(node => (
-            <TreeItem
-              key={node.path}
-              node={node}
-              activeFile={activeFile}
-              openFolders={openFolders}
-              toggleFolder={toggleFolder}
-              onSelect={openFile}
-              depth={0}
-            />
-          ))}
-        </div>
+        )}
       </div>
 
       {/* Main */}
@@ -406,13 +607,13 @@ function App() {
         {activeFile ? (
           <>
             <div className="tab-bar">
-              <button className={`tab ${view === 'preview' ? 'active' : ''}`} onClick={() => setView('preview')}>
+              <button className={`tab ${view === 'preview' ? 'active' : ''}`} onClick={() => switchView('preview')}>
                 <Eye size={14} /> Preview
               </button>
-              <button className={`tab ${view === 'edit' ? 'active' : ''}`} onClick={() => setView('edit')}>
+              <button className={`tab ${view === 'edit' ? 'active' : ''}`} onClick={() => switchView('edit')}>
                 <Code2 size={14} /> Edit
               </button>
-              <button className={`tab ${view === 'split' ? 'active' : ''}`} onClick={() => setView('split')}>
+              <button className={`tab ${view === 'split' ? 'active' : ''}`} onClick={() => switchView('split')}>
                 <Columns2 size={14} /> Split
               </button>
               <div className="tab-spacer" />
@@ -442,6 +643,7 @@ function App() {
             <div className={`editor-container view-${view}`} style={{ '--font-size-base': `${fontSize}px` } as React.CSSProperties}>
               <div className="editor-pane pane-editor">
                 <CodeMirror
+                  ref={editorRef}
                   value={content}
                   onChange={setContent}
                   extensions={[markdown()]}
@@ -454,7 +656,15 @@ function App() {
                 />
               </div>
               <div className="editor-pane pane-preview">
-                <MarkdownPreview content={content} filePath={activeFile} />
+                <div className="preview-wrapper">
+                  <div className="preview-spacer" />
+                  <MarkdownPreview content={content} filePath={activeFile} onActiveHeading={setActiveHeading} />
+                  <div className="toc-column">
+                    {toc.length > 1 && (
+                      <TableOfContents items={toc} activeId={activeHeading} onItemClick={handleTocClick} />
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -494,19 +704,115 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={e => e.stopPropagation()}
+        >
+          <button className="context-menu-item" onClick={() => {
+            setRenameInput(contextMenu.node.name)
+            setRenameModal(contextMenu.node)
+            setContextMenu(null)
+          }}>
+            <Pencil size={14} /> Rename
+          </button>
+          <button className="context-menu-item" onClick={() => {
+            setMoveTarget('')
+            setMoveModal(contextMenu.node)
+            setContextMenu(null)
+          }}>
+            <FolderInput size={14} /> Move to…
+          </button>
+          <div className="context-menu-separator" />
+          <button className="context-menu-item danger" onClick={() => {
+            setDeleteModal(contextMenu.node)
+            setContextMenu(null)
+          }}>
+            <Trash2 size={14} /> Delete
+          </button>
+        </div>
+      )}
+
+      {/* Rename modal */}
+      {renameModal && (
+        <div className="modal-overlay" onClick={() => setRenameModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Rename</h3>
+            <input
+              autoFocus
+              value={renameInput}
+              onChange={e => setRenameInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleRename()}
+            />
+            <div className="modal-actions">
+              <button className="btn-modal" onClick={() => setRenameModal(null)}>Cancel</button>
+              <button className="btn-modal primary" onClick={handleRename}>Rename</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete modal */}
+      {deleteModal && (
+        <div className="modal-overlay" onClick={() => setDeleteModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Delete {deleteModal.type === 'dir' ? 'folder' : 'file'}</h3>
+            <p className="modal-warning">
+              Are you sure you want to delete <strong>{deleteModal.name}</strong>?
+              {deleteModal.type === 'dir' && ' This will delete all contents inside.'}
+              {' '}This cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button className="btn-modal" onClick={() => setDeleteModal(null)}>Cancel</button>
+              <button className="btn-modal danger" onClick={handleDelete}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move modal */}
+      {moveModal && (
+        <div className="modal-overlay" onClick={() => setMoveModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Move "{moveModal.name}" to…</h3>
+            <div className="move-folder-list">
+              {collectFolders(tree)
+                .filter(f => f.path !== moveModal.path && !f.path.startsWith(moveModal.path + '/'))
+                .map(f => (
+                  <button
+                    key={f.path}
+                    className={`move-folder-item ${moveTarget === f.path ? 'selected' : ''}`}
+                    style={{ paddingLeft: 12 + f.depth * 16 }}
+                    onClick={() => setMoveTarget(f.path)}
+                  >
+                    <FolderOpen size={14} /> {f.name}
+                  </button>
+                ))}
+            </div>
+            <div className="modal-actions">
+              <button className="btn-modal" onClick={() => setMoveModal(null)}>Cancel</button>
+              <button className="btn-modal primary" onClick={handleMove}>Move</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // Tree item component
 function TreeItem({
-  node, activeFile, openFolders, toggleFolder, onSelect, depth
+  node, activeFile, openFolders, toggleFolder, onSelect, onContextMenu, depth
 }: {
   node: TreeNode
   activeFile: string | null
   openFolders: Set<string>
   toggleFolder: (path: string) => void
   onSelect: (path: string) => void
+  onContextMenu: (e: React.MouseEvent, node: TreeNode) => void
   depth: number
 }) {
   if (node.type === 'dir') {
@@ -517,6 +823,7 @@ function TreeItem({
           className={`tree-folder-header ${isOpen ? 'open' : ''}`}
           style={{ paddingLeft: 16 + depth * 12 }}
           onClick={() => toggleFolder(node.path)}
+          onContextMenu={e => onContextMenu(e, node)}
         >
           <ChevronRight size={14} />
           <FolderOpen size={14} />
@@ -532,6 +839,7 @@ function TreeItem({
                 openFolders={openFolders}
                 toggleFolder={toggleFolder}
                 onSelect={onSelect}
+                onContextMenu={onContextMenu}
                 depth={depth + 1}
               />
             ))}
@@ -546,6 +854,7 @@ function TreeItem({
       className={`tree-file ${activeFile === node.path ? 'active' : ''}`}
       style={{ paddingLeft: 24 + depth * 12 }}
       onClick={() => onSelect(node.path)}
+      onContextMenu={e => onContextMenu(e, node)}
     >
       <FileText size={15} />
       <span className="tree-file-name">{node.name.replace('.md', '')}</span>
@@ -554,15 +863,46 @@ function TreeItem({
 }
 
 // Markdown Preview component
-function MarkdownPreview({ content, filePath }: { content: string; filePath: string }) {
+function MarkdownPreview({ content, filePath, onActiveHeading }: {
+  content: string; filePath: string; onActiveHeading?: (id: string | null) => void
+}) {
   const enhancer = useEnhancer(filePath)
-  const Wrapper = enhancer?.default
   const widgets = enhancer?.widgets
+  const previewRef = useRef<HTMLDivElement>(null)
+
+  // Track visible heading via scroll position
+  useEffect(() => {
+    const container = previewRef.current?.closest('.pane-preview') as HTMLElement
+    if (!container || !onActiveHeading) return
+
+    const handleScroll = () => {
+      const headings = previewRef.current?.querySelectorAll('h1[id], h2[id], h3[id], h4[id]')
+      if (!headings) return
+      const containerTop = container.getBoundingClientRect().top
+      let active: string | null = null
+      for (const h of headings) {
+        if (h.getBoundingClientRect().top - containerTop <= 100) active = h.id
+      }
+      onActiveHeading(active)
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    handleScroll()
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [content, onActiveHeading])
+
+  // Heading component with auto-generated id
+  const heading = (Tag: 'h1' | 'h2' | 'h3' | 'h4') =>
+    ({ children, ...props }: any) => <Tag id={slugify(textContent(children))} {...props}>{children}</Tag>
 
   const markdownContent = (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
+        h1: heading('h1'),
+        h2: heading('h2'),
+        h3: heading('h3'),
+        h4: heading('h4'),
         code({ className, children, ...props }) {
           const isInline = !className
           if (isInline) return <code {...props}>{children}</code>
@@ -594,13 +934,36 @@ function MarkdownPreview({ content, filePath }: { content: string; filePath: str
   )
 
   return (
-    <div className="markdown-preview">
+    <div className="markdown-preview" ref={previewRef}>
       <div className="breadcrumb">
         {filePath}
         {enhancer && <span className="breadcrumb-enhanced">Enhanced</span>}
       </div>
-      {Wrapper ? <Wrapper>{markdownContent}</Wrapper> : markdownContent}
+      {markdownContent}
     </div>
+  )
+}
+
+// Table of Contents component
+function TableOfContents({ items, activeId, onItemClick }: {
+  items: TocItem[]
+  activeId: string | null
+  onItemClick: (id: string) => void
+}) {
+  return (
+    <nav className="toc-nav">
+      <div className="toc-title">On this page</div>
+      {items.map((item, i) => (
+        <button
+          key={`${item.id}-${i}`}
+          className={`toc-item toc-level-${item.level} ${activeId === item.id ? 'active' : ''}`}
+          onClick={() => onItemClick(item.id)}
+          title={item.text}
+        >
+          {item.text}
+        </button>
+      ))}
+    </nav>
   )
 }
 

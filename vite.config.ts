@@ -19,6 +19,7 @@ export default defineConfig({
   resolve: {
     // Ensure files outside project root resolve packages from our node_modules
     alias: {
+      '@enhance-kit': path.resolve(__dirname, 'src/enhance-kit'),
       'react': path.resolve(__dirname, 'node_modules/react'),
       'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
       'recharts': path.resolve(__dirname, 'node_modules/recharts'),

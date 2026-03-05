@@ -84,4 +84,65 @@ app.post('/api/folder', async (req, res) => {
   }
 });
 
+// Rename file or folder
+app.post('/api/rename', async (req, res) => {
+  try {
+    const { path: itemPath, newName } = req.body;
+    const fullPath = path.join(LEARN_DIR, itemPath);
+    const newFullPath = path.join(path.dirname(fullPath), newName);
+    if (!newFullPath.startsWith(LEARN_DIR)) return res.status(400).json({ error: 'Invalid path' });
+    try { await fs.access(newFullPath); return res.status(409).json({ error: 'Name already exists' }); } catch {}
+    await fs.rename(fullPath, newFullPath);
+    // Also rename companion .tsx if renaming a .md file
+    if (fullPath.endsWith('.md')) {
+      const tsxOld = fullPath.replace(/\.md$/, '.tsx');
+      const tsxNew = newFullPath.replace(/\.md$/, '.tsx');
+      try { await fs.access(tsxOld); await fs.rename(tsxOld, tsxNew); } catch {}
+    }
+    res.json({ ok: true, newPath: path.relative(LEARN_DIR, newFullPath) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Delete file or folder
+app.post('/api/delete', async (req, res) => {
+  try {
+    const { path: itemPath } = req.body;
+    const fullPath = path.join(LEARN_DIR, itemPath);
+    if (!fullPath.startsWith(LEARN_DIR) || fullPath === LEARN_DIR) return res.status(400).json({ error: 'Invalid path' });
+    await fs.rm(fullPath, { recursive: true });
+    // Also delete companion .tsx if deleting a .md file
+    if (fullPath.endsWith('.md')) {
+      const tsxPath = fullPath.replace(/\.md$/, '.tsx');
+      try { await fs.rm(tsxPath); } catch {}
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Move file or folder
+app.post('/api/move', async (req, res) => {
+  try {
+    const { from, to } = req.body;
+    const fullFrom = path.join(LEARN_DIR, from);
+    const name = path.basename(fullFrom);
+    const fullTo = path.join(LEARN_DIR, to, name);
+    if (!fullTo.startsWith(LEARN_DIR)) return res.status(400).json({ error: 'Invalid path' });
+    await fs.mkdir(path.join(LEARN_DIR, to), { recursive: true });
+    await fs.rename(fullFrom, fullTo);
+    // Also move companion .tsx if moving a .md file
+    if (fullFrom.endsWith('.md')) {
+      const tsxFrom = fullFrom.replace(/\.md$/, '.tsx');
+      const tsxTo = fullTo.replace(/\.md$/, '.tsx');
+      try { await fs.access(tsxFrom); await fs.rename(tsxFrom, tsxTo); } catch {}
+    }
+    res.json({ ok: true, newPath: path.relative(LEARN_DIR, fullTo) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.listen(3001, () => console.log('API server running on :3001'));
