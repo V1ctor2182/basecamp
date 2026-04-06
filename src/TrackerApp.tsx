@@ -115,6 +115,17 @@ function formatUSD(v: number) {
   return v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : v >= 1 ? `$${v.toFixed(2)}` : `$${v.toFixed(3)}`
 }
 
+// Project color palette for activity timeline
+const PROJECT_COLORS = [
+  '#D97757', '#5B8DEF', '#43B581', '#E8A87C', '#A78BFA',
+  '#F59E42', '#38BDF8', '#FB7185', '#34D399', '#C084FC',
+  '#FBBF24', '#6EE7B7', '#F472B6', '#93C5FD', '#FCA5A5',
+]
+function getProjectColor(project: string, allProjects: string[]): string {
+  const idx = allProjects.indexOf(project)
+  return PROJECT_COLORS[idx >= 0 ? idx % PROJECT_COLORS.length : 0]
+}
+
 // Helpers
 function toDateKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -409,6 +420,13 @@ export default function TrackerApp() {
     }
     return map
   }, [monthActivity])
+
+  // All projects seen in pings, sorted by total turns (most used first)
+  const allProjects = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const p of claudePings) counts.set(p.project, (counts.get(p.project) || 0) + 1)
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([p]) => p)
+  }, [claudePings])
 
   // Pings by date (for activity calendar dots) — use local date
   const pingsByDate = useMemo(() => {
@@ -877,8 +895,8 @@ export default function TrackerApp() {
         series: [{
           type: 'bar' as const,
           barWidth: '60%',
-          itemStyle: { color: '#D97757', borderRadius: [0, 3, 3, 0] },
-          data: hours,
+          itemStyle: { borderRadius: [0, 3, 3, 0] },
+          data: hours.map((v, i) => ({ value: v, itemStyle: { color: getProjectColor(projects[i], allProjects) } })),
         }],
       },
     }
@@ -1488,12 +1506,13 @@ export default function TrackerApp() {
                             const endMin = block.end.getHours() * 60 + block.end.getMinutes()
                             const left = (startMin / 1440) * 100
                             const width = Math.max(0.4, ((Math.max(endMin - startMin, 1)) / 1440) * 100)
+                            const color = getProjectColor(block.project, allProjects)
                             const tip = `${block.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${block.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${block.project} · ${block.turns} turns`
                             return (
                               <div
                                 key={i}
                                 className="t-timeline-block"
-                                style={{ left: `${left}%`, width: `${width}%` }}
+                                style={{ left: `${left}%`, width: `${width}%`, background: color }}
                                 onMouseEnter={e => {
                                   const rect = (e.target as HTMLElement).getBoundingClientRect()
                                   const track = (e.target as HTMLElement).parentElement!.getBoundingClientRect()
@@ -1515,6 +1534,18 @@ export default function TrackerApp() {
                   )
                 )}
 
+                {/* Project Legend (shown for day & week views) */}
+                {(activityView === 'day' || activityView === 'week') && allProjects.length > 0 && (
+                  <div className="t-project-legend">
+                    {allProjects.map(p => (
+                      <span key={p} className="t-project-legend-item">
+                        <span className="t-project-legend-dot" style={{ background: getProjectColor(p, allProjects) }} />
+                        {p}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 {/* Week View */}
                 {activityView === 'week' && (
                   activityWeek && activityWeek.days.some(d => d.blocks.length > 0) ? (
@@ -1533,12 +1564,13 @@ export default function TrackerApp() {
                                 const endMin = block.end.getHours() * 60 + block.end.getMinutes()
                                 const left = (startMin / 1440) * 100
                                 const width = Math.max(0.4, ((Math.max(endMin - startMin, 1)) / 1440) * 100)
+                                const color = getProjectColor(block.project, allProjects)
                                 const tip = `${block.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${block.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${block.project} · ${block.turns} turns`
                                 return (
                                   <div
                                     key={i}
                                     className="t-timeline-block"
-                                    style={{ left: `${left}%`, width: `${width}%` }}
+                                    style={{ left: `${left}%`, width: `${width}%`, background: color }}
                                     onMouseEnter={e => {
                                       const rect = (e.target as HTMLElement).getBoundingClientRect()
                                       const track = (e.target as HTMLElement).parentElement!.getBoundingClientRect()

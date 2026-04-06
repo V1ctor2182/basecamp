@@ -1151,6 +1151,29 @@
   padding: 0;
 }
 
+/* Project legend */
+.t-project-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 6px 16px 12px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.t-project-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.t-project-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
 /* Activity timeline empty state */
 .t-hourly-empty {
   padding: 24px 16px;
