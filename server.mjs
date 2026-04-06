@@ -292,6 +292,25 @@ async function buildTree(dirPath, relativePath, ignoreList = []) {
   return children;
 }
 
+// --- Folder Picker (native macOS dialog) ---
+app.post('/api/pick-folder', async (_req, res) => {
+  try {
+    const { exec } = await import('child_process');
+    const script = `osascript -e 'POSIX path of (choose folder with prompt "Choose a folder to add")'`;
+    exec(script, { encoding: 'utf-8', timeout: 120000 }, (err, stdout) => {
+      if (err) {
+        // User cancelled or error — status 1 means cancel
+        return res.json({ cancelled: true });
+      }
+      const result = stdout.trim();
+      const folder = result.endsWith('/') ? result.slice(0, -1) : result;
+      res.json({ path: folder, name: path.basename(folder) });
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Learn Dirs CRUD ---
 app.get('/api/learn-dirs', async (_req, res) => {
   try { res.json(await getLearnDirs()); }

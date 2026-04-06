@@ -652,6 +652,21 @@ function LearnApp() {
                     </div>
                   ))}
                   <div className="dir-add-form">
+                    <button
+                      className="btn-action dir-browse-btn"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch('/api/pick-folder', { method: 'POST' })
+                          const r = await res.json()
+                          if (r.cancelled) return
+                          if (r.error) { showToast(r.error); return }
+                          setNewDirPath(r.path)
+                          if (!newDirName.trim()) setNewDirName(r.name)
+                        } catch { showToast('Failed to open folder picker') }
+                      }}
+                    >
+                      <FolderPlus size={12} /> Browse…
+                    </button>
                     <input
                       placeholder="Name"
                       value={newDirName}
