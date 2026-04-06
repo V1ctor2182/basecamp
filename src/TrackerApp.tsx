@@ -287,6 +287,7 @@ export default function TrackerApp() {
   const heatmapRef = useRef<HTMLDivElement>(null)
   const calendarRef = useRef<HTMLDivElement>(null)
   const activityCalRef = useRef<HTMLDivElement>(null)
+  const timelineZoomRef = useRef<HTMLDivElement>(null)
 
   const loadClaudeStats = useCallback(async () => {
     try {
@@ -400,6 +401,30 @@ export default function TrackerApp() {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [showCalendar])
+
+  // Non-passive wheel handler for timeline zoom
+  const dayRangeRef = useRef(dayRange)
+  dayRangeRef.current = dayRange
+  useEffect(() => {
+    const el = timelineZoomRef.current
+    if (!el) return
+    const handler = (e: WheelEvent) => {
+      e.preventDefault()
+      const rect = el.getBoundingClientRect()
+      const r = dayRangeRef.current
+      const mouseRatio = (e.clientX - rect.left) / rect.width
+      const mouseHour = r[0] + mouseRatio * (r[1] - r[0])
+      const zoomFactor = e.deltaY > 0 ? 1.15 : 0.85
+      const newSpan = Math.max(1, Math.min(24, (r[1] - r[0]) * zoomFactor))
+      let newStart = mouseHour - mouseRatio * newSpan
+      let newEnd = mouseHour + (1 - mouseRatio) * newSpan
+      if (newStart < 0) { newEnd -= newStart; newStart = 0 }
+      if (newEnd > 24) { newStart -= (newEnd - 24); newEnd = 24 }
+      setDayRange([Math.max(0, newStart), Math.min(24, newEnd)])
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [activityView])
 
   // Close activity calendar on click outside
   useEffect(() => {
@@ -1514,20 +1539,6 @@ export default function TrackerApp() {
                       rulerTicks.push({ h, major: h % labelStep === 0 && h === Math.floor(h) })
                     }
 
-                    const handleWheel = (e: React.WheelEvent) => {
-                      e.preventDefault()
-                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                      const mouseRatio = (e.clientX - rect.left) / rect.width
-                      const mouseHour = dayRange[0] + mouseRatio * (dayRange[1] - dayRange[0])
-                      const zoomFactor = e.deltaY > 0 ? 1.15 : 0.85
-                      const newSpan = Math.max(1, Math.min(24, (dayRange[1] - dayRange[0]) * zoomFactor))
-                      let newStart = mouseHour - mouseRatio * newSpan
-                      let newEnd = mouseHour + (1 - mouseRatio) * newSpan
-                      if (newStart < 0) { newEnd -= newStart; newStart = 0 }
-                      if (newEnd > 24) { newStart -= (newEnd - 24); newEnd = 24 }
-                      setDayRange([Math.max(0, newStart), Math.min(24, newEnd)])
-                    }
-
                     const handleMouseDown = (e: React.MouseEvent) => {
                       if (dayRange[0] === 0 && dayRange[1] === 24) return
                       setIsDraggingTimeline(true)
@@ -1563,8 +1574,8 @@ export default function TrackerApp() {
                           )}
                         </div>
                         <div
+                          ref={timelineZoomRef}
                           className={`t-timeline t-timeline-zoomable${isDraggingTimeline ? ' dragging' : ''}`}
-                          onWheel={handleWheel}
                           onMouseDown={handleMouseDown}
                         >
                           {/* Ruler */}
