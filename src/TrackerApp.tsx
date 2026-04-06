@@ -1544,8 +1544,9 @@ export default function TrackerApp() {
 
                     // Ruler tick generation
                     const rulerTicks: { h: number; major: boolean }[] = []
-                    const step = rangeDuration <= 30 ? 0.25 : rangeDuration <= 60 ? 0.25 : rangeDuration <= 120 ? 0.5 : rangeDuration <= 360 ? 1 : 1
-                    const labelStep = rangeDuration <= 30 ? 0.25 : rangeDuration <= 60 ? 0.5 : rangeDuration <= 120 ? 1 : rangeDuration <= 360 ? 1 : rangeDuration <= 720 ? 2 : 3
+                    // rangeDuration is in minutes (15–1440)
+                    const step = rangeDuration <= 30 ? 5/60 : rangeDuration <= 60 ? 0.25 : rangeDuration <= 180 ? 0.25 : rangeDuration <= 360 ? 0.5 : 1
+                    const labelStep = rangeDuration <= 30 ? 0.25 : rangeDuration <= 60 ? 0.25 : rangeDuration <= 180 ? 0.5 : rangeDuration <= 360 ? 1 : rangeDuration <= 720 ? 2 : 3
                     for (let h = Math.ceil(dayRange[0] / step) * step; h <= dayRange[1]; h += step) {
                       rulerTicks.push({ h, major: Math.abs(h % labelStep) < 0.01 || Math.abs(h % labelStep - labelStep) < 0.01 })
                     }
