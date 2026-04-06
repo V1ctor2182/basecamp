@@ -267,6 +267,7 @@ export default function TrackerApp() {
   const [activityDate, setActivityDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [activityView, setActivityView] = useState<'day' | 'week' | 'month' | 'projects'>('day')
   const [showActivityCal, setShowActivityCal] = useState(false)
+  const [blockTooltip, setBlockTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
   const [heatmapTooltip, setHeatmapTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
   const heatmapRef = useRef<HTMLDivElement>(null)
   const calendarRef = useRef<HTMLDivElement>(null)
@@ -1487,15 +1488,22 @@ export default function TrackerApp() {
                             const endMin = block.end.getHours() * 60 + block.end.getMinutes()
                             const left = (startMin / 1440) * 100
                             const width = Math.max(0.4, ((Math.max(endMin - startMin, 1)) / 1440) * 100)
+                            const tip = `${block.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${block.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${block.project} · ${block.turns} turns`
                             return (
                               <div
                                 key={i}
                                 className="t-timeline-block"
                                 style={{ left: `${left}%`, width: `${width}%` }}
-                                title={`${block.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${block.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${block.project} · ${block.turns} turns`}
+                                onMouseEnter={e => {
+                                  const rect = (e.target as HTMLElement).getBoundingClientRect()
+                                  const track = (e.target as HTMLElement).parentElement!.getBoundingClientRect()
+                                  setBlockTooltip({ text: tip, x: rect.left - track.left + rect.width / 2, y: -8 })
+                                }}
+                                onMouseLeave={() => setBlockTooltip(null)}
                               />
                             )
                           })}
+                          {blockTooltip && <div className="t-block-tooltip" style={{ left: blockTooltip.x, top: blockTooltip.y }}>{blockTooltip.text}</div>}
                         </div>
                       </div>
                     </>
@@ -1525,15 +1533,22 @@ export default function TrackerApp() {
                                 const endMin = block.end.getHours() * 60 + block.end.getMinutes()
                                 const left = (startMin / 1440) * 100
                                 const width = Math.max(0.4, ((Math.max(endMin - startMin, 1)) / 1440) * 100)
+                                const tip = `${block.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${block.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${block.project} · ${block.turns} turns`
                                 return (
                                   <div
                                     key={i}
                                     className="t-timeline-block"
                                     style={{ left: `${left}%`, width: `${width}%` }}
-                                    title={`${block.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${block.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${block.project} · ${block.turns} turns`}
+                                    onMouseEnter={e => {
+                                      const rect = (e.target as HTMLElement).getBoundingClientRect()
+                                      const track = (e.target as HTMLElement).parentElement!.getBoundingClientRect()
+                                      setBlockTooltip({ text: tip, x: rect.left - track.left + rect.width / 2, y: -8 })
+                                    }}
+                                    onMouseLeave={() => setBlockTooltip(null)}
                                   />
                                 )
                               })}
+                              {blockTooltip && <div className="t-block-tooltip" style={{ left: blockTooltip.x, top: blockTooltip.y }}>{blockTooltip.text}</div>}
                             </div>
                             <span className="t-timeline-week-time">
                               {day.totalMinutes >= 60 ? `${(day.totalMinutes / 60).toFixed(1)}h` : day.totalMinutes > 0 ? `${Math.round(day.totalMinutes)}m` : ''}
