@@ -278,7 +278,7 @@ export default function TrackerApp() {
   const [activityDate, setActivityDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [activityView, setActivityView] = useState<'day' | 'week' | 'month' | 'projects'>('day')
   const [showActivityCal, setShowActivityCal] = useState(false)
-  const [blockTooltip, setBlockTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
+  const [blockTooltip, setBlockTooltip] = useState<{ text: string; x: number; y: number; trackId: string } | null>(null)
   const [dayRange, setDayRange] = useState<[number, number]>([0, 24]) // hours
   const [heatmapTooltip, setHeatmapTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
   const heatmapRef = useRef<HTMLDivElement>(null)
@@ -1529,7 +1529,6 @@ export default function TrackerApp() {
                             {activityTimeline.blocks.map((block, i) => {
                               const startMin = block.start.getHours() * 60 + block.start.getMinutes()
                               const endMin = block.end.getHours() * 60 + block.end.getMinutes()
-                              // Map to visible range
                               const left = ((startMin - rangeStartMin) / rangeDuration) * 100
                               const width = Math.max(0.5, ((Math.max(endMin - startMin, 1)) / rangeDuration) * 100)
                               if (endMin < rangeStartMin || startMin > rangeEndMin) return null
@@ -1543,13 +1542,13 @@ export default function TrackerApp() {
                                   onMouseEnter={e => {
                                     const rect = (e.target as HTMLElement).getBoundingClientRect()
                                     const track = (e.target as HTMLElement).parentElement!.getBoundingClientRect()
-                                    setBlockTooltip({ text: tip, x: rect.left - track.left + rect.width / 2, y: -8 })
+                                    setBlockTooltip({ text: tip, x: rect.left - track.left + rect.width / 2, y: -8, trackId: 'day' })
                                   }}
                                   onMouseLeave={() => setBlockTooltip(null)}
                                 />
                               )
                             })}
-                            {blockTooltip && <div className="t-block-tooltip" style={{ left: blockTooltip.x, top: blockTooltip.y }}>{blockTooltip.text}</div>}
+                            {blockTooltip?.trackId === 'day' && <div className="t-block-tooltip" style={{ left: blockTooltip.x, top: blockTooltip.y }}>{blockTooltip.text}</div>}
                           </div>
                           {/* Range slider */}
                           <div className="t-range-slider">
@@ -1563,6 +1562,16 @@ export default function TrackerApp() {
                               left: `${(dayRange[0] / 24) * 100}%`,
                               width: `${((dayRange[1] - dayRange[0]) / 24) * 100}%`,
                             }} />
+                            {(dayRange[0] !== 0 || dayRange[1] !== 24) && (
+                              <>
+                                <span className="t-range-label" style={{ left: `${(dayRange[0] / 24) * 100}%` }}>
+                                  {`${Math.floor(dayRange[0])}:${dayRange[0] % 1 ? '30' : '00'}`}
+                                </span>
+                                <span className="t-range-label" style={{ left: `${(dayRange[1] / 24) * 100}%` }}>
+                                  {`${Math.floor(dayRange[1])}:${dayRange[1] % 1 ? '30' : '00'}`}
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </>
@@ -1615,13 +1624,13 @@ export default function TrackerApp() {
                                     onMouseEnter={e => {
                                       const rect = (e.target as HTMLElement).getBoundingClientRect()
                                       const track = (e.target as HTMLElement).parentElement!.getBoundingClientRect()
-                                      setBlockTooltip({ text: tip, x: rect.left - track.left + rect.width / 2, y: -8 })
+                                      setBlockTooltip({ text: tip, x: rect.left - track.left + rect.width / 2, y: -8, trackId: day.date })
                                     }}
                                     onMouseLeave={() => setBlockTooltip(null)}
                                   />
                                 )
                               })}
-                              {blockTooltip && <div className="t-block-tooltip" style={{ left: blockTooltip.x, top: blockTooltip.y }}>{blockTooltip.text}</div>}
+                              {blockTooltip?.trackId === day.date && <div className="t-block-tooltip" style={{ left: blockTooltip.x, top: blockTooltip.y }}>{blockTooltip.text}</div>}
                             </div>
                             <span className="t-timeline-week-time">
                               {day.totalMinutes >= 60 ? `${(day.totalMinutes / 60).toFixed(1)}h` : day.totalMinutes > 0 ? `${Math.round(day.totalMinutes)}m` : ''}

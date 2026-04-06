@@ -1204,6 +1204,17 @@
   pointer-events: none;
 }
 
+.t-range-label {
+  position: absolute;
+  top: 18px;
+  transform: translateX(-50%);
+  font-size: 0.62rem;
+  color: #D97757;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
 .t-range-reset {
   background: none;
   border: 1px solid var(--border-light);
