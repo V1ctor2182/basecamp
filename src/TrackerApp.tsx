@@ -1377,6 +1377,23 @@ export default function TrackerApp() {
       {/* Claude Usage View */}
       {viewTab === 'claude' && (
         <div className="t-feed">
+          {/* Setup banner for activity tracking */}
+          {claudePings.length === 0 && (
+            <div className="t-setup-banner">
+              <div className="t-setup-banner-text">
+                <ClaudeIcon size={16} />
+                <span>Enable real-time activity tracking by adding a hook to Claude Code</span>
+              </div>
+              <button className="t-setup-banner-btn" onClick={() => {
+                const prompt = `Add a Stop hook to my global Claude Code settings (~/.claude/settings.json) that sends a POST request to http://localhost:8000/api/claude-ping on every response. The hook should:\n- POST the raw hook JSON input (which includes session_id, cwd, etc.) to the endpoint\n- Use curl with --max-time 3 and fail silently (|| true) so it never blocks Claude\n- Set timeout to 5 seconds\n\nHere is the exact hook entry to add to the "Stop" array in hooks:\n{\n  "type": "command",\n  "command": "bash -c 'INPUT=$(cat); curl -s -X POST http://localhost:8000/api/claude-ping -H \\\\"Content-Type: application/json\\\\" -d \\\\"$INPUT\\\\" --max-time 3 >/dev/null 2>&1 || true'",\n  "timeout": 5\n}`
+                navigator.clipboard.writeText(prompt)
+                const btn = document.activeElement as HTMLButtonElement
+                if (btn) { const orig = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = orig }, 2000) }
+              }}>
+                Copy Setup Prompt
+              </button>
+            </div>
+          )}
           {!claudeStats ? (
             <div className="t-empty">
               <ClaudeIcon size={36} />
