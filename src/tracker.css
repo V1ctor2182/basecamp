@@ -1151,6 +1151,82 @@
   padding: 0;
 }
 
+/* Range slider for day view zoom */
+.t-range-slider {
+  position: relative;
+  height: 20px;
+  margin-top: 6px;
+}
+
+.t-range-input {
+  position: absolute;
+  width: 100%;
+  top: 0;
+  height: 20px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+  margin: 0;
+}
+
+.t-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #D97757;
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  cursor: grab;
+  pointer-events: auto;
+  position: relative;
+  z-index: 2;
+}
+
+.t-range-input::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.15);
+}
+
+.t-range-input::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+}
+
+.t-range-fill {
+  position: absolute;
+  top: 8px;
+  height: 4px;
+  background: rgba(217, 119, 87, 0.35);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.t-range-reset {
+  background: none;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  margin-left: 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.t-range-reset:hover {
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+/* Make hour labels container relative for absolute positioning */
+.t-timeline .t-timeline-hours {
+  position: relative;
+  height: 16px;
+}
+
 /* Project legend */
 .t-project-legend {
   display: flex;

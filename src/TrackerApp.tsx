@@ -279,6 +279,7 @@ export default function TrackerApp() {
   const [activityView, setActivityView] = useState<'day' | 'week' | 'month' | 'projects'>('day')
   const [showActivityCal, setShowActivityCal] = useState(false)
   const [blockTooltip, setBlockTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
+  const [dayRange, setDayRange] = useState<[number, number]>([0, 24]) // hours
   const [heatmapTooltip, setHeatmapTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
   const heatmapRef = useRef<HTMLDivElement>(null)
   const calendarRef = useRef<HTMLDivElement>(null)
@@ -1498,45 +1499,75 @@ export default function TrackerApp() {
 
                 {/* Day View */}
                 {activityView === 'day' && (
-                  activityTimeline ? (
-                    <>
-                      <div className="t-activity-summary">
-                        {Math.floor(activityTimeline.totalMinutes / 60) > 0 && `${Math.floor(activityTimeline.totalMinutes / 60)}h `}
-                        {Math.round(activityTimeline.totalMinutes % 60)}m · {activityTimeline.totalTurns} turns · {activityTimeline.sessionCount} sessions
-                      </div>
-                      <div className="t-timeline">
-                        <div className="t-timeline-hours">
-                          {Array.from({ length: 24 }, (_, i) => (
-                            <span key={i} className="t-timeline-hour-label">{i}</span>
-                          ))}
+                  activityTimeline ? (() => {
+                    const rangeStartMin = dayRange[0] * 60
+                    const rangeEndMin = dayRange[1] * 60
+                    const rangeDuration = rangeEndMin - rangeStartMin
+                    const hourLabels: number[] = []
+                    for (let h = Math.ceil(dayRange[0]); h <= Math.floor(dayRange[1]); h++) hourLabels.push(h)
+                    // Decide label interval based on range
+                    const labelInterval = rangeDuration <= 180 ? 1 : rangeDuration <= 480 ? 2 : rangeDuration <= 720 ? 3 : 1
+                    return (
+                      <>
+                        <div className="t-activity-summary">
+                          {Math.floor(activityTimeline.totalMinutes / 60) > 0 && `${Math.floor(activityTimeline.totalMinutes / 60)}h `}
+                          {Math.round(activityTimeline.totalMinutes % 60)}m · {activityTimeline.totalTurns} turns · {activityTimeline.sessionCount} sessions
+                          {(dayRange[0] !== 0 || dayRange[1] !== 24) && (
+                            <button className="t-range-reset" onClick={() => setDayRange([0, 24])}>Reset</button>
+                          )}
                         </div>
-                        <div className="t-timeline-track">
-                          {activityTimeline.blocks.map((block, i) => {
-                            const startMin = block.start.getHours() * 60 + block.start.getMinutes()
-                            const endMin = block.end.getHours() * 60 + block.end.getMinutes()
-                            const left = (startMin / 1440) * 100
-                            const width = Math.max(0.4, ((Math.max(endMin - startMin, 1)) / 1440) * 100)
-                            const color = getProjectColor(block.project, allProjects)
-                            const tip = `${block.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${block.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${block.project} · ${block.turns} turns`
-                            return (
-                              <div
-                                key={i}
-                                className="t-timeline-block"
-                                style={{ left: `${left}%`, width: `${width}%`, background: color }}
-                                onMouseEnter={e => {
-                                  const rect = (e.target as HTMLElement).getBoundingClientRect()
-                                  const track = (e.target as HTMLElement).parentElement!.getBoundingClientRect()
-                                  setBlockTooltip({ text: tip, x: rect.left - track.left + rect.width / 2, y: -8 })
-                                }}
-                                onMouseLeave={() => setBlockTooltip(null)}
-                              />
-                            )
-                          })}
-                          {blockTooltip && <div className="t-block-tooltip" style={{ left: blockTooltip.x, top: blockTooltip.y }}>{blockTooltip.text}</div>}
+                        <div className="t-timeline">
+                          <div className="t-timeline-hours">
+                            {hourLabels.map((h, i) => (
+                              <span key={h} className="t-timeline-hour-label"
+                                style={{ position: 'absolute', left: `${((h * 60 - rangeStartMin) / rangeDuration) * 100}%`, transform: 'translateX(-50%)' }}>
+                                {i % labelInterval === 0 ? h : ''}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="t-timeline-track">
+                            {activityTimeline.blocks.map((block, i) => {
+                              const startMin = block.start.getHours() * 60 + block.start.getMinutes()
+                              const endMin = block.end.getHours() * 60 + block.end.getMinutes()
+                              // Map to visible range
+                              const left = ((startMin - rangeStartMin) / rangeDuration) * 100
+                              const width = Math.max(0.5, ((Math.max(endMin - startMin, 1)) / rangeDuration) * 100)
+                              if (endMin < rangeStartMin || startMin > rangeEndMin) return null
+                              const color = getProjectColor(block.project, allProjects)
+                              const tip = `${block.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${block.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${block.project} · ${block.turns} turns`
+                              return (
+                                <div
+                                  key={i}
+                                  className="t-timeline-block"
+                                  style={{ left: `${Math.max(0, left)}%`, width: `${width}%`, background: color }}
+                                  onMouseEnter={e => {
+                                    const rect = (e.target as HTMLElement).getBoundingClientRect()
+                                    const track = (e.target as HTMLElement).parentElement!.getBoundingClientRect()
+                                    setBlockTooltip({ text: tip, x: rect.left - track.left + rect.width / 2, y: -8 })
+                                  }}
+                                  onMouseLeave={() => setBlockTooltip(null)}
+                                />
+                              )
+                            })}
+                            {blockTooltip && <div className="t-block-tooltip" style={{ left: blockTooltip.x, top: blockTooltip.y }}>{blockTooltip.text}</div>}
+                          </div>
+                          {/* Range slider */}
+                          <div className="t-range-slider">
+                            <input type="range" min={0} max={24} step={0.5} value={dayRange[0]}
+                              onChange={e => { const v = +e.target.value; if (v < dayRange[1] - 1) setDayRange([v, dayRange[1]]) }}
+                              className="t-range-input t-range-left" />
+                            <input type="range" min={0} max={24} step={0.5} value={dayRange[1]}
+                              onChange={e => { const v = +e.target.value; if (v > dayRange[0] + 1) setDayRange([dayRange[0], v]) }}
+                              className="t-range-input t-range-right" />
+                            <div className="t-range-fill" style={{
+                              left: `${(dayRange[0] / 24) * 100}%`,
+                              width: `${((dayRange[1] - dayRange[0]) / 24) * 100}%`,
+                            }} />
+                          </div>
                         </div>
-                      </div>
-                    </>
-                  ) : (
+                      </>
+                    )
+                  })() : (
                     <div className="t-hourly-empty">
                       No activity for {new Date(activityDate + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
                       <span className="t-hourly-empty-hint">Data records automatically via Claude Code hooks on every response</span>
