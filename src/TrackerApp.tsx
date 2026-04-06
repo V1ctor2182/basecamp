@@ -266,9 +266,11 @@ export default function TrackerApp() {
   const [claudeStats, setClaudeStats] = useState<ClaudeStats | null>(null)
   const [hourlySnapshots, setHourlySnapshots] = useState<HourlySnapshot[]>([])
   const [hourlyDate, setHourlyDate] = useState(() => { const d = new Date(); return d.toISOString().slice(0, 10) })
+  const [showHourlyCal, setShowHourlyCal] = useState(false)
   const [heatmapTooltip, setHeatmapTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
   const heatmapRef = useRef<HTMLDivElement>(null)
   const calendarRef = useRef<HTMLDivElement>(null)
+  const hourlyCalRef = useRef<HTMLDivElement>(null)
 
   const loadClaudeStats = useCallback(async () => {
     try {
@@ -383,6 +385,18 @@ export default function TrackerApp() {
     return () => document.removeEventListener('mousedown', handler)
   }, [showCalendar])
 
+  // Close hourly calendar on click outside
+  useEffect(() => {
+    if (!showHourlyCal) return
+    const handler = (e: MouseEvent) => {
+      if (hourlyCalRef.current && !hourlyCalRef.current.contains(e.target as Node)) {
+        setShowHourlyCal(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showHourlyCal])
+
   // Commits by date (for chart + calendar)
   const commitsByDate = useMemo(() => {
     const map = new Map<string, number>()
@@ -394,6 +408,17 @@ export default function TrackerApp() {
     }
     return map
   }, [monthActivity])
+
+  // Tokens by date (for hourly calendar dots)
+  const tokensByDate = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const snap of hourlySnapshots) {
+      const key = snap.ts.slice(0, 10) // YYYY-MM-DD
+      const tokens = Object.values(snap.tokensByModel).reduce((a, b) => a + b, 0)
+      map.set(key, (map.get(key) || 0) + tokens)
+    }
+    return map
+  }, [hourlySnapshots])
 
   // Commits by date per repo (for stacked chart)
   const chartData = useMemo(() => {
@@ -1287,7 +1312,7 @@ export default function TrackerApp() {
                 <div className="t-chart-card">
                   <div className="t-chart-header">
                     <Clock size={14} />
-                    <span>Sessions by Hour of Day (All Time)</span>
+                    <span>When Do You Code the Most?</span>
                   </div>
                   <ReactEChartsCore echarts={echarts} option={claudeHourChart} style={{ height: 160 }} notMerge />
                 </div>
@@ -1298,18 +1323,21 @@ export default function TrackerApp() {
                 <div className="t-chart-header">
                   <Zap size={14} />
                   <span>Hourly Token Usage</span>
-                  <div className="t-hourly-date-nav">
-                    <button className="t-hourly-nav-btn" onClick={() => {
-                      const d = new Date(hourlyDate + 'T00:00:00'); d.setDate(d.getDate() - 1); setHourlyDate(d.toISOString().slice(0, 10))
-                    }}><ChevronLeft size={14} /></button>
-                    <input type="date" className="t-hourly-date-input" value={hourlyDate}
-                      onChange={e => setHourlyDate(e.target.value)}
-                      max={new Date().toISOString().slice(0, 10)} />
-                    <button className="t-hourly-nav-btn" onClick={() => {
-                      const d = new Date(hourlyDate + 'T00:00:00'); d.setDate(d.getDate() + 1)
-                      const today = new Date().toISOString().slice(0, 10)
-                      if (d.toISOString().slice(0, 10) <= today) setHourlyDate(d.toISOString().slice(0, 10))
-                    }}><ChevronRight size={14} /></button>
+                  <div className="t-cal-wrapper" ref={hourlyCalRef} style={{ marginLeft: 'auto' }}>
+                    <button
+                      className={`t-date-tab ${showHourlyCal ? 'active' : ''}`}
+                      onClick={() => setShowHourlyCal(!showHourlyCal)}
+                    >
+                      <Calendar size={14} />
+                      <span>{new Date(hourlyDate + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    </button>
+                    {showHourlyCal && (
+                      <MiniCalendar
+                        selectedDate={new Date(hourlyDate + 'T00:00:00')}
+                        onSelect={(d) => { setHourlyDate(toDateKey(d)); setShowHourlyCal(false) }}
+                        commitsByDate={tokensByDate}
+                      />
+                    )}
                   </div>
                 </div>
                 {hourlyDayChart ? (
