@@ -1215,7 +1215,6 @@
   background: var(--bg-secondary);
   border-radius: 6px;
   border: 1px solid var(--border-light);
-  overflow: hidden;
 }
 
 .t-timeline-block {

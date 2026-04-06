@@ -693,31 +693,41 @@ export default function TrackerApp() {
     }
   }, [claudeStats])
 
-  // Build activity blocks from pings with gap detection (30min gap = new block)
+  // Build activity blocks from pings with global gap detection
+  // 30min without ANY ping across ALL sessions = split
   const GAP_MS = 30 * 60 * 1000
   const buildBlocks = useCallback((pings: ClaudePing[]) => {
-    // Group by session
-    const sessions = new Map<string, { pings: ClaudePing[]; project: string }>()
-    for (const p of pings) {
-      if (!sessions.has(p.session)) sessions.set(p.session, { pings: [], project: p.project })
-      sessions.get(p.session)!.pings.push(p)
+    if (!pings.length) return []
+    // Sort all pings chronologically
+    const sorted = [...pings].sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
+
+    // Find global activity segments (split when no pings for 30min)
+    const segments: ClaudePing[][] = [[sorted[0]]]
+    for (let i = 1; i < sorted.length; i++) {
+      const gap = new Date(sorted[i].ts).getTime() - new Date(sorted[i - 1].ts).getTime()
+      if (gap > GAP_MS) {
+        segments.push([sorted[i]])
+      } else {
+        segments[segments.length - 1].push(sorted[i])
+      }
     }
 
+    // Within each segment, create per-project blocks
     const blocks: { start: Date; end: Date; project: string; turns: number }[] = []
-    for (const [, s] of sessions) {
-      const times = s.pings.map(p => new Date(p.ts).getTime()).sort((a, b) => a - b)
-      // Split into segments if gap > 30 min
-      let segStart = 0
-      for (let i = 1; i <= times.length; i++) {
-        if (i === times.length || times[i] - times[i - 1] > GAP_MS) {
-          blocks.push({
-            start: new Date(times[segStart]),
-            end: new Date(times[i - 1]),
-            project: s.project,
-            turns: i - segStart,
-          })
-          segStart = i
-        }
+    for (const seg of segments) {
+      const byProject = new Map<string, Date[]>()
+      for (const p of seg) {
+        if (!byProject.has(p.project)) byProject.set(p.project, [])
+        byProject.get(p.project)!.push(new Date(p.ts))
+      }
+      for (const [project, times] of byProject) {
+        times.sort((a, b) => a.getTime() - b.getTime())
+        blocks.push({
+          start: times[0],
+          end: times[times.length - 1],
+          project,
+          turns: times.length,
+        })
       }
     }
     blocks.sort((a, b) => a.start.getTime() - b.start.getTime())
