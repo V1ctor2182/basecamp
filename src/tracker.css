@@ -239,37 +239,214 @@
   margin-bottom: 20px;
 }
 
-.t-tabs {
+.t-date-picker {
   display: flex;
-  gap: 2px;
-  background: var(--bg-card);
-  padding: 3px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-light);
-  box-shadow: var(--shadow-sm);
+  gap: 6px;
 }
 
-.t-tab {
-  background: none;
-  border: none;
+.t-date-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
   color: var(--text-muted);
-  padding: 6px 14px;
-  border-radius: 5px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
   font-size: 0.82rem;
   font-weight: 500;
   cursor: pointer;
   transition: var(--transition);
   font-family: var(--font-body);
-}
-
-.t-tab:hover {
-  color: var(--text-secondary);
-}
-
-.t-tab.active {
-  background: var(--accent);
-  color: white;
   box-shadow: var(--shadow-sm);
+}
+
+.t-date-tab:hover {
+  color: var(--text-secondary);
+  border-color: var(--border);
+  background: var(--bg-secondary);
+}
+
+.t-date-tab.active {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+.t-date-tab.active svg {
+  opacity: 1;
+}
+
+.t-date-tab svg {
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* Controls right group */
+.t-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Calendar wrapper (for dropdown positioning) */
+.t-cal-wrapper {
+  position: relative;
+}
+
+/* Mini Calendar */
+.t-calendar {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 100;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 12px;
+  width: 260px;
+  animation: t-slideDown 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.t-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.t-cal-month {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.t-cal-nav {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: var(--transition);
+}
+
+.t-cal-nav:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.t-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.t-cal-dow {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 4px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.t-cal-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.t-cal-day:hover:not(.t-cal-empty):not(.t-cal-future) {
+  background: var(--bg-hover);
+}
+
+.t-cal-empty {
+  cursor: default;
+}
+
+.t-cal-future {
+  cursor: default;
+  opacity: 0.3;
+}
+
+.t-cal-num {
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+.t-cal-today {
+  background: var(--bg-secondary);
+}
+
+.t-cal-today .t-cal-num {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.t-cal-selected {
+  background: var(--accent) !important;
+}
+
+.t-cal-selected .t-cal-num {
+  color: white !important;
+  font-weight: 700;
+}
+
+.t-cal-dot {
+  position: absolute;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.t-cal-selected .t-cal-dot {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+/* Workload Chart Card */
+.t-chart-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  animation: t-slideDown 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.t-chart-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.t-chart-header svg {
+  opacity: 0.6;
 }
 
 /* View Tabs (Commits / PRs) */
@@ -698,6 +875,184 @@
   background: rgba(185, 28, 28, 0.15);
 }
 
+/* Claude since label */
+.t-claude-since {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  text-align: right;
+}
+
+/* GitHub-style heatmap */
+.t-heatmap {
+  padding: 12px 16px 14px;
+  overflow-x: auto;
+}
+
+.t-heatmap-months {
+  display: grid;
+  grid-auto-columns: 14px;
+  grid-auto-flow: column;
+  gap: 3px;
+  margin-left: 32px;
+  margin-bottom: 4px;
+}
+
+.t-heatmap-month {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.t-heatmap-body {
+  display: flex;
+  gap: 4px;
+}
+
+.t-heatmap-days {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 0;
+}
+
+.t-heatmap-days span {
+  height: 14px;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  line-height: 14px;
+  text-align: right;
+  min-width: 28px;
+}
+
+.t-heatmap-grid {
+  display: flex;
+  gap: 3px;
+  position: relative;
+}
+
+.t-heatmap-tooltip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.t-heatmap-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.t-heatmap-cell {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--bg-secondary);
+  border: 1px solid transparent;
+}
+
+.t-heatmap-cell.future {
+  visibility: hidden;
+}
+
+.t-heatmap-cell[data-level="0"] {
+  background: var(--bg-secondary);
+  border-color: var(--border-light);
+}
+
+.t-heatmap-cell[data-level="1"] {
+  background: #0e4429;
+  border-color: #0e4429;
+}
+
+.t-heatmap-cell[data-level="2"] {
+  background: #006d32;
+  border-color: #006d32;
+}
+
+.t-heatmap-cell[data-level="3"] {
+  background: #26a641;
+  border-color: #26a641;
+}
+
+.t-heatmap-cell[data-level="4"] {
+  background: #39d353;
+  border-color: #39d353;
+}
+
+.t-heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+  margin-top: 8px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.t-heatmap-legend .t-heatmap-cell {
+  width: 12px;
+  height: 12px;
+}
+
+/* Chart header right-aligned text */
+.t-chart-header-right {
+  margin-left: auto;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Claude cost highlight */
+.t-claude-cost {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Claude model breakdown */
+.t-claude-model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.t-claude-model-row:last-child {
+  border-bottom: none;
+}
+
+.t-claude-model-name {
+  font-size: 0.87rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.t-claude-model-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.t-claude-sep {
+  color: var(--border);
+}
+
 /* Animations */
 @keyframes t-spin {
   to { transform: rotate(360deg); }
@@ -716,7 +1071,13 @@
 @media (max-width: 600px) {
   .tracker { padding: 16px; }
   .t-header-left h1 { font-size: 1.1rem; }
-  .t-stats { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .t-controls { flex-wrap: wrap; gap: 8px; }
+  .t-date-picker { flex-wrap: wrap; gap: 4px; }
+  .t-date-tab span { display: none; }
+  .t-date-tab { padding: 7px 10px; }
+  .t-date-tab.active span { display: inline; }
+  .t-calendar { left: auto; right: 0; }
+  .t-stats { grid-template-columns: repeat(2, 1fr); gap: 6px; }
   .t-stat { padding: 12px; }
   .t-stat-val { font-size: 1.4rem; }
   .t-commit { grid-template-columns: auto auto 1fr; }

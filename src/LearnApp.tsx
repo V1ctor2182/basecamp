@@ -11,7 +11,7 @@ import {
   Search, Save, Plus, FolderPlus, Eye, Code2,
   Columns2, Layers, Minus, ZoomIn, ZoomOut, Maximize2,
   Moon, Sun, Pencil, Trash2, FolderInput, PanelLeftClose, PanelLeftOpen,
-  Activity
+  Activity, Upload, HardDrive, X
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import './learn.css'
@@ -59,47 +59,6 @@ interface TreeNode {
   path: string
   type: 'dir' | 'file'
   children?: TreeNode[]
-}
-
-interface EnhancerModule {
-  widgets?: Record<string, React.FC>
-}
-
-// Discover companion .tsx files in learn/topic-folder/ (one level deep)
-const enhancerModules = import.meta.glob<EnhancerModule>(
-  '../../**/*.tsx',
-  { eager: false }
-)
-
-// Load enhancer for a given MD file path
-function useEnhancer(filePath: string) {
-  const [enhancer, setEnhancer] = useState<EnhancerModule | null>(null)
-
-  useEffect(() => {
-    const enhancerPath = `../../${filePath.replace(/\.md$/, '.tsx')}`
-    const loader = enhancerModules[enhancerPath]
-
-    if (loader) {
-      loader().then(mod => setEnhancer(mod)).catch(() => setEnhancer(null))
-    } else {
-      // Fallback: dynamic import for renamed/moved files not yet in the glob map
-      import(/* @vite-ignore */ enhancerPath)
-        .then(mod => setEnhancer(mod))
-        .catch(() => setEnhancer(null))
-    }
-  }, [filePath])
-
-  return enhancer
-}
-
-// Widget skeleton shown while enhancer is loading or widget not found
-function WidgetSkeleton({ name }: { name: string }) {
-  return (
-    <div className="widget-skeleton">
-      <div className="widget-skeleton-shimmer" />
-      <span className="widget-skeleton-label">{name}</span>
-    </div>
-  )
 }
 
 // Mermaid init
@@ -246,9 +205,24 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
   return <code className={className}>{children}</code>
 }
 
+interface LearnDir {
+  id: string
+  name: string
+  path: string
+}
+
 // API helpers
 const api = {
   tree: () => fetch('/api/tree').then(r => r.json()),
+  learnDirs: () => fetch('/api/learn-dirs').then(r => r.json()) as Promise<LearnDir[]>,
+  addLearnDir: (name: string, path: string) =>
+    fetch('/api/learn-dirs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, path })
+    }).then(r => r.json()),
+  removeLearnDir: (id: string) =>
+    fetch(`/api/learn-dirs/${id}`, { method: 'DELETE' }).then(r => r.json()),
   read: (path: string) => fetch(`/api/file?path=${encodeURIComponent(path)}`).then(r => r.json()),
   write: (path: string, content: string) =>
     fetch('/api/file', {
@@ -286,6 +260,12 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ from, to })
     }).then(r => r.json()),
+  upload: (files: { name: string; content: string; dir?: string }[]) =>
+    fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files })
+    }).then(r => r.json()),
 }
 
 function LearnApp() {
@@ -299,7 +279,10 @@ function LearnApp() {
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState<null | 'file' | 'folder'>(null)
   const [modalInput, setModalInput] = useState('')
-  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set())
+  const [openFolders, setOpenFolders] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('learn-open-folders')
+    return saved ? new Set(JSON.parse(saved) as string[]) : new Set<string>()
+  })
   const [fontSize, setFontSize] = useState(() => {
     const saved = localStorage.getItem('learn-font-size')
     return saved ? Number(saved) : 16
@@ -311,6 +294,12 @@ function LearnApp() {
   const [moveModal, setMoveModal] = useState<TreeNode | null>(null)
   const [renameInput, setRenameInput] = useState('')
   const [moveTarget, setMoveTarget] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [learnDirs, setLearnDirs] = useState<LearnDir[]>([])
+  const [showDirManager, setShowDirManager] = useState(false)
+  const [newDirName, setNewDirName] = useState('')
+  const [newDirPath, setNewDirPath] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [activeHeading, setActiveHeading] = useState<string | null>(null)
   const editorRef = useRef<ReactCodeMirrorRef>(null)
   const toc = useMemo(() => extractToc(content), [content])
@@ -368,17 +357,20 @@ function LearnApp() {
 
   // Load tree
   const loadTree = useCallback(async () => {
-    const data = await api.tree()
+    const [data, dirs] = await Promise.all([api.tree(), api.learnDirs()])
     setTree(data)
-    // Auto-expand all
-    const allPaths = new Set<string>()
-    function walk(nodes: TreeNode[]) {
-      for (const n of nodes) {
-        if (n.type === 'dir') { allPaths.add(n.path); if (n.children) walk(n.children) }
+    setLearnDirs(dirs)
+    // Only auto-expand all on first visit (no saved state)
+    if (!localStorage.getItem('learn-open-folders')) {
+      const allPaths = new Set<string>()
+      function walk(nodes: TreeNode[]) {
+        for (const n of nodes) {
+          if (n.type === 'dir') { allPaths.add(n.path); if (n.children) walk(n.children) }
+        }
       }
+      walk(data)
+      setOpenFolders(allPaths)
     }
-    walk(data)
-    setOpenFolders(allPaths)
   }, [])
 
   useEffect(() => { loadTree() }, [loadTree])
@@ -431,6 +423,39 @@ function LearnApp() {
     setModal(null)
     setModalInput('')
   }
+
+  // Upload handler
+  const handleUpload = useCallback(async (fileList: FileList) => {
+    setUploading(true)
+    try {
+      const files: { name: string; content: string }[] = []
+      for (const file of Array.from(fileList)) {
+        const content = await file.text()
+        files.push({ name: file.name, content })
+      }
+      await api.upload(files)
+      await loadTree()
+      showToast(`Uploaded ${files.length} file${files.length > 1 ? 's' : ''}`)
+    } catch (err) {
+      showToast('Upload failed')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }, [loadTree])
+
+  // Drag and drop handler
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const files = e.dataTransfer.files
+    if (files.length > 0) handleUpload(files)
+  }, [handleUpload])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
 
   // Context menu handler
   const handleContextMenu = useCallback((e: React.MouseEvent, node: TreeNode) => {
@@ -529,6 +554,7 @@ function LearnApp() {
     setOpenFolders(prev => {
       const next = new Set(prev)
       if (next.has(path)) next.delete(path); else next.add(path)
+      localStorage.setItem('learn-open-folders', JSON.stringify([...next]))
       return next
     })
   }
@@ -580,6 +606,17 @@ function LearnApp() {
               <button className="btn-action" onClick={() => { setModal('folder'); setModalInput('') }}>
                 <FolderPlus size={14} /> Folder
               </button>
+              <button className="btn-action" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                <Upload size={14} /> {uploading ? 'Uploading…' : 'Upload'}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".md,.markdown,.txt"
+                multiple
+                style={{ display: 'none' }}
+                onChange={e => e.target.files && handleUpload(e.target.files)}
+              />
             </div>
 
             <Link to="/tracker" className="sidebar-tracker-link">
@@ -587,7 +624,92 @@ function LearnApp() {
               <span>Work Tracker</span>
             </Link>
 
-            <div className="sidebar-tree">
+            <div className="sidebar-dirs">
+              <button className="sidebar-dirs-toggle" onClick={() => setShowDirManager(!showDirManager)}>
+                <HardDrive size={14} />
+                <span>{learnDirs.length} folder{learnDirs.length !== 1 ? 's' : ''}</span>
+              </button>
+              {showDirManager && (
+                <div className="dir-manager">
+                  {learnDirs.map(d => (
+                    <div key={d.id} className="dir-item">
+                      <FolderOpen size={13} />
+                      <div className="dir-item-info">
+                        <span className="dir-item-name">{d.name}</span>
+                        <span className="dir-item-path">{d.path}</span>
+                      </div>
+                      <button
+                        className="dir-item-remove"
+                        onClick={async () => {
+                          await api.removeLearnDir(d.id)
+                          loadTree()
+                          showToast(`Removed ${d.name}`)
+                        }}
+                        title="Remove"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  <div className="dir-add-form">
+                    <input
+                      placeholder="Name"
+                      value={newDirName}
+                      onChange={e => setNewDirName(e.target.value)}
+                      className="dir-add-input"
+                    />
+                    <input
+                      placeholder="~/path/to/folder"
+                      value={newDirPath}
+                      onChange={e => setNewDirPath(e.target.value)}
+                      className="dir-add-input"
+                      onKeyDown={async e => {
+                        if (e.key === 'Enter' && newDirName.trim() && newDirPath.trim()) {
+                          try {
+                            const res = await fetch('/api/learn-dirs', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ name: newDirName.trim(), path: newDirPath.trim() })
+                            })
+                            const r = await res.json()
+                            if (!res.ok || r.error) {
+                              showToast(r.error || 'Failed to add folder')
+                            } else {
+                              setNewDirName(''); setNewDirPath(''); await loadTree(); showToast('Folder added')
+                            }
+                          } catch { showToast('Failed to add folder') }
+                        }
+                      }}
+                    />
+                    <button
+                      className="btn-action dir-add-btn"
+                      disabled={!newDirName.trim() || !newDirPath.trim()}
+                      onClick={async () => {
+                        try {
+                          const res = await fetch('/api/learn-dirs', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: newDirName.trim(), path: newDirPath.trim() })
+                          })
+                          const r = await res.json()
+                          if (!res.ok || r.error) {
+                            showToast(r.error || 'Failed to add folder')
+                          } else {
+                            setNewDirName(''); setNewDirPath(''); await loadTree(); showToast('Folder added')
+                          }
+                        } catch (e) {
+                          showToast('Failed to add folder')
+                        }
+                      }}
+                    >
+                      <Plus size={12} /> Add
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="sidebar-tree" onDrop={handleDrop} onDragOver={handleDragOver}>
               {displayTree.map(node => (
                 <TreeItem
                   key={node.path}
@@ -663,15 +785,12 @@ function LearnApp() {
                 />
               </div>
               <div className="editor-pane pane-preview">
-                <div className="preview-wrapper">
-                  <div className="preview-spacer" />
-                  <MarkdownPreview content={content} filePath={activeFile} onActiveHeading={setActiveHeading} />
-                  <div className="toc-column">
-                    {toc.length > 1 && (
-                      <TableOfContents items={toc} activeId={activeHeading} onItemClick={handleTocClick} />
-                    )}
+                <MarkdownPreview content={content} filePath={activeFile} onActiveHeading={setActiveHeading} />
+                {toc.length > 1 && (
+                  <div className="toc-float">
+                    <TableOfContents items={toc} activeId={activeHeading} onItemClick={handleTocClick} />
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -873,8 +992,6 @@ function TreeItem({
 function MarkdownPreview({ content, filePath, onActiveHeading }: {
   content: string; filePath: string; onActiveHeading?: (id: string | null) => void
 }) {
-  const enhancer = useEnhancer(filePath)
-  const widgets = enhancer?.widgets
   const previewRef = useRef<HTMLDivElement>(null)
 
   // Track visible heading via scroll position
@@ -913,22 +1030,6 @@ function MarkdownPreview({ content, filePath, onActiveHeading }: {
         code({ className, children, ...props }) {
           const isInline = !className
           if (isInline) return <code {...props}>{children}</code>
-
-          const lang = className?.replace('language-', '') || ''
-
-          // Widget routing: ```widget:chart-name```
-          if (lang.startsWith('widget:')) {
-            const widgetName = lang.replace('widget:', '')
-            const Widget = widgets?.[widgetName]
-            return Widget ? (
-              <div className="widget-container">
-                <Widget />
-              </div>
-            ) : (
-              <WidgetSkeleton name={widgetName} />
-            )
-          }
-
           return <CodeBlock className={className}>{children}</CodeBlock>
         },
         pre({ children }) {
@@ -944,7 +1045,6 @@ function MarkdownPreview({ content, filePath, onActiveHeading }: {
     <div className="markdown-preview" ref={previewRef}>
       <div className="breadcrumb">
         {filePath}
-        {enhancer && <span className="breadcrumb-enhanced">Enhanced</span>}
       </div>
       {markdownContent}
     </div>
@@ -959,17 +1059,35 @@ function TableOfContents({ items, activeId, onItemClick }: {
 }) {
   return (
     <nav className="toc-nav">
-      <div className="toc-title">On this page</div>
-      {items.map((item, i) => (
-        <button
-          key={`${item.id}-${i}`}
-          className={`toc-item toc-level-${item.level} ${activeId === item.id ? 'active' : ''}`}
-          onClick={() => onItemClick(item.id)}
-          title={item.text}
-        >
-          {item.text}
-        </button>
-      ))}
+      {/* Ruler ticks — always visible */}
+      <div className="toc-ruler">
+        {items.map((item, i) => (
+          <div
+            key={`${item.id}-${i}`}
+            className={`toc-ruler-tick${activeId === item.id ? ' active' : ''}`}
+            onClick={() => onItemClick(item.id)}
+          >
+            <span
+              className="toc-ruler-line"
+              style={{ width: item.level === 1 ? '100%' : item.level === 2 ? '70%' : item.level === 3 ? '45%' : '28%' }}
+            />
+          </div>
+        ))}
+      </div>
+      {/* Full panel — appears on hover */}
+      <div className="toc-panel">
+        <div className="toc-panel-title">On this page</div>
+        {items.map((item, i) => (
+          <button
+            key={`${item.id}-${i}`}
+            className={`toc-item toc-level-${item.level} ${activeId === item.id ? 'active' : ''}`}
+            onClick={() => onItemClick(item.id)}
+            title={item.text}
+          >
+            {item.text}
+          </button>
+        ))}
+      </div>
     </nav>
   )
 }
