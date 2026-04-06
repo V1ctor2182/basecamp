@@ -77,18 +77,10 @@ interface ClaudeStats {
   firstSessionDate: string
 }
 
-interface HourlySnapshot {
-  ts: string
-  messages: number
-  sessions: number
-  tokensByModel: Record<string, number>
-}
-
 interface ClaudePing {
   ts: string
-  session_id: string
-  model: string
-  stop_reason: string
+  session: string
+  project: string
 }
 
 // Claude logo icon
@@ -271,24 +263,22 @@ export default function TrackerApp() {
   // Full month data for chart + calendar dots
   const [monthActivity, setMonthActivity] = useState<RepoActivity[]>([])
   const [claudeStats, setClaudeStats] = useState<ClaudeStats | null>(null)
-  const [hourlySnapshots, setHourlySnapshots] = useState<HourlySnapshot[]>([])
   const [claudePings, setClaudePings] = useState<ClaudePing[]>([])
-  const [hourlyDate, setHourlyDate] = useState(() => { const d = new Date(); return d.toISOString().slice(0, 10) })
-  const [showHourlyCal, setShowHourlyCal] = useState(false)
+  const [activityDate, setActivityDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [activityView, setActivityView] = useState<'day' | 'week' | 'month' | 'projects'>('day')
+  const [showActivityCal, setShowActivityCal] = useState(false)
   const [heatmapTooltip, setHeatmapTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
   const heatmapRef = useRef<HTMLDivElement>(null)
   const calendarRef = useRef<HTMLDivElement>(null)
-  const hourlyCalRef = useRef<HTMLDivElement>(null)
+  const activityCalRef = useRef<HTMLDivElement>(null)
 
   const loadClaudeStats = useCallback(async () => {
     try {
-      const [statsRes, hourlyRes, pingsRes] = await Promise.all([
+      const [statsRes, pingsRes] = await Promise.all([
         fetch('/api/claude-stats'),
-        fetch('/api/claude-hourly'),
         fetch('/api/claude-pings'),
       ])
       if (statsRes.ok) setClaudeStats(await statsRes.json())
-      if (hourlyRes.ok) setHourlySnapshots(await hourlyRes.json())
       if (pingsRes.ok) setClaudePings(await pingsRes.json())
     } catch { /* silent */ }
   }, [])
@@ -395,17 +385,17 @@ export default function TrackerApp() {
     return () => document.removeEventListener('mousedown', handler)
   }, [showCalendar])
 
-  // Close hourly calendar on click outside
+  // Close activity calendar on click outside
   useEffect(() => {
-    if (!showHourlyCal) return
+    if (!showActivityCal) return
     const handler = (e: MouseEvent) => {
-      if (hourlyCalRef.current && !hourlyCalRef.current.contains(e.target as Node)) {
-        setShowHourlyCal(false)
+      if (activityCalRef.current && !activityCalRef.current.contains(e.target as Node)) {
+        setShowActivityCal(false)
       }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [showHourlyCal])
+  }, [showActivityCal])
 
   // Commits by date (for chart + calendar)
   const commitsByDate = useMemo(() => {
@@ -419,16 +409,15 @@ export default function TrackerApp() {
     return map
   }, [monthActivity])
 
-  // Tokens by date (for hourly calendar dots)
-  const tokensByDate = useMemo(() => {
+  // Pings by date (for activity calendar dots)
+  const pingsByDate = useMemo(() => {
     const map = new Map<string, number>()
-    for (const snap of hourlySnapshots) {
-      const key = snap.ts.slice(0, 10) // YYYY-MM-DD
-      const tokens = Object.values(snap.tokensByModel).reduce((a, b) => a + b, 0)
-      map.set(key, (map.get(key) || 0) + tokens)
+    for (const p of claudePings) {
+      const key = p.ts.slice(0, 10)
+      map.set(key, (map.get(key) || 0) + 1)
     }
     return map
-  }, [hourlySnapshots])
+  }, [claudePings])
 
   // Commits by date per repo (for stacked chart)
   const chartData = useMemo(() => {
@@ -685,121 +674,27 @@ export default function TrackerApp() {
     }
   }, [claudeStats])
 
-  // Hourly token chart for selected day
-  const hourlyDayChart = useMemo(() => {
-    if (!hourlySnapshots.length) return null
-    const root = document.documentElement
-    const cs = getComputedStyle(root)
-    const resolve = (v: string) => { const m = v.match(/var\((.+)\)/); return m ? cs.getPropertyValue(m[1]).trim() || '#888' : v }
-
-    // Filter snapshots for selected date
-    const daySnapshots = hourlySnapshots.filter(s => s.ts.startsWith(hourlyDate))
-
-    // Bucket into hours, accumulate tokens per model
-    const hourBuckets: Record<number, Record<string, number>> = {}
-    const hourMessages: Record<number, number> = {}
-    for (let h = 0; h < 24; h++) { hourBuckets[h] = {}; hourMessages[h] = 0 }
-
-    for (const snap of daySnapshots) {
-      const h = new Date(snap.ts).getHours()
-      hourMessages[h] += snap.messages
-      for (const [model, tokens] of Object.entries(snap.tokensByModel)) {
-        hourBuckets[h][model] = (hourBuckets[h][model] || 0) + tokens
-      }
-    }
-
-    // Collect all models seen this day
-    const modelSet = new Set<string>()
-    for (const bucket of Object.values(hourBuckets)) for (const m of Object.keys(bucket)) modelSet.add(m)
-    const models = [...modelSet]
-
-    if (models.length === 0) return null
-
-    const modelColors: Record<string, string> = {
-      'claude-opus-4-6': '#D97757',
-      'claude-opus-4-5-20251101': '#C65D33',
-      'claude-sonnet-4-6': '#E8A87C',
-      'claude-sonnet-4-5-20250929': '#B8856C',
-      'claude-haiku-4-5-20251001': '#F0C4A8',
-    }
-    const shortName = (m: string) => {
-      if (m.includes('opus-4-6')) return 'Opus 4.6'
-      if (m.includes('opus-4-5')) return 'Opus 4.5'
-      if (m.includes('sonnet-4-6')) return 'Sonnet 4.6'
-      if (m.includes('sonnet-4-5')) return 'Sonnet 4.5'
-      if (m.includes('haiku')) return 'Haiku 4.5'
-      return m
-    }
-
-    const hours = Array.from({ length: 24 }, (_, i) => i)
-    const totalTokens = Object.values(hourBuckets).reduce((s, b) => s + Object.values(b).reduce((a, v) => a + v, 0), 0)
-    const totalMsgs = Object.values(hourMessages).reduce((a, b) => a + b, 0)
-
-    return {
-      totalTokens,
-      totalMessages: totalMsgs,
-      chart: {
-        grid: { left: 56, right: 12, top: 30, bottom: 28 },
-        tooltip: {
-          trigger: 'axis' as const,
-          backgroundColor: resolve('var(--bg-card)'),
-          borderColor: resolve('var(--border)'),
-          textStyle: { color: resolve('var(--text-primary)'), fontSize: 12 },
-          valueFormatter: (v: number) => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v),
-        },
-        legend: {
-          top: 0, right: 0,
-          textStyle: { color: resolve('var(--text-muted)'), fontSize: 11 },
-          itemWidth: 10, itemHeight: 10,
-        },
-        xAxis: {
-          type: 'category' as const,
-          data: hours.map(h => `${h}:00`),
-          axisLabel: { color: resolve('var(--text-muted)'), fontSize: 10, interval: 2 },
-          axisLine: { lineStyle: { color: resolve('var(--border-light)') } },
-          axisTick: { show: false },
-        },
-        yAxis: {
-          type: 'value' as const,
-          axisLabel: { color: resolve('var(--text-muted)'), fontSize: 10, formatter: (v: number) => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v) },
-          splitLine: { lineStyle: { color: resolve('var(--border-light)'), type: 'dashed' as const } },
-        },
-        series: models.map((m, i) => ({
-          name: shortName(m),
-          type: 'bar' as const,
-          stack: 'tokens',
-          barWidth: '60%',
-          itemStyle: {
-            color: modelColors[m] || `hsl(${20 + i * 15}, 70%, 55%)`,
-            borderRadius: i === models.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0],
-          },
-          data: hours.map(h => Object.entries(hourBuckets[h]).filter(([k]) => k === m).reduce((s, [, v]) => s + v, 0)),
-        })),
-      },
-    }
-  }, [hourlySnapshots, hourlyDate])
-
   // Activity timeline from pings — shows active sessions as time blocks
   const activityTimeline = useMemo(() => {
     if (!claudePings.length) return null
-    const dayPings = claudePings.filter(p => p.ts.startsWith(hourlyDate))
+    const dayPings = claudePings.filter(p => p.ts.startsWith(activityDate))
     if (!dayPings.length) return null
 
     // Group pings by session
-    const sessions = new Map<string, { pings: ClaudePing[], model: string }>()
+    const sessions = new Map<string, { pings: ClaudePing[], project: string }>()
     for (const p of dayPings) {
-      if (!sessions.has(p.session_id)) sessions.set(p.session_id, { pings: [], model: p.model })
-      sessions.get(p.session_id)!.pings.push(p)
+      if (!sessions.has(p.session)) sessions.set(p.session, { pings: [], project: p.project })
+      sessions.get(p.session)!.pings.push(p)
     }
 
     // Build session blocks: first ping → last ping per session
-    const blocks: { start: Date; end: Date; model: string; turns: number }[] = []
+    const blocks: { start: Date; end: Date; project: string; turns: number }[] = []
     for (const [, s] of sessions) {
       const times = s.pings.map(p => new Date(p.ts).getTime()).sort((a, b) => a - b)
       blocks.push({
         start: new Date(times[0]),
         end: new Date(times[times.length - 1]),
-        model: s.model,
+        project: s.project,
         turns: s.pings.length,
       })
     }
@@ -810,7 +705,199 @@ export default function TrackerApp() {
     const totalTurns = dayPings.length
 
     return { blocks, totalMinutes, totalTurns, sessionCount: sessions.size }
-  }, [claudePings, hourlyDate])
+  }, [claudePings, activityDate])
+
+  // Week view: 7 days of activity tracks
+  const activityWeek = useMemo(() => {
+    if (!claudePings.length) return null
+    const baseDate = new Date(activityDate + 'T00:00:00')
+    // Start from Monday of the week containing activityDate
+    const dayOfWeek = baseDate.getDay()
+    const monday = new Date(baseDate)
+    monday.setDate(monday.getDate() - ((dayOfWeek + 6) % 7))
+
+    const days: { date: string; label: string; blocks: { start: Date; end: Date; project: string; turns: number }[]; totalMinutes: number; turns: number }[] = []
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday)
+      d.setDate(d.getDate() + i)
+      const key = toDateKey(d)
+      const dayPings = claudePings.filter(p => p.ts.startsWith(key))
+
+      const sessions = new Map<string, { pings: ClaudePing[]; project: string }>()
+      for (const p of dayPings) {
+        if (!sessions.has(p.session)) sessions.set(p.session, { pings: [], project: p.project })
+        sessions.get(p.session)!.pings.push(p)
+      }
+
+      const blocks: { start: Date; end: Date; project: string; turns: number }[] = []
+      for (const [, s] of sessions) {
+        const times = s.pings.map(p => new Date(p.ts).getTime()).sort((a, b) => a - b)
+        blocks.push({ start: new Date(times[0]), end: new Date(times[times.length - 1]), project: s.project, turns: s.pings.length })
+      }
+      blocks.sort((a, b) => a.start.getTime() - b.start.getTime())
+
+      const totalMinutes = blocks.reduce((s, b) => s + Math.max(1, (b.end.getTime() - b.start.getTime()) / 60000), 0)
+      days.push({ date: key, label: d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }), blocks, totalMinutes, turns: dayPings.length })
+    }
+
+    const weekTotal = days.reduce((s, d) => s + d.totalMinutes, 0)
+    return { days, weekTotal }
+  }, [claudePings, activityDate])
+
+  // Month view: daily hours line chart
+  const activityMonthChart = useMemo(() => {
+    if (!claudePings.length) return null
+    const root = document.documentElement
+    const cs = getComputedStyle(root)
+    const resolve = (v: string) => { const m = v.match(/var\((.+)\)/); return m ? cs.getPropertyValue(m[1]).trim() || '#888' : v }
+
+    const baseDate = new Date(activityDate + 'T00:00:00')
+    const year = baseDate.getFullYear()
+    const month = baseDate.getMonth()
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+    const dailyHours: { date: string; label: string; hours: number; turns: number }[] = []
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(year, month, d)
+      const key = toDateKey(date)
+      const dayPings = claudePings.filter(p => p.ts.startsWith(key))
+
+      const sessions = new Map<string, ClaudePing[]>()
+      for (const p of dayPings) {
+        if (!sessions.has(p.session)) sessions.set(p.session, [])
+        sessions.get(p.session)!.push(p)
+      }
+
+      let minutes = 0
+      for (const pings of sessions.values()) {
+        const times = pings.map(p => new Date(p.ts).getTime()).sort((a, b) => a - b)
+        minutes += Math.max(1, (times[times.length - 1] - times[0]) / 60000)
+      }
+
+      dailyHours.push({ date: key, label: `${d}`, hours: minutes / 60, turns: dayPings.length })
+    }
+
+    const totalHours = dailyHours.reduce((s, d) => s + d.hours, 0)
+    const activeDays = dailyHours.filter(d => d.turns > 0).length
+
+    return {
+      totalHours,
+      activeDays,
+      monthLabel: baseDate.toLocaleDateString([], { month: 'long', year: 'numeric' }),
+      chart: {
+        grid: { left: 42, right: 12, top: 14, bottom: 28 },
+        tooltip: {
+          trigger: 'axis' as const,
+          backgroundColor: resolve('var(--bg-card)'),
+          borderColor: resolve('var(--border)'),
+          textStyle: { color: resolve('var(--text-primary)'), fontSize: 12 },
+          formatter: (params: Array<{ dataIndex: number; value: number }>) => {
+            const p = params[0]
+            const d = dailyHours[p.dataIndex]
+            return `${d.date}<br/><b>${d.hours.toFixed(1)}h</b> · ${d.turns} turns`
+          },
+        },
+        xAxis: {
+          type: 'category' as const,
+          data: dailyHours.map(d => d.label),
+          axisLabel: { color: resolve('var(--text-muted)'), fontSize: 10, interval: 2 },
+          axisLine: { lineStyle: { color: resolve('var(--border-light)') } },
+          axisTick: { show: false },
+        },
+        yAxis: {
+          type: 'value' as const,
+          axisLabel: { color: resolve('var(--text-muted)'), fontSize: 10, formatter: (v: number) => `${v}h` },
+          splitLine: { lineStyle: { color: resolve('var(--border-light)'), type: 'dashed' as const } },
+        },
+        series: [{
+          type: 'line' as const,
+          smooth: true,
+          symbol: 'circle',
+          symbolSize: 5,
+          lineStyle: { color: '#D97757', width: 2 },
+          itemStyle: { color: '#D97757' },
+          areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(217, 119, 87, 0.3)' },
+            { offset: 1, color: 'rgba(217, 119, 87, 0.02)' },
+          ])},
+          data: dailyHours.map(d => d.hours),
+        }],
+      },
+    }
+  }, [claudePings, activityDate])
+
+  // Project stats: bar chart of hours per project
+  const activityProjectChart = useMemo(() => {
+    if (!claudePings.length) return null
+    const root = document.documentElement
+    const cs = getComputedStyle(root)
+    const resolve = (v: string) => { const m = v.match(/var\((.+)\)/); return m ? cs.getPropertyValue(m[1]).trim() || '#888' : v }
+
+    // Group all pings by project → sessions → compute time
+    const projectMinutes = new Map<string, number>()
+    const projectTurns = new Map<string, number>()
+
+    // Group by project+session
+    const projectSessions = new Map<string, Map<string, ClaudePing[]>>()
+    for (const p of claudePings) {
+      if (!projectSessions.has(p.project)) projectSessions.set(p.project, new Map())
+      const sessions = projectSessions.get(p.project)!
+      if (!sessions.has(p.session)) sessions.set(p.session, [])
+      sessions.get(p.session)!.push(p)
+      projectTurns.set(p.project, (projectTurns.get(p.project) || 0) + 1)
+    }
+
+    for (const [project, sessions] of projectSessions) {
+      let totalMin = 0
+      for (const pings of sessions.values()) {
+        const times = pings.map(p => new Date(p.ts).getTime()).sort((a, b) => a - b)
+        totalMin += Math.max(1, (times[times.length - 1] - times[0]) / 60000)
+      }
+      projectMinutes.set(project, totalMin)
+    }
+
+    const sorted = [...projectMinutes.entries()].sort((a, b) => b[1] - a[1])
+    if (!sorted.length) return null
+
+    const projects = sorted.map(([p]) => p)
+    const hours = sorted.map(([, m]) => +(m / 60).toFixed(1))
+
+    return {
+      chart: {
+        grid: { left: 120, right: 24, top: 14, bottom: 28 },
+        tooltip: {
+          trigger: 'axis' as const,
+          backgroundColor: resolve('var(--bg-card)'),
+          borderColor: resolve('var(--border)'),
+          textStyle: { color: resolve('var(--text-primary)'), fontSize: 12 },
+          formatter: (params: Array<{ dataIndex: number; value: number }>) => {
+            const p = params[0]
+            const proj = projects[p.dataIndex]
+            return `<b>${proj}</b><br/>${p.value}h · ${projectTurns.get(proj) || 0} turns`
+          },
+        },
+        xAxis: {
+          type: 'value' as const,
+          axisLabel: { color: resolve('var(--text-muted)'), fontSize: 10, formatter: (v: number) => `${v}h` },
+          splitLine: { lineStyle: { color: resolve('var(--border-light)'), type: 'dashed' as const } },
+        },
+        yAxis: {
+          type: 'category' as const,
+          data: projects,
+          axisLabel: { color: resolve('var(--text-muted)'), fontSize: 10, width: 100, overflow: 'truncate' as const },
+          axisLine: { lineStyle: { color: resolve('var(--border-light)') } },
+          axisTick: { show: false },
+        },
+        series: [{
+          type: 'bar' as const,
+          barWidth: '60%',
+          itemStyle: { color: '#D97757', borderRadius: [0, 3, 3, 0] },
+          data: hours,
+        }],
+      },
+    }
+  }, [claudePings])
 
   const activeRepos = activity.filter(a => a.commits.length > 0)
   const totalCommits = activity.reduce((sum, a) => sum + a.commits.length, 0)
@@ -1361,93 +1448,162 @@ export default function TrackerApp() {
                 </div>
               )}
 
-              {/* Hourly Token Tracking for specific day */}
+              {/* Activity Timeline */}
               <div className="t-chart-card">
                 <div className="t-chart-header">
-                  <Zap size={14} />
-                  <span>Hourly Token Usage</span>
-                  <div className="t-cal-wrapper" ref={hourlyCalRef} style={{ marginLeft: 'auto' }}>
-                    <button
-                      className={`t-date-tab ${showHourlyCal ? 'active' : ''}`}
-                      onClick={() => setShowHourlyCal(!showHourlyCal)}
-                    >
-                      <Calendar size={14} />
-                      <span>{new Date(hourlyDate + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                    </button>
-                    {showHourlyCal && (
-                      <MiniCalendar
-                        selectedDate={new Date(hourlyDate + 'T00:00:00')}
-                        onSelect={(d) => { setHourlyDate(toDateKey(d)); setShowHourlyCal(false) }}
-                        commitsByDate={tokensByDate}
-                      />
-                    )}
+                  <Clock size={14} />
+                  <span>Activity Timeline</span>
+                  <div className="t-activity-tabs">
+                    {(['day', 'week', 'month', 'projects'] as const).map(v => (
+                      <button key={v} className={`t-activity-tab ${activityView === v ? 'active' : ''}`} onClick={() => setActivityView(v)}>
+                        {v === 'day' ? 'Day' : v === 'week' ? 'Week' : v === 'month' ? 'Month' : 'Projects'}
+                      </button>
+                    ))}
                   </div>
-                </div>
-                {hourlyDayChart ? (
-                  <>
-                    <div className="t-hourly-summary">
-                      {hourlyDayChart.totalTokens >= 1_000_000
-                        ? `${(hourlyDayChart.totalTokens / 1_000_000).toFixed(1)}M`
-                        : `${(hourlyDayChart.totalTokens / 1000).toFixed(0)}k`} tokens · {hourlyDayChart.totalMessages} messages
+                  {activityView !== 'projects' && (
+                    <div className="t-cal-wrapper" ref={activityCalRef}>
+                      <button
+                        className={`t-date-tab ${showActivityCal ? 'active' : ''}`}
+                        onClick={() => setShowActivityCal(!showActivityCal)}
+                      >
+                        <Calendar size={14} />
+                        <span>{activityView === 'month'
+                          ? new Date(activityDate + 'T00:00:00').toLocaleDateString([], { month: 'short', year: 'numeric' })
+                          : new Date(activityDate + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric' })
+                        }</span>
+                      </button>
+                      {showActivityCal && (
+                        <MiniCalendar
+                          selectedDate={new Date(activityDate + 'T00:00:00')}
+                          onSelect={(d) => { setActivityDate(toDateKey(d)); setShowActivityCal(false) }}
+                          commitsByDate={pingsByDate}
+                        />
+                      )}
                     </div>
-                    <ReactEChartsCore echarts={echarts} option={hourlyDayChart.chart} style={{ height: 200 }} notMerge />
-                  </>
-                ) : (
-                  <div className="t-hourly-empty">
-                    No hourly data for {new Date(hourlyDate + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
-                    <span className="t-hourly-empty-hint">Tracking starts when the server runs — data builds up over time</span>
-                  </div>
+                  )}
+                </div>
+
+                {/* Day View */}
+                {activityView === 'day' && (
+                  activityTimeline ? (
+                    <>
+                      <div className="t-activity-summary">
+                        {Math.floor(activityTimeline.totalMinutes / 60) > 0 && `${Math.floor(activityTimeline.totalMinutes / 60)}h `}
+                        {Math.round(activityTimeline.totalMinutes % 60)}m · {activityTimeline.totalTurns} turns · {activityTimeline.sessionCount} sessions
+                      </div>
+                      <div className="t-timeline">
+                        <div className="t-timeline-hours">
+                          {Array.from({ length: 24 }, (_, i) => (
+                            <span key={i} className="t-timeline-hour-label">{i}</span>
+                          ))}
+                        </div>
+                        <div className="t-timeline-track">
+                          {activityTimeline.blocks.map((block, i) => {
+                            const startMin = block.start.getHours() * 60 + block.start.getMinutes()
+                            const endMin = block.end.getHours() * 60 + block.end.getMinutes()
+                            const left = (startMin / 1440) * 100
+                            const width = Math.max(0.4, ((Math.max(endMin - startMin, 1)) / 1440) * 100)
+                            return (
+                              <div
+                                key={i}
+                                className="t-timeline-block"
+                                style={{ left: `${left}%`, width: `${width}%` }}
+                                title={`${block.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${block.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${block.project} · ${block.turns} turns`}
+                              />
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="t-hourly-empty">
+                      No activity for {new Date(activityDate + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+                      <span className="t-hourly-empty-hint">Data records automatically via Claude Code hooks on every response</span>
+                    </div>
+                  )
+                )}
+
+                {/* Week View */}
+                {activityView === 'week' && (
+                  activityWeek && activityWeek.days.some(d => d.blocks.length > 0) ? (
+                    <>
+                      <div className="t-activity-summary">
+                        {Math.floor(activityWeek.weekTotal / 60) > 0 && `${Math.floor(activityWeek.weekTotal / 60)}h `}
+                        {Math.round(activityWeek.weekTotal % 60)}m this week
+                      </div>
+                      <div className="t-timeline-week">
+                        {activityWeek.days.map(day => (
+                          <div key={day.date} className="t-timeline-week-row">
+                            <span className="t-timeline-week-label">{day.label}</span>
+                            <div className="t-timeline-track">
+                              {day.blocks.map((block, i) => {
+                                const startMin = block.start.getHours() * 60 + block.start.getMinutes()
+                                const endMin = block.end.getHours() * 60 + block.end.getMinutes()
+                                const left = (startMin / 1440) * 100
+                                const width = Math.max(0.4, ((Math.max(endMin - startMin, 1)) / 1440) * 100)
+                                return (
+                                  <div
+                                    key={i}
+                                    className="t-timeline-block"
+                                    style={{ left: `${left}%`, width: `${width}%` }}
+                                    title={`${block.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${block.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${block.project} · ${block.turns} turns`}
+                                  />
+                                )
+                              })}
+                            </div>
+                            <span className="t-timeline-week-time">
+                              {day.totalMinutes >= 60 ? `${(day.totalMinutes / 60).toFixed(1)}h` : day.totalMinutes > 0 ? `${Math.round(day.totalMinutes)}m` : ''}
+                            </span>
+                          </div>
+                        ))}
+                        <div className="t-timeline-week-row t-timeline-week-hours-row">
+                          <span className="t-timeline-week-label" />
+                          <div className="t-timeline-hours">
+                            {Array.from({ length: 24 }, (_, i) => (
+                              <span key={i} className="t-timeline-hour-label">{i % 3 === 0 ? i : ''}</span>
+                            ))}
+                          </div>
+                          <span className="t-timeline-week-time" />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="t-hourly-empty">
+                      No activity this week
+                      <span className="t-hourly-empty-hint">Data records automatically via Claude Code hooks on every response</span>
+                    </div>
+                  )
+                )}
+
+                {/* Month View */}
+                {activityView === 'month' && (
+                  activityMonthChart ? (
+                    <>
+                      <div className="t-activity-summary">
+                        {activityMonthChart.totalHours.toFixed(1)}h across {activityMonthChart.activeDays} days in {activityMonthChart.monthLabel}
+                      </div>
+                      <ReactEChartsCore echarts={echarts} option={activityMonthChart.chart} style={{ height: 180 }} notMerge />
+                    </>
+                  ) : (
+                    <div className="t-hourly-empty">
+                      No activity data yet
+                      <span className="t-hourly-empty-hint">Data records automatically via Claude Code hooks on every response</span>
+                    </div>
+                  )
+                )}
+
+                {/* Projects View */}
+                {activityView === 'projects' && (
+                  activityProjectChart ? (
+                    <ReactEChartsCore echarts={echarts} option={activityProjectChart.chart} style={{ height: Math.max(150, Object.keys(activityProjectChart.chart.yAxis.data).length * 32) }} notMerge />
+                  ) : (
+                    <div className="t-hourly-empty">
+                      No project data yet
+                      <span className="t-hourly-empty-hint">Data records automatically via Claude Code hooks on every response</span>
+                    </div>
+                  )
                 )}
               </div>
-
-              {/* Activity Timeline */}
-              {activityTimeline ? (
-                <div className="t-chart-card">
-                  <div className="t-chart-header">
-                    <Clock size={14} />
-                    <span>Activity Timeline</span>
-                    <span className="t-chart-header-right">
-                      {Math.floor(activityTimeline.totalMinutes / 60) > 0 && `${Math.floor(activityTimeline.totalMinutes / 60)}h `}
-                      {Math.round(activityTimeline.totalMinutes % 60)}m · {activityTimeline.totalTurns} turns · {activityTimeline.sessionCount} sessions
-                    </span>
-                  </div>
-                  <div className="t-timeline">
-                    <div className="t-timeline-hours">
-                      {Array.from({ length: 24 }, (_, i) => (
-                        <span key={i} className="t-timeline-hour-label">{i}</span>
-                      ))}
-                    </div>
-                    <div className="t-timeline-track">
-                      {activityTimeline.blocks.map((block, i) => {
-                        const startMin = block.start.getHours() * 60 + block.start.getMinutes()
-                        const endMin = block.end.getHours() * 60 + block.end.getMinutes()
-                        const left = (startMin / 1440) * 100
-                        const width = Math.max(0.4, ((Math.max(endMin - startMin, 1)) / 1440) * 100)
-                        const shortModel = block.model.includes('opus') ? 'Opus' : block.model.includes('sonnet') ? 'Sonnet' : block.model.includes('haiku') ? 'Haiku' : block.model
-                        return (
-                          <div
-                            key={i}
-                            className="t-timeline-block"
-                            style={{ left: `${left}%`, width: `${width}%` }}
-                            title={`${block.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${block.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${shortModel} · ${block.turns} turns`}
-                          />
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-              ) : hourlyDate === new Date().toISOString().slice(0, 10) && claudePings.length === 0 ? (
-                <div className="t-chart-card">
-                  <div className="t-chart-header">
-                    <Clock size={14} />
-                    <span>Activity Timeline</span>
-                  </div>
-                  <div className="t-hourly-empty">
-                    No activity pings yet
-                    <span className="t-hourly-empty-hint">Data records automatically via Claude Code hooks on every response</span>
-                  </div>
-                </div>
-              ) : null}
 
               {/* Model Breakdown */}
               <div className="t-chart-card">

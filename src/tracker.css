@@ -1065,14 +1065,93 @@
   color: var(--border);
 }
 
-/* Hourly token tracking */
-.t-hourly-summary {
+/* Activity view tabs */
+.t-activity-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 2px;
+  margin-left: auto;
+}
+
+.t-activity-tab {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: inherit;
+}
+
+.t-activity-tab:hover {
+  color: var(--text-secondary);
+}
+
+.t-activity-tab.active {
+  background: var(--bg-card);
+  color: #D97757;
+  box-shadow: var(--shadow-sm);
+}
+
+.t-activity-summary {
   font-size: 0.75rem;
   color: #D97757;
   font-weight: 600;
   padding: 4px 16px 0;
 }
 
+/* Week view */
+.t-timeline-week {
+  padding: 8px 16px 12px;
+}
+
+.t-timeline-week-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 48px;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.t-timeline-week-hours-row {
+  margin-bottom: 0;
+  margin-top: 2px;
+}
+
+.t-timeline-week-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.t-timeline-week-time {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.t-timeline-week-row .t-timeline-track {
+  height: 18px;
+}
+
+.t-timeline-week-row .t-timeline-block {
+  top: 2px;
+  bottom: 2px;
+}
+
+.t-timeline-week-row .t-timeline-hours {
+  padding: 0;
+}
+
+/* Activity timeline empty state */
 .t-hourly-empty {
   padding: 24px 16px;
   text-align: center;

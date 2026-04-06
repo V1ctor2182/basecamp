@@ -224,6 +224,101 @@ A Claude Code skill (`.skill` zip + `~/.claude/skills/`) that automates the crea
 | Backend | Express | 5.2 |
 | Dev runner | concurrently | — |
 
+## Claude Code Usage Tracking
+
+Two complementary data sources track Claude Code usage: a passive stats cache reader and a real-time activity hook.
+
+### Data Sources
+
+| Source | Mechanism | Granularity | Data |
+|---|---|---|---|
+| `~/.claude/stats-cache.json` | Read on page load + every 60s | Daily totals (updates on new session) | Messages, tokens by model, sessions, cost |
+| `Stop` hook → `/api/claude-ping` | Real-time, fires on every Claude response | Per-turn | Timestamp, session ID, project name |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Claude Code (any project, global hook)                 │
+│                                                         │
+│  Stop hook fires ──→ curl POST localhost:8000/claude-ping│
+│                      { session_id, cwd }                │
+│                                                         │
+│  Session start ──→ updates ~/.claude/stats-cache.json   │
+└─────────────────────────────────────────────────────────┘
+          │                          │
+          ▼                          ▼
+┌──────────────────┐    ┌──────────────────────────┐
+│ data/             │    │ server.mjs                │
+│ claude-pings.json │◀───│ POST /api/claude-ping     │
+└──────────────────┘    │ GET /api/claude-stats      │
+                        │ reads stats-cache.json     │
+                        └──────────────────────────┘
+```
+
+### Data Flow — Activity Pings (real-time)
+
+```
+Claude finishes response
+  → Stop hook in ~/.claude/settings.json fires
+  → bash curl POSTs { session_id, cwd } to localhost:8000/api/claude-ping
+  → server extracts ts, session, project (basename of cwd)
+  → appends to data/claude-pings.json
+  → frontend polls /api/claude-pings, groups by session
+  → Activity Timeline renders session blocks on a 24h track
+  → total active time = sum of (last ping − first ping) per session
+```
+
+### Data Flow — Stats Cache (delayed, read-only)
+
+```
+New Claude Code session starts
+  → Claude Code recomputes ~/.claude/stats-cache.json
+  → frontend fetches /api/claude-stats (reads file directly)
+  → renders all-time stats cards, heatmap, model breakdown, charts
+```
+
+### Hook Configuration
+
+Global hook in `~/.claude/settings.json` under `hooks.Stop`:
+
+```json
+{
+  "type": "command",
+  "command": "bash -c 'INPUT=$(cat); curl -s -X POST http://localhost:8000/api/claude-ping -H \"Content-Type: application/json\" -d \"$INPUT\" --max-time 3 >/dev/null 2>&1 || true'",
+  "timeout": 5
+}
+```
+
+- Global scope: fires in all projects, all sessions
+- Fails silently if server is not running (`|| true`)
+- 3s curl timeout + 5s hook timeout to avoid blocking Claude
+
+### Storage
+
+| File | Contents | Retention |
+|---|---|---|
+| `data/claude-pings.json` | `[{ ts, session, project }]` | Last 50k entries |
+| `~/.claude/stats-cache.json` | Claude Code's own cache (read-only) | Managed by Claude Code |
+
+### Frontend Components
+
+| Component | Data Source | Shows |
+|---|---|---|
+| Stats cards (Sessions, Messages, Tokens, Cost) | stats-cache | All-time totals |
+| Contribution heatmap | stats-cache dailyActivity | Messages per day (calendar grid) |
+| Tokens by Model chart | stats-cache dailyModelTokens | Last 30 days stacked bars |
+| When Do You Code the Most? | stats-cache hourCounts | All-time session distribution by hour |
+| Activity Timeline | claude-pings.json | Session blocks on 24h track with date picker |
+| Model Breakdown table | stats-cache modelUsage | Per-model tokens + estimated cost |
+
+### Limitations
+
+1. **Stats cache is delayed** — stats-cache.json only updates when a new Claude Code session starts, not during a session.
+2. **Activity pings require server running** — if the dashboard server is down, pings are silently dropped (no queuing).
+3. **No model/token info in pings** — the Stop hook payload doesn't include model or token counts; that data only comes from stats-cache.
+4. **Cost is estimated** — uses hardcoded pricing per million tokens; may drift from actual billing.
+
 ## Known Limitations
 
 1. **Mermaid colors don't follow dark mode** — `mermaid.initialize()` is called once at module load with hardcoded light-theme `themeVariables`. Fixing this requires re-initializing mermaid and re-rendering diagrams on theme toggle.
