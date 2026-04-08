@@ -99,41 +99,66 @@ app.post('/api/repos', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- Sync all repos from GitHub user ---
+// --- Sync all repos where user has commits ---
 app.post('/api/repos/sync', async (req, res) => {
   try {
     const config = await readJSON(CONFIG_FILE);
     const username = config.githubUsername;
     if (!username) return res.status(400).json({ error: 'Set GitHub username in settings first' });
 
-    // Fetch all repos (paginated, up to 300)
-    let allGhRepos = [];
+    const repoSet = new Map(); // id -> repo metadata
+
+    // 1. All repos owned by user (including private if token available)
     for (let page = 1; page <= 3; page++) {
-      const data = await githubFetch(`/users/${username}/repos?per_page=100&page=${page}&sort=updated`);
+      const data = await githubFetch(`/user/repos?per_page=100&page=${page}&sort=updated&affiliation=owner,collaborator,organization_member`);
       if (!Array.isArray(data) || data.length === 0) break;
-      allGhRepos = allGhRepos.concat(data);
+      for (const gh of data) {
+        repoSet.set(gh.full_name, gh);
+      }
     }
 
+    // 2. Recent push events (up to ~10 pages = 300 events) to find repos in other orgs
+    for (let page = 1; page <= 10; page++) {
+      const events = await githubFetch(`/users/${username}/events?per_page=30&page=${page}`);
+      if (!Array.isArray(events) || events.length === 0) break;
+      for (const event of events) {
+        if (event.type === 'PushEvent' && event.repo) {
+          const [owner, repo] = event.repo.name.split('/');
+          if (!repoSet.has(event.repo.name)) {
+            // Fetch repo metadata
+            const gh = await githubFetch(`/repos/${event.repo.name}`).catch(() => null);
+            if (gh && gh.full_name) repoSet.set(gh.full_name, gh);
+          }
+        }
+      }
+    }
+
+    // 3. Filter: only repos where user has at least one commit
     const repos = await readJSON(REPOS_FILE);
     const existingIds = new Set(repos.map(r => r.id));
     let added = 0;
+    let checked = 0;
 
-    for (const gh of allGhRepos) {
-      if (gh.fork) continue; // skip forks
-      const id = gh.full_name;
-      if (existingIds.has(id)) continue;
-      repos.push({
-        id,
-        url: gh.html_url,
-        owner: gh.owner.login,
-        repo: gh.name,
-        addedAt: new Date().toISOString(),
-      });
-      added++;
-    }
+    const candidates = [...repoSet.values()].filter(gh => !existingIds.has(gh.full_name));
+
+    await Promise.allSettled(candidates.map(async (gh) => {
+      try {
+        const commits = await githubFetch(`/repos/${gh.full_name}/commits?author=${username}&per_page=1`);
+        checked++;
+        if (!Array.isArray(commits) || commits.length === 0) return;
+        repos.push({
+          id: gh.full_name,
+          url: gh.html_url,
+          owner: gh.owner.login,
+          repo: gh.name,
+          addedAt: new Date().toISOString(),
+        });
+        added++;
+      } catch (e) { /* skip inaccessible repos */ }
+    }));
 
     await writeJSON(REPOS_FILE, repos);
-    res.json({ ok: true, added, total: repos.length });
+    res.json({ ok: true, added, total: repos.length, checked });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
