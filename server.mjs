@@ -99,6 +99,44 @@ app.post('/api/repos', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- Sync all repos from GitHub user ---
+app.post('/api/repos/sync', async (req, res) => {
+  try {
+    const config = await readJSON(CONFIG_FILE);
+    const username = config.githubUsername;
+    if (!username) return res.status(400).json({ error: 'Set GitHub username in settings first' });
+
+    // Fetch all repos (paginated, up to 300)
+    let allGhRepos = [];
+    for (let page = 1; page <= 3; page++) {
+      const data = await githubFetch(`/users/${username}/repos?per_page=100&page=${page}&sort=updated`);
+      if (!Array.isArray(data) || data.length === 0) break;
+      allGhRepos = allGhRepos.concat(data);
+    }
+
+    const repos = await readJSON(REPOS_FILE);
+    const existingIds = new Set(repos.map(r => r.id));
+    let added = 0;
+
+    for (const gh of allGhRepos) {
+      if (gh.fork) continue; // skip forks
+      const id = gh.full_name;
+      if (existingIds.has(id)) continue;
+      repos.push({
+        id,
+        url: gh.html_url,
+        owner: gh.owner.login,
+        repo: gh.name,
+        addedAt: new Date().toISOString(),
+      });
+      added++;
+    }
+
+    await writeJSON(REPOS_FILE, repos);
+    res.json({ ok: true, added, total: repos.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.delete('/api/repos/:owner/:repo', async (req, res) => {
   try {
     const id = `${req.params.owner}/${req.params.repo}`;

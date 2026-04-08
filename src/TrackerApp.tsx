@@ -3,7 +3,7 @@ import {
   Plus, Trash2, Settings, RefreshCw, ExternalLink,
   Activity, GitBranch, GitPullRequest, Clock, X, AlertCircle, ArrowLeft,
   CalendarDays, CalendarRange, Calendar, ChevronLeft, ChevronRight, BarChart3,
-  MessageSquare, Wrench, Zap
+  MessageSquare, Wrench, Zap, HardDrive
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import ReactEChartsCore from 'echarts-for-react/lib/core'
@@ -526,6 +526,23 @@ export default function TrackerApp() {
     }
   }
 
+  const handleSyncRepos = async () => {
+    try {
+      setLoading(true)
+      const res = await fetch('/api/repos/sync', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      // Reload repo list
+      const reposRes = await fetch('/api/repos')
+      setRepos(await reposRes.json())
+      setError(null)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to sync repos')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleDeleteRepo = async (owner: string, repo: string) => {
     await fetch(`/api/repos/${owner}/${repo}`, { method: 'DELETE' })
     setRepos(prev => prev.filter(r => r.id !== `${owner}/${repo}`))
@@ -701,7 +718,7 @@ export default function TrackerApp() {
         formatter: (params: Array<{ dataIndex: number; value: number }>) => {
           const p = params[0]
           const h = p.dataIndex
-          return `${h}:00 — ${h}:59<br/><b>${p.value}</b> sessions`
+          return `${h}:00 — ${h}:59<br/><b>${p.value}</b> responses`
         },
       },
       xAxis: {
@@ -1116,6 +1133,11 @@ export default function TrackerApp() {
         <button className="t-btn t-btn-accent" onClick={handleAddRepo}>
           <Plus size={15} /> Add
         </button>
+        {config.githubUsername && (
+          <button className="t-btn" onClick={handleSyncRepos} disabled={loading} title="Sync all repos from your GitHub account">
+            <HardDrive size={15} /> {loading ? 'Syncing...' : 'Sync All'}
+          </button>
+        )}
       </div>
 
       {/* Controls */}
