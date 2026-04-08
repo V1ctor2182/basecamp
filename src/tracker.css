@@ -983,23 +983,23 @@
 }
 
 .t-heatmap-cell[data-level="1"] {
-  background: #5C2E1A;
-  border-color: #5C2E1A;
+  background: #E8834A;
+  border-color: #E8834A;
 }
 
 .t-heatmap-cell[data-level="2"] {
-  background: #8B4226;
-  border-color: #8B4226;
-}
-
-.t-heatmap-cell[data-level="3"] {
   background: #C65D33;
   border-color: #C65D33;
 }
 
+.t-heatmap-cell[data-level="3"] {
+  background: #8B4226;
+  border-color: #8B4226;
+}
+
 .t-heatmap-cell[data-level="4"] {
-  background: #E8834A;
-  border-color: #E8834A;
+  background: #5C2E1A;
+  border-color: #5C2E1A;
 }
 
 .t-heatmap-legend {
