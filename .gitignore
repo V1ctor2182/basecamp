@@ -25,3 +25,5 @@ dist-ssr
 
 # App data (contains tokens)
 data/
+claude-skills/
+start.sh
