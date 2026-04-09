@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Plus, Trash2, Settings, RefreshCw, ExternalLink,
-  Activity, GitBranch, GitPullRequest, Clock, X, AlertCircle,
+  Activity, GitBranch, GitPullRequest, Clock, X, AlertCircle, ArrowLeft,
   CalendarDays, CalendarRange, Calendar, ChevronLeft, ChevronRight, BarChart3,
   MessageSquare, Wrench, Zap, HardDrive
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import ReactEChartsCore from 'echarts-for-react/lib/core'
 import * as echarts from 'echarts/core'
 import { BarChart, LineChart, PieChart, ScatterChart } from 'echarts/charts'
@@ -1137,6 +1138,9 @@ export default function TrackerApp() {
       {/* Header */}
       <header className="t-header">
         <div className="t-header-left">
+          <Link to="/" className="t-back">
+            <ArrowLeft size={16} />
+          </Link>
           <Activity size={20} strokeWidth={2} />
           <h1>Work Tracker</h1>
         </div>
