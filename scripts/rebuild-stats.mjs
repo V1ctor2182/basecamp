@@ -8,7 +8,7 @@ import { createReadStream } from 'fs';
 import { createInterface } from 'readline';
 
 const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
-const OUTPUT_FILE = path.join(os.homedir(), '.claude', 'stats-cache.json');
+const OUTPUT_FILE = path.join(path.dirname(import.meta.dirname), 'data', 'claude-stats.json');
 
 // Collect all JSONL files recursively under a project dir
 async function collectJsonlFiles(dir) {
@@ -190,8 +190,15 @@ async function scanSessions() {
   const earliestDate = sortedDates.length > 0 ? sortedDates[0] : firstDate;
   const firstSessionDate = earliestDate ? new Date(earliestDate).toISOString() : null;
 
+  // Add v3 fields to modelUsage
+  for (const [, u] of Object.entries(modelUsage)) {
+    u.webSearchRequests = u.webSearchRequests || 0;
+    u.contextWindow = u.contextWindow || 0;
+    u.maxOutputTokens = u.maxOutputTokens || 0;
+  }
+
   const result = {
-    version: 1,
+    version: 3,
     lastComputedDate: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })(),
     dailyActivity: dailyActivityArr,
     dailyModelTokens: dailyModelTokensArr,
@@ -203,6 +210,8 @@ async function scanSessions() {
     longestSession,
     firstSessionDate,
     hourCounts,
+    totalSpeculationTimeSavedMs: 0,
+    shotDistribution: {},
   };
 
   await fs.writeFile(OUTPUT_FILE, JSON.stringify(result), 'utf-8');

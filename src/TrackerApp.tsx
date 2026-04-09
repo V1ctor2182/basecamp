@@ -1503,7 +1503,7 @@ export default function TrackerApp() {
             <div className="t-empty">
               <ClaudeIcon size={36} />
               <p>Loading Claude stats...</p>
-              <span className="t-empty-hint">Reading from ~/.claude/stats-cache.json</span>
+              <span className="t-empty-hint">Run: node scripts/rebuild-stats.mjs</span>
             </div>
           ) : (
             <>

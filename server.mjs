@@ -1,7 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs/promises';
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, createReadStream } from 'fs';
+import { createInterface } from 'readline';
 import path from 'path';
 import os from 'os';
 
@@ -41,7 +42,16 @@ async function githubFetch(endpoint) {
   const headers = { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'work-tracker' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`https://api.github.com${endpoint}`, { headers });
+  let res = await fetch(`https://api.github.com${endpoint}`, { headers });
+
+  // Retry once on secondary rate limit (403 with Retry-After)
+  if (res.status === 403 || res.status === 429) {
+    const retryAfter = parseInt(res.headers.get('retry-after') || '5', 10);
+    const wait = Math.min(retryAfter, 60) * 1000;
+    await new Promise(r => setTimeout(r, wait));
+    res = await fetch(`https://api.github.com${endpoint}`, { headers });
+  }
+
   if (res.status === 409) return []; // empty repo
   if (!res.ok) {
     const text = await res.text();
@@ -99,66 +109,61 @@ app.post('/api/repos', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- Sync all repos where user has commits ---
+// --- Sync repos from recent commits (last 3 days) ---
 app.post('/api/repos/sync', async (req, res) => {
   try {
     const config = await readJSON(CONFIG_FILE);
     const username = config.githubUsername;
     if (!username) return res.status(400).json({ error: 'Set GitHub username in settings first' });
 
-    const repoSet = new Map(); // id -> repo metadata
+    const since = new Date();
+    since.setDate(since.getDate() - 3);
+    const sinceStr = since.toISOString().slice(0, 10);
+    const q = encodeURIComponent(`author:${username} committer-date:>=${sinceStr}`);
 
-    // 1. All repos owned by user (including private if token available)
-    for (let page = 1; page <= 3; page++) {
-      const data = await githubFetch(`/user/repos?per_page=100&page=${page}&sort=updated&affiliation=owner,collaborator,organization_member`);
-      if (!Array.isArray(data) || data.length === 0) break;
-      for (const gh of data) {
-        repoSet.set(gh.full_name, gh);
+    // 1. Search public commits (max 2 pages = 200 results)
+    const repoMap = new Map();
+    for (let page = 1; page <= 2; page++) {
+      const data = await githubFetch(`/search/commits?q=${q}&per_page=100&page=${page}&sort=committer-date`);
+      if (!data.items || data.items.length === 0) break;
+      for (const item of data.items) {
+        const repo = item.repository;
+        if (repo && !repoMap.has(repo.full_name)) {
+          repoMap.set(repo.full_name, repo);
+        }
       }
+      if (data.items.length < 100) break;
     }
 
-    // 2. Recent push events (up to ~10 pages = 300 events) to find repos in other orgs
-    for (let page = 1; page <= 10; page++) {
-      const events = await githubFetch(`/users/${username}/events?per_page=30&page=${page}`);
-      if (!Array.isArray(events) || events.length === 0) break;
-      for (const event of events) {
-        if (event.type === 'PushEvent' && event.repo) {
-          const [owner, repo] = event.repo.name.split('/');
-          if (!repoSet.has(event.repo.name)) {
-            // Fetch repo metadata
-            const gh = await githubFetch(`/repos/${event.repo.name}`).catch(() => null);
-            if (gh && gh.full_name) repoSet.set(gh.full_name, gh);
-          }
+    // 2. Private repos (1 extra request)
+    const privateRepos = await githubFetch('/user/repos?per_page=100&visibility=private&sort=pushed').catch(() => []);
+    if (Array.isArray(privateRepos)) {
+      const threeDaysAgo = since.toISOString();
+      for (const gh of privateRepos) {
+        if (gh.pushed_at && gh.pushed_at >= threeDaysAgo && !repoMap.has(gh.full_name)) {
+          repoMap.set(gh.full_name, gh);
         }
       }
     }
 
-    // 3. Filter: only repos where user has at least one commit
     const repos = await readJSON(REPOS_FILE);
     const existingIds = new Set(repos.map(r => r.id));
     let added = 0;
-    let checked = 0;
 
-    const candidates = [...repoSet.values()].filter(gh => !existingIds.has(gh.full_name));
-
-    await Promise.allSettled(candidates.map(async (gh) => {
-      try {
-        const commits = await githubFetch(`/repos/${gh.full_name}/commits?author=${username}&per_page=1`);
-        checked++;
-        if (!Array.isArray(commits) || commits.length === 0) return;
-        repos.push({
-          id: gh.full_name,
-          url: gh.html_url,
-          owner: gh.owner.login,
-          repo: gh.name,
-          addedAt: new Date().toISOString(),
-        });
-        added++;
-      } catch (e) { /* skip inaccessible repos */ }
-    }));
+    for (const [id, gh] of repoMap) {
+      if (existingIds.has(id)) continue;
+      repos.push({
+        id,
+        url: gh.html_url,
+        owner: gh.owner.login,
+        repo: gh.name,
+        addedAt: new Date().toISOString(),
+      });
+      added++;
+    }
 
     await writeJSON(REPOS_FILE, repos);
-    res.json({ ok: true, added, total: repos.length, checked });
+    res.json({ ok: true, added, total: repos.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -552,11 +557,170 @@ app.post('/api/move', async (req, res) => {
 });
 
 // --- Claude Usage Stats ---
+const CLAUDE_STATS_FILE = path.join(DATA_DIR, 'claude-stats.json');
+const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
+let statsRebuilding = false;
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+async function collectJsonlFiles(dir) {
+  const results = [];
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) results.push(...await collectJsonlFiles(full));
+    else if (entry.name.endsWith('.jsonl')) results.push(full);
+  }
+  return results;
+}
+
+async function rebuildStats() {
+  if (statsRebuilding) return;
+  statsRebuilding = true;
+  try {
+    const MODEL_PRICING = {
+      'claude-opus-4-6':            { input: 15,   output: 75,  cacheRead: 1.875, cacheWrite: 18.75 },
+      'claude-opus-4-5-20251101':   { input: 15,   output: 75,  cacheRead: 1.875, cacheWrite: 18.75 },
+      'claude-sonnet-4-6':          { input: 3,    output: 15,  cacheRead: 0.375, cacheWrite: 3.75  },
+      'claude-sonnet-4-5-20250929': { input: 3,    output: 15,  cacheRead: 0.375, cacheWrite: 3.75  },
+      'claude-haiku-4-5-20251001':  { input: 0.80, output: 4,   cacheRead: 0.08,  cacheWrite: 1.0   },
+    };
+
+    const dailyActivity = {};
+    const dailyTokens = {};
+    const dailyCost = {};
+    const modelUsage = {};
+    const hourCounts = {};
+    const sessions = new Set();
+    let firstDate = null;
+    const sessionMeta = {};
+
+    const projectDirs = await fs.readdir(CLAUDE_PROJECTS_DIR).catch(() => []);
+    for (const projDir of projectDirs) {
+      const projPath = path.join(CLAUDE_PROJECTS_DIR, projDir);
+      const stat = await fs.stat(projPath).catch(() => null);
+      if (!stat?.isDirectory()) continue;
+      const files = await collectJsonlFiles(projPath);
+
+      for (const filePath of files) {
+        const sessionId = path.basename(filePath, '.jsonl');
+        const isSubagent = filePath.includes('/subagents/');
+        try {
+          const rl = createInterface({ input: createReadStream(filePath), crlfDelay: Infinity });
+          for await (const line of rl) {
+            if (!line.trim()) continue;
+            let record;
+            try { record = JSON.parse(line); } catch { continue; }
+            const ts = record.timestamp;
+            if (!ts) continue;
+            const localDate = new Date(ts);
+            const date = `${localDate.getFullYear()}-${String(localDate.getMonth()+1).padStart(2,'0')}-${String(localDate.getDate()).padStart(2,'0')}`;
+            const hour = localDate.getHours();
+
+            if (record.type === 'user' && record.userType === 'external' && !isSubagent) {
+              sessions.add(sessionId);
+              if (!dailyActivity[date]) dailyActivity[date] = { messages: 0, sessions: new Set(), toolCalls: 0 };
+              dailyActivity[date].sessions.add(sessionId);
+              if (!sessionMeta[sessionId]) sessionMeta[sessionId] = { start: ts, end: ts, messageCount: 0 };
+              sessionMeta[sessionId].messageCount++;
+              sessionMeta[sessionId].end = ts;
+              if (!firstDate || date < firstDate) firstDate = date;
+            }
+
+            if (record.type === 'assistant') {
+              if (!dailyActivity[date]) dailyActivity[date] = { messages: 0, sessions: new Set(), toolCalls: 0 };
+              dailyActivity[date].messages++;
+              hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+              const msg = record.message || {};
+              const model = msg.model;
+              const usage = msg.usage;
+              if (model && usage) {
+                if (!dailyTokens[date]) dailyTokens[date] = {};
+                const totalTokens = (usage.input_tokens || 0) + (usage.output_tokens || 0)
+                  + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+                dailyTokens[date][model] = (dailyTokens[date][model] || 0) + totalTokens;
+                if (!dailyCost[date]) dailyCost[date] = {};
+                const p = MODEL_PRICING[model];
+                if (p) {
+                  const cost = ((usage.input_tokens || 0) * p.input + (usage.output_tokens || 0) * p.output
+                    + (usage.cache_read_input_tokens || 0) * p.cacheRead + (usage.cache_creation_input_tokens || 0) * p.cacheWrite) / 1_000_000;
+                  dailyCost[date][model] = (dailyCost[date][model] || 0) + cost;
+                }
+                if (!modelUsage[model]) modelUsage[model] = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
+                modelUsage[model].inputTokens += usage.input_tokens || 0;
+                modelUsage[model].outputTokens += usage.output_tokens || 0;
+                modelUsage[model].cacheReadInputTokens += usage.cache_read_input_tokens || 0;
+                modelUsage[model].cacheCreationInputTokens += usage.cache_creation_input_tokens || 0;
+              }
+              if (msg.content && Array.isArray(msg.content)) {
+                for (const block of msg.content) {
+                  if (block.type === 'tool_use') dailyActivity[date].toolCalls++;
+                }
+              }
+            }
+          }
+        } catch { /* skip unreadable */ }
+      }
+    }
+
+    for (const [, u] of Object.entries(modelUsage)) {
+      const p = MODEL_PRICING[Object.keys(modelUsage).find(k => modelUsage[k] === u)];
+      u.costUSD = p ? (u.inputTokens * p.input + u.outputTokens * p.output + u.cacheReadInputTokens * p.cacheRead + u.cacheCreationInputTokens * p.cacheWrite) / 1_000_000 : 0;
+      u.webSearchRequests = 0; u.contextWindow = 0; u.maxOutputTokens = 0;
+    }
+
+    const sortedDates = Object.keys(dailyActivity).sort();
+    const dailyActivityArr = sortedDates.map(date => ({ date, messageCount: dailyActivity[date].messages, sessionCount: dailyActivity[date].sessions.size, toolCallCount: dailyActivity[date].toolCalls }));
+    const dailyModelTokensArr = Object.keys(dailyTokens).sort().map(date => ({ date, tokensByModel: dailyTokens[date] }));
+    const dailyCostArr = Object.keys(dailyCost).sort().map(date => ({ date, costByModel: dailyCost[date] }));
+
+    let longestSession = null;
+    for (const [sid, meta] of Object.entries(sessionMeta)) {
+      const duration = new Date(meta.end) - new Date(meta.start);
+      if (!longestSession || duration > longestSession.duration) longestSession = { sessionId: sid, duration, messageCount: meta.messageCount, timestamp: meta.start };
+    }
+
+    const totalCost = Object.values(modelUsage).reduce((s, u) => s + (u.costUSD || 0), 0);
+    const earliestDate = sortedDates.length > 0 ? sortedDates[0] : firstDate;
+
+    const result = {
+      version: 3, lastComputedDate: todayStr(),
+      dailyActivity: dailyActivityArr, dailyModelTokens: dailyModelTokensArr, dailyCost: dailyCostArr,
+      modelUsage, totalSessions: sessions.size,
+      totalMessages: dailyActivityArr.reduce((s, d) => s + d.messageCount, 0),
+      totalCostUSD: totalCost, longestSession,
+      firstSessionDate: earliestDate ? new Date(earliestDate).toISOString() : null,
+      hourCounts, totalSpeculationTimeSavedMs: 0, shotDistribution: {},
+    };
+
+    await fs.writeFile(CLAUDE_STATS_FILE, JSON.stringify(result), 'utf-8');
+    console.log(`Stats rebuilt: ${sessions.size} sessions, ${result.totalMessages} messages`);
+  } catch (e) {
+    console.error('Stats rebuild failed:', e.message);
+  } finally {
+    statsRebuilding = false;
+  }
+}
+
+// Rebuild on server start
+rebuildStats();
+
 app.get('/api/claude-stats', async (_req, res) => {
   try {
-    const statsPath = path.join(os.homedir(), '.claude', 'stats-cache.json');
-    const raw = await fs.readFile(statsPath, 'utf-8');
-    res.json(JSON.parse(raw));
+    // Trigger async rebuild if stale (lastComputedDate < today)
+    try {
+      const raw = await fs.readFile(CLAUDE_STATS_FILE, 'utf-8');
+      const stats = JSON.parse(raw);
+      if (stats.lastComputedDate < todayStr()) rebuildStats();
+      res.json(stats);
+    } catch {
+      // No cache file yet, rebuild and return empty for now
+      rebuildStats();
+      res.json({ version: 3, dailyActivity: [], dailyModelTokens: [], modelUsage: {}, totalSessions: 0, totalMessages: 0, hourCounts: {} });
+    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
