@@ -26,8 +26,17 @@ async function collectJsonlFiles(dir) {
 }
 
 async function scanSessions() {
+  const MODEL_PRICING = {
+    'claude-opus-4-6':            { input: 15,   output: 75,  cacheRead: 1.875, cacheWrite: 18.75 },
+    'claude-opus-4-5-20251101':   { input: 15,   output: 75,  cacheRead: 1.875, cacheWrite: 18.75 },
+    'claude-sonnet-4-6':          { input: 3,    output: 15,  cacheRead: 0.375, cacheWrite: 3.75  },
+    'claude-sonnet-4-5-20250929': { input: 3,    output: 15,  cacheRead: 0.375, cacheWrite: 3.75  },
+    'claude-haiku-4-5-20251001':  { input: 0.80, output: 4,   cacheRead: 0.08,  cacheWrite: 1.0   },
+  };
+
   const dailyActivity = {};   // date -> { messages, sessions Set, toolCalls }
   const dailyTokens = {};     // date -> { model -> tokens }
+  const dailyCost = {};       // date -> { model -> costUSD }
   const modelUsage = {};      // model -> { inputTokens, outputTokens, cacheReadInputTokens, cacheCreationInputTokens }
   const hourCounts = {};      // hour -> count (local time)
   const sessions = new Set();
@@ -96,6 +105,19 @@ async function scanSessions() {
                 + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
               dailyTokens[date][model] = (dailyTokens[date][model] || 0) + totalTokens;
 
+              // Daily cost by model
+              if (!dailyCost[date]) dailyCost[date] = {};
+              const p = MODEL_PRICING[model];
+              if (p) {
+                const cost = (
+                  (usage.input_tokens || 0) * p.input +
+                  (usage.output_tokens || 0) * p.output +
+                  (usage.cache_read_input_tokens || 0) * p.cacheRead +
+                  (usage.cache_creation_input_tokens || 0) * p.cacheWrite
+                ) / 1_000_000;
+                dailyCost[date][model] = (dailyCost[date][model] || 0) + cost;
+              }
+
               // Cumulative model usage
               if (!modelUsage[model]) {
                 modelUsage[model] = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
@@ -121,15 +143,6 @@ async function scanSessions() {
       }
     }
   }
-
-  // Compute estimated cost per model (pricing per million tokens)
-  const MODEL_PRICING = {
-    'claude-opus-4-6':            { input: 15,   output: 75,  cacheRead: 1.875, cacheWrite: 18.75 },
-    'claude-opus-4-5-20251101':   { input: 15,   output: 75,  cacheRead: 1.875, cacheWrite: 18.75 },
-    'claude-sonnet-4-6':          { input: 3,    output: 15,  cacheRead: 0.375, cacheWrite: 3.75  },
-    'claude-sonnet-4-5-20250929': { input: 3,    output: 15,  cacheRead: 0.375, cacheWrite: 3.75  },
-    'claude-haiku-4-5-20251001':  { input: 0.80, output: 4,   cacheRead: 0.08,  cacheWrite: 1.0   },
-  };
 
   for (const [model, u] of Object.entries(modelUsage)) {
     const p = MODEL_PRICING[model];
@@ -158,6 +171,11 @@ async function scanSessions() {
     tokensByModel: dailyTokens[date],
   }));
 
+  const dailyCostArr = Object.keys(dailyCost).sort().map(date => ({
+    date,
+    costByModel: dailyCost[date],
+  }));
+
   let longestSession = null;
   for (const [sid, meta] of Object.entries(sessionMeta)) {
     const duration = new Date(meta.end) - new Date(meta.start);
@@ -177,6 +195,7 @@ async function scanSessions() {
     lastComputedDate: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })(),
     dailyActivity: dailyActivityArr,
     dailyModelTokens: dailyModelTokensArr,
+    dailyCost: dailyCostArr,
     modelUsage,
     totalSessions: sessions.size,
     totalMessages: dailyActivityArr.reduce((s, d) => s + d.messageCount, 0),

@@ -70,6 +70,7 @@ interface ClaudeStats {
   lastComputedDate: string
   dailyActivity: { date: string; messageCount: number; sessionCount: number; toolCallCount: number }[]
   dailyModelTokens: { date: string; tokensByModel: Record<string, number> }[]
+  dailyCost?: { date: string; costByModel: Record<string, number> }[]
   modelUsage: Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number }>
   totalSessions: number
   totalMessages: number
@@ -366,6 +367,13 @@ export default function TrackerApp() {
       setLoading(false)
     }
   }, [dateRange, customDate, config.githubUsername, repos.length])
+
+  // Auto-dismiss fetch errors after 5 seconds
+  useEffect(() => {
+    if (fetchErrors.length === 0) return
+    const t = setTimeout(() => setFetchErrors([]), 5000)
+    return () => clearTimeout(t)
+  }, [fetchErrors])
 
   useEffect(() => {
     if (initialized) {
@@ -694,6 +702,74 @@ export default function TrackerApp() {
           borderRadius: i === models.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0],
         },
         data: last30.map(d => d.tokensByModel[m] || 0),
+      })),
+    }
+  }, [claudeStats])
+
+  const claudeCostChart = useMemo(() => {
+    if (!claudeStats?.dailyCost) return null
+    const last30 = claudeStats.dailyCost.slice(-30)
+    if (last30.length === 0) return null
+    const root = document.documentElement
+    const cs = getComputedStyle(root)
+    const resolve = (v: string) => { const m = v.match(/var\((.+)\)/); return m ? cs.getPropertyValue(m[1]).trim() || '#888' : v }
+
+    const modelSet = new Set<string>()
+    for (const d of last30) for (const m of Object.keys(d.costByModel)) modelSet.add(m)
+    const models = [...modelSet]
+
+    const modelColors: Record<string, string> = {
+      'claude-opus-4-6': '#D97757',
+      'claude-opus-4-5-20251101': '#C65D33',
+      'claude-sonnet-4-6': '#E8A87C',
+      'claude-sonnet-4-5-20250929': '#B8856C',
+      'claude-haiku-4-5-20251001': '#F0C4A8',
+    }
+    const shortName = (m: string) => {
+      if (m.includes('opus-4-6')) return 'Opus 4.6'
+      if (m.includes('opus-4-5')) return 'Opus 4.5'
+      if (m.includes('sonnet-4-6')) return 'Sonnet 4.6'
+      if (m.includes('sonnet-4-5')) return 'Sonnet 4.5'
+      if (m.includes('haiku')) return 'Haiku 4.5'
+      return m
+    }
+
+    return {
+      grid: { left: 56, right: 12, top: 30, bottom: 28 },
+      tooltip: {
+        trigger: 'axis' as const,
+        backgroundColor: resolve('var(--bg-card)'),
+        borderColor: resolve('var(--border)'),
+        textStyle: { color: resolve('var(--text-primary)'), fontSize: 12 },
+        valueFormatter: (v: number) => `$${v.toFixed(2)}`,
+      },
+      legend: {
+        top: 0, right: 0,
+        textStyle: { color: resolve('var(--text-muted)'), fontSize: 11 },
+        itemWidth: 10, itemHeight: 10,
+      },
+      xAxis: {
+        type: 'category' as const,
+        data: last30.map(d => { const dt = new Date(d.date + 'T00:00:00'); return dt.toLocaleDateString([], { month: 'short', day: 'numeric' }) }),
+        axisLabel: { color: resolve('var(--text-muted)'), fontSize: 10, interval: (_i: number) => _i % Math.ceil(last30.length / 8) === 0 },
+        axisLine: { lineStyle: { color: resolve('var(--border-light)') } },
+        axisTick: { show: false },
+      },
+      yAxis: {
+        type: 'value' as const,
+        axisLabel: { color: resolve('var(--text-muted)'), fontSize: 10, formatter: (v: number) => `$${v.toFixed(0)}` },
+        splitLine: { lineStyle: { color: resolve('var(--border-light)'), type: 'dashed' as const } },
+      },
+      series: models.map((m, i) => ({
+        name: shortName(m),
+        type: 'bar' as const,
+        stack: 'cost',
+        barWidth: '60%',
+        itemStyle: {
+          color: modelColors[m] || resolve(`var(--chart-${(i % 6) + 1})`),
+          borderRadius: i === models.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0],
+        },
+        data: last30.map(d => Math.round((d.costByModel[m] || 0) * 100) / 100),
       })),
     }
   }, [claudeStats])
@@ -1273,6 +1349,7 @@ export default function TrackerApp() {
         <div className="t-warning">
           <AlertCircle size={14} />
           <span>Failed: {fetchErrors.map(e => e.repo).join(', ')}</span>
+          <button className="t-dismiss" onClick={() => setFetchErrors([])}><X size={14} /></button>
         </div>
       )}
 
@@ -1531,6 +1608,17 @@ export default function TrackerApp() {
                     <span>Tokens by Model — Last 30 Days</span>
                   </div>
                   <ReactEChartsCore echarts={echarts} option={claudeTokenChart} style={{ height: 200 }} notMerge />
+                </div>
+              )}
+
+              {/* Daily Cost by Model */}
+              {claudeCostChart && (
+                <div className="t-chart-card">
+                  <div className="t-chart-header">
+                    <Zap size={14} />
+                    <span>Daily Cost — Last 30 Days</span>
+                  </div>
+                  <ReactEChartsCore echarts={echarts} option={claudeCostChart} style={{ height: 200 }} notMerge />
                 </div>
               )}
 
