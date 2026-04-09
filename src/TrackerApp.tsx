@@ -476,45 +476,66 @@ export default function TrackerApp() {
     return map
   }, [claudePings])
 
-  // Commits by date per repo (for stacked chart)
+  // Activity by date (or hour) per repo — switches between commits and PRs
   const chartData = useMemo(() => {
-    // For 'today', show last 7 days in the chart
-    const chartDateRange: DateRange = dateRange === 'today' ? 'week' : dateRange
-    const days: string[] = []
+    const isToday = dateRange === 'today'
+    const chartDateRange: DateRange = isToday ? 'today' : dateRange
+    const buckets: string[] = []
     const { since, until } = getDateRange(chartDateRange, customDate || undefined)
-    const cur = new Date(since)
-    cur.setHours(0, 0, 0, 0)
-    const end = new Date(until)
-    end.setHours(23, 59, 59, 999)
-    while (cur <= end) {
-      days.push(toDateKey(cur))
-      cur.setDate(cur.getDate() + 1)
-    }
 
-    // group by repo — use activity state directly
-    const repoMap = new Map<string, Map<string, number>>()
-    for (const ra of activity) {
-      const repoName = ra.repo.split('/')[1] || ra.repo
-      if (!repoMap.has(repoName)) repoMap.set(repoName, new Map())
-      const m = repoMap.get(repoName)!
-      for (const c of ra.commits) {
-        const key = toDateKey(new Date(c.date))
-        m.set(key, (m.get(key) || 0) + 1)
+    if (isToday) {
+      // Hourly buckets for today: 0, 1, 2, ... 23
+      for (let h = 0; h < 24; h++) {
+        buckets.push(String(h))
+      }
+    } else {
+      const cur = new Date(since)
+      cur.setHours(0, 0, 0, 0)
+      const end = new Date(until)
+      end.setHours(23, 59, 59, 999)
+      while (cur <= end) {
+        buckets.push(toDateKey(cur))
+        cur.setDate(cur.getDate() + 1)
       }
     }
 
-    // Only show repos that have at least one commit in the 30-day window
+    const repoMap = new Map<string, Map<string, number>>()
+
+    if (viewTab === 'prs') {
+      for (const rp of prData) {
+        const repoName = rp.repo.split('/')[1] || rp.repo
+        if (!repoMap.has(repoName)) repoMap.set(repoName, new Map())
+        const m = repoMap.get(repoName)!
+        for (const pr of rp.prs) {
+          const d = new Date(pr.createdAt)
+          const key = isToday ? String(d.getHours()) : toDateKey(d)
+          m.set(key, (m.get(key) || 0) + 1)
+        }
+      }
+    } else {
+      for (const ra of activity) {
+        const repoName = ra.repo.split('/')[1] || ra.repo
+        if (!repoMap.has(repoName)) repoMap.set(repoName, new Map())
+        const m = repoMap.get(repoName)!
+        for (const c of ra.commits) {
+          const d = new Date(c.date)
+          const key = isToday ? String(d.getHours()) : toDateKey(d)
+          m.set(key, (m.get(key) || 0) + 1)
+        }
+      }
+    }
+
     const repoNames = [...repoMap.keys()].filter(name => {
       const m = repoMap.get(name)!
-      return days.some(d => (m.get(d) || 0) > 0)
+      return buckets.some(d => (m.get(d) || 0) > 0)
     })
     const chartColors = [
       'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)',
       'var(--chart-4)', 'var(--chart-5)', 'var(--chart-6)',
     ]
 
-    return { days, repoNames, repoMap, chartColors }
-  }, [activity, dateRange, customDate])
+    return { days: buckets, repoNames, repoMap, chartColors, isToday }
+  }, [activity, prData, viewTab, dateRange, customDate])
 
   const handleAddRepo = async () => {
     const url = repoUrl.trim()
@@ -1061,8 +1082,12 @@ export default function TrackerApp() {
 
   // ECharts option for workload chart
   const chartOption = useMemo(() => {
-    const { days, repoNames, repoMap, chartColors } = chartData
+    const { days, repoNames, repoMap, chartColors, isToday } = chartData
     const xLabels = days.map(d => {
+      if (isToday) {
+        const h = parseInt(d)
+        return h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`
+      }
       const dt = new Date(d + 'T00:00:00')
       return dt.toLocaleDateString([], { month: 'short', day: 'numeric' })
     })
@@ -1116,6 +1141,7 @@ export default function TrackerApp() {
           color: resolveColor('var(--text-muted)'),
           fontSize: 10,
           interval: (index: number) => {
+            if (isToday) return index % 3 === 0
             if (days.length <= 7) return true
             return index % Math.ceil(days.length / 8) === 0
           },
@@ -1279,11 +1305,11 @@ export default function TrackerApp() {
       </div>
 
       {/* Workload Chart */}
-      {showChart && repos.length > 0 && dateRange !== 'custom' && (
+      {showChart && repos.length > 0 && dateRange !== 'custom' && viewTab !== 'claude' && (
         <div className="t-chart-card">
           <div className="t-chart-header">
             <BarChart3 size={14} />
-            <span>Workload — {dateRange === 'today' ? 'Last 7 Days' : dateRange === 'week' ? 'Last 7 Days' : dateRange === 'month' ? 'Last 30 Days' : dateRange === 'quarter' ? 'Last 3 Months' : 'Custom'}</span>
+            <span>{viewTab === 'prs' ? 'Pull Requests' : 'Workload'} — {dateRange === 'today' ? 'Today by Hour' : dateRange === 'week' ? 'Last 7 Days' : dateRange === 'month' ? 'Last 30 Days' : dateRange === 'quarter' ? 'Last 3 Months' : 'Custom'}</span>
           </div>
           <ReactEChartsCore
             echarts={echarts}
