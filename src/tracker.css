@@ -1096,6 +1096,67 @@
   color: var(--border);
 }
 
+/* Claude project breakdown */
+.t-claude-project-section {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.t-claude-project-section:last-child {
+  border-bottom: none;
+}
+.t-claude-project-stale {
+  opacity: 0.55;
+}
+.t-claude-project-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.t-claude-project-name-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+.t-claude-project-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.t-claude-project-meta {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.t-claude-project-models {
+  padding-left: 14px;
+}
+.t-claude-project-model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 0;
+}
+.t-claude-project-model-name {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+.t-claude-project-model-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
 /* Activity view tabs */
 .t-activity-tabs {
   display: flex;

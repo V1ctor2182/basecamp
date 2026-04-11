@@ -71,9 +71,19 @@ interface ClaudeStats {
   dailyActivity: { date: string; messageCount: number; sessionCount: number; toolCallCount: number }[]
   dailyModelTokens: { date: string; tokensByModel: Record<string, number> }[]
   dailyCost?: { date: string; costByModel: Record<string, number> }[]
-  modelUsage: Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number }>
+  modelUsage: Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; costUSD?: number }>
+  projectUsage?: Record<string, {
+    displayName: string
+    cwd: string | null
+    totalCostUSD: number
+    daysActive: number
+    firstActivity: string
+    lastActivity: string
+    models: Record<string, { outputTokens: number; costUSD: number }>
+  }>
   totalSessions: number
   totalMessages: number
+  totalCostUSD?: number
   hourCounts: Record<string, number>
   firstSessionDate: string
 }
@@ -96,23 +106,23 @@ function ClaudeIcon({ size = 14 }: { size?: number }) {
 type DateRange = 'today' | 'week' | 'month' | 'quarter' | 'custom'
 type ViewTab = 'commits' | 'prs' | 'claude'
 
-// Claude model pricing ($ per million tokens)
-const MODEL_PRICING: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
-  'claude-opus-4-6':            { input: 5,    output: 25,  cacheRead: 0.50,   cacheWrite: 6.25 },
-  'claude-opus-4-5-20251101':   { input: 5,    output: 25,  cacheRead: 0.50,   cacheWrite: 6.25 },
-  'claude-sonnet-4-6':          { input: 3,    output: 15,  cacheRead: 0.30,   cacheWrite: 3.75 },
-  'claude-sonnet-4-5-20250929': { input: 3,    output: 15,  cacheRead: 0.30,   cacheWrite: 3.75 },
-  'claude-haiku-4-5-20251001':  { input: 1,    output: 5,   cacheRead: 0.10,   cacheWrite: 1.25 },
-}
-
-function calcModelCost(model: string, usage: { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number }) {
-  const p = MODEL_PRICING[model]
-  if (!p) return 0
-  return (usage.inputTokens * p.input + usage.outputTokens * p.output + usage.cacheReadInputTokens * p.cacheRead + usage.cacheCreationInputTokens * p.cacheWrite) / 1_000_000
-}
-
 function formatUSD(v: number) {
   return v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : v >= 1 ? `$${v.toFixed(2)}` : `$${v.toFixed(3)}`
+}
+
+// "today" / "yesterday" / "Nd ago" / "Nw ago" / "Nmo ago" / "Ny ago" — based on date-only diff
+function formatRelativeTime(iso: string): string {
+  if (!iso) return ''
+  const then = new Date(iso + 'T00:00:00')
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diffDays = Math.floor((startOfToday.getTime() - then.getTime()) / 86400000)
+  if (diffDays <= 0) return 'today'
+  if (diffDays === 1) return 'yesterday'
+  if (diffDays < 7) return `${diffDays}d ago`
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`
+  return `${Math.floor(diffDays / 365)}y ago`
 }
 
 // Project color palette for activity timeline
@@ -1558,7 +1568,7 @@ export default function TrackerApp() {
                 </div>
                 <div className="t-stat">
                   <div className="t-stat-val">
-                    {formatUSD(Object.entries(claudeStats.modelUsage).reduce((s, [m, u]) => s + calcModelCost(m, u), 0))}
+                    {formatUSD(claudeStats.totalCostUSD ?? 0)}
                   </div>
                   <div className="t-stat-label">Est. Cost</div>
                 </div>
@@ -1902,13 +1912,70 @@ export default function TrackerApp() {
                 )}
               </div>
 
+              {/* Project Breakdown — projects with ≥ $1 spend, sorted by cost desc */}
+              {claudeStats.projectUsage && Object.keys(claudeStats.projectUsage).length > 0 && (
+                <div className="t-chart-card">
+                  <div className="t-chart-header">
+                    <HardDrive size={14} />
+                    <span>Project Usage Breakdown</span>
+                    <span className="t-chart-header-right">
+                      est. total: {formatUSD(
+                        Object.values(claudeStats.projectUsage).reduce((s, p) => s + p.totalCostUSD, 0)
+                      )}
+                    </span>
+                  </div>
+                  <div style={{ padding: '12px 16px' }}>
+                    {Object.entries(claudeStats.projectUsage)
+                      .sort((a, b) => b[1].totalCostUSD - a[1].totalCostUSD)
+                      .map(([key, proj]) => {
+                        const stale = formatRelativeTime(proj.lastActivity).match(/mo ago|y ago/) !== null
+                        const sortedModels = Object.entries(proj.models).sort((a, b) => b[1].costUSD - a[1].costUSD)
+                        return (
+                          <div key={key} className={`t-claude-project-section${stale ? ' t-claude-project-stale' : ''}`}>
+                            <div className="t-claude-project-header">
+                              <div className="t-claude-project-name-meta">
+                                <span className="t-claude-project-name" title={proj.cwd || key}>{proj.displayName}</span>
+                                <span className="t-claude-project-meta">
+                                  · {proj.daysActive} {proj.daysActive === 1 ? 'day' : 'days'} · {formatRelativeTime(proj.lastActivity)}
+                                </span>
+                              </div>
+                              <span className="t-claude-cost">{formatUSD(proj.totalCostUSD)}</span>
+                            </div>
+                            <div className="t-claude-project-models">
+                              {sortedModels.map(([mname, m]) => {
+                                const shortName = mname.includes('opus-4-6') ? 'Opus 4.6' :
+                                  mname.includes('opus-4-5') ? 'Opus 4.5' :
+                                  mname.includes('sonnet-4-6') ? 'Sonnet 4.6' :
+                                  mname.includes('sonnet-4-5') ? 'Sonnet 4.5' :
+                                  mname.includes('haiku') ? 'Haiku 4.5' : mname
+                                const out = m.outputTokens
+                                const outStr = out >= 1_000_000 ? `${(out / 1_000_000).toFixed(1)}M` : out >= 1000 ? `${(out / 1000).toFixed(0)}k` : String(out)
+                                return (
+                                  <div key={mname} className="t-claude-project-model-row">
+                                    <span className="t-claude-project-model-name">{shortName}</span>
+                                    <div className="t-claude-project-model-stats">
+                                      <span title="Output tokens">{outStr} out</span>
+                                      <span className="t-claude-sep">·</span>
+                                      <span className="t-claude-cost">{formatUSD(m.costUSD)}</span>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                  </div>
+                </div>
+              )}
+
               {/* Model Breakdown */}
               <div className="t-chart-card">
                 <div className="t-chart-header">
                   <Wrench size={14} />
                   <span>Model Usage Breakdown</span>
                   <span className="t-chart-header-right">
-                    est. total: {formatUSD(Object.entries(claudeStats.modelUsage).reduce((s, [m, u]) => s + calcModelCost(m, u), 0))}
+                    est. total: {formatUSD(claudeStats.totalCostUSD ?? 0)}
                   </span>
                 </div>
                 <div style={{ padding: '12px 16px' }}>
@@ -1920,7 +1987,7 @@ export default function TrackerApp() {
                       model.includes('haiku') ? 'Haiku 4.5' : model
                     const totalOut = usage.outputTokens
                     const totalCache = usage.cacheReadInputTokens
-                    const cost = calcModelCost(model, usage)
+                    const cost = usage.costUSD ?? 0
                     return (
                       <div key={model} className="t-claude-model-row">
                         <span className="t-claude-model-name">{shortName}</span>

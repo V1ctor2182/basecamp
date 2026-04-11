@@ -28,3 +28,9 @@ data/
 claude-skills/
 start.sh
 .gstack/
+
+# Local skill installations (npx skills add)
+.agents/
+.claude/
+skills/
+skills-lock.json
