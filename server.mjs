@@ -254,7 +254,7 @@ app.get('/api/activity', async (req, res) => {
             sha: c.sha,
             message: c.commit.message,
             author: c.commit.author.name,
-            date: c.commit.author.date,
+            date: c.commit.committer.date,
             url: c.html_url,
             branch: '',
           })),
