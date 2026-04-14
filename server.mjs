@@ -659,10 +659,25 @@ async function collectJsonlFiles(dir) {
   return results;
 }
 
+// Merge daily arrays by date: new scan wins for dates it has, old dates preserved
+function mergeDailyByDate(oldArr, newArr, dateKey = 'date') {
+  const map = new Map();
+  for (const entry of (oldArr || [])) map.set(entry[dateKey], entry);
+  for (const entry of (newArr || [])) map.set(entry[dateKey], entry); // new overwrites old
+  return [...map.values()].sort((a, b) => a[dateKey].localeCompare(b[dateKey]));
+}
+
 async function rebuildStats() {
   if (statsRebuilding) return;
   statsRebuilding = true;
   try {
+    // Load existing stats for incremental merge (preserves data from deleted JSONL files)
+    let oldStats = null;
+    try {
+      const raw = await fs.readFile(CLAUDE_STATS_FILE, 'utf-8');
+      oldStats = JSON.parse(raw);
+    } catch { /* no existing stats, fresh build */ }
+
     // Token + cost data comes from ccusage (live LiteLLM pricing).
     // This function still owns: dailyActivity, hourCounts, sessions, longestSession,
     // and the encoded-dir → cwd map used for project display names.
@@ -726,23 +741,27 @@ async function rebuildStats() {
     }
 
     const sortedDates = Object.keys(dailyActivity).sort();
-    const dailyActivityArr = sortedDates.map(date => ({ date, messageCount: dailyActivity[date].messages, sessionCount: dailyActivity[date].sessions.size, toolCallCount: dailyActivity[date].toolCalls }));
+    const newDailyActivityArr = sortedDates.map(date => ({ date, messageCount: dailyActivity[date].messages, sessionCount: dailyActivity[date].sessions.size, toolCallCount: dailyActivity[date].toolCalls }));
 
     let longestSession = null;
     for (const [sid, meta] of Object.entries(sessionMeta)) {
       const duration = new Date(meta.end) - new Date(meta.start);
       if (!longestSession || duration > longestSession.duration) longestSession = { sessionId: sid, duration, messageCount: meta.messageCount, timestamp: meta.start };
     }
+    // Keep the longer of old vs new longest session
+    if (oldStats?.longestSession && (!longestSession || oldStats.longestSession.duration > longestSession.duration)) {
+      longestSession = oldStats.longestSession;
+    }
 
     // Pull token + cost data from ccusage (live LiteLLM pricing — no manual price table).
     // Single `--instances` call provides per-project data; daily/model totals are
     // reconstructed by summing across projects (verified to match plain `daily` output).
     // If ccusage isn't installed, fall back to empty token/cost data so activity still renders.
-    let dailyModelTokensArr = [];
-    let dailyCostArr = [];
-    let modelUsage = {};
-    let totalCost = 0;
-    let projectUsage = {};
+    let newDailyModelTokensArr = [];
+    let newDailyCostArr = [];
+    let newModelUsage = {};
+    let newTotalCost = 0;
+    let newProjectUsage = {};
     try {
       const ccusageBin = path.join(__dirname, 'node_modules', '.bin', 'ccusage');
       const ccusageCmd = existsSync(ccusageBin) ? ccusageBin : 'ccusage';
@@ -794,14 +813,14 @@ async function rebuildStats() {
             costByDate[date][m.modelName] = (costByDate[date][m.modelName] || 0) + m.cost;
 
             // Global per-model rollup
-            if (!modelUsage[m.modelName]) {
-              modelUsage[m.modelName] = {
+            if (!newModelUsage[m.modelName]) {
+              newModelUsage[m.modelName] = {
                 inputTokens: 0, outputTokens: 0,
                 cacheReadInputTokens: 0, cacheCreationInputTokens: 0,
                 costUSD: 0, webSearchRequests: 0, contextWindow: 0, maxOutputTokens: 0,
               };
             }
-            const u = modelUsage[m.modelName];
+            const u = newModelUsage[m.modelName];
             u.inputTokens += m.inputTokens;
             u.outputTokens += m.outputTokens;
             u.cacheReadInputTokens += m.cacheReadTokens;
@@ -810,7 +829,7 @@ async function rebuildStats() {
           }
         }
 
-        totalCost += projTotalCost;
+        newTotalCost += projTotalCost;
 
         // Filter: only surface projects with ≥ $10 total spend
         if (projTotalCost >= 10) {
@@ -820,7 +839,7 @@ async function rebuildStats() {
           const dailyBreakdown = Object.values(projDailyMap)
             .sort((a, b) => b.date.localeCompare(a.date))
             .slice(0, 10);
-          projectUsage[encodedDir] = {
+          newProjectUsage[encodedDir] = {
             displayName,
             cwd: cwd || null,
             totalCostUSD: projTotalCost,
@@ -833,26 +852,65 @@ async function rebuildStats() {
         }
       }
 
-      dailyModelTokensArr = Object.keys(tokensByDate).sort().map(date => ({ date, tokensByModel: tokensByDate[date] }));
-      dailyCostArr = Object.keys(costByDate).sort().map(date => ({ date, costByModel: costByDate[date] }));
+      newDailyModelTokensArr = Object.keys(tokensByDate).sort().map(date => ({ date, tokensByModel: tokensByDate[date] }));
+      newDailyCostArr = Object.keys(costByDate).sort().map(date => ({ date, costByModel: costByDate[date] }));
     } catch (e) {
       console.error('ccusage failed — token/cost data omitted. Install via `brew install ccusage` or `npm i -g ccusage`.', e.message);
     }
 
-    const earliestDate = sortedDates.length > 0 ? sortedDates[0] : firstDate;
+    // --- Incremental merge: preserve old data for dates whose JSONL was deleted ---
+    const mergedDailyActivity = mergeDailyByDate(oldStats?.dailyActivity, newDailyActivityArr);
+    const mergedDailyModelTokens = mergeDailyByDate(oldStats?.dailyModelTokens, newDailyModelTokensArr);
+    const mergedDailyCost = mergeDailyByDate(oldStats?.dailyCost, newDailyCostArr);
+
+    // Merge hourCounts: take max per hour (cumulative, old may have counts from deleted JSONL)
+    const mergedHourCounts = { ...(oldStats?.hourCounts || {}) };
+    for (const [h, count] of Object.entries(hourCounts)) {
+      mergedHourCounts[h] = Math.max(mergedHourCounts[h] || 0, count);
+    }
+
+    // Merge modelUsage: take max per field per model
+    const mergedModelUsage = {};
+    const allModels = new Set([...Object.keys(oldStats?.modelUsage || {}), ...Object.keys(newModelUsage)]);
+    for (const model of allModels) {
+      const o = (oldStats?.modelUsage || {})[model] || {};
+      const n = newModelUsage[model] || {};
+      mergedModelUsage[model] = {
+        inputTokens: Math.max(o.inputTokens || 0, n.inputTokens || 0),
+        outputTokens: Math.max(o.outputTokens || 0, n.outputTokens || 0),
+        cacheReadInputTokens: Math.max(o.cacheReadInputTokens || 0, n.cacheReadInputTokens || 0),
+        cacheCreationInputTokens: Math.max(o.cacheCreationInputTokens || 0, n.cacheCreationInputTokens || 0),
+        costUSD: Math.max(o.costUSD || 0, n.costUSD || 0),
+        webSearchRequests: Math.max(o.webSearchRequests || 0, n.webSearchRequests || 0),
+        contextWindow: n.contextWindow || o.contextWindow || 0,
+        maxOutputTokens: n.maxOutputTokens || o.maxOutputTokens || 0,
+      };
+    }
+
+    // Merge projectUsage: new scan wins where present, keep old projects not in new scan
+    const mergedProjectUsage = { ...(oldStats?.projectUsage || {}), ...newProjectUsage };
+
+    // Recompute totals from merged data
+    const mergedTotalMessages = mergedDailyActivity.reduce((s, d) => s + d.messageCount, 0);
+    const mergedTotalCost = mergedDailyCost.reduce((s, d) => Object.values(d.costByModel || {}).reduce((a, b) => a + b, 0) + s, 0);
+    const mergedTotalSessions = Math.max(sessions.size, oldStats?.totalSessions || 0);
+
+    const earliestNewDate = sortedDates.length > 0 ? sortedDates[0] : firstDate;
+    const earliestDate = oldStats?.firstSessionDate && (!earliestNewDate || oldStats.firstSessionDate < earliestNewDate)
+      ? oldStats.firstSessionDate : earliestNewDate;
 
     const result = {
       version: 6, lastComputedDate: todayStr(),
-      dailyActivity: dailyActivityArr, dailyModelTokens: dailyModelTokensArr, dailyCost: dailyCostArr,
-      modelUsage, projectUsage, totalSessions: sessions.size,
-      totalMessages: dailyActivityArr.reduce((s, d) => s + d.messageCount, 0),
-      totalCostUSD: totalCost, longestSession,
+      dailyActivity: mergedDailyActivity, dailyModelTokens: mergedDailyModelTokens, dailyCost: mergedDailyCost,
+      modelUsage: mergedModelUsage, projectUsage: mergedProjectUsage, totalSessions: mergedTotalSessions,
+      totalMessages: mergedTotalMessages,
+      totalCostUSD: mergedTotalCost, longestSession,
       firstSessionDate: earliestDate || null,
-      hourCounts, totalSpeculationTimeSavedMs: 0, shotDistribution: {},
+      hourCounts: mergedHourCounts, totalSpeculationTimeSavedMs: 0, shotDistribution: {},
     };
 
     await fs.writeFile(CLAUDE_STATS_FILE, JSON.stringify(result), 'utf-8');
-    console.log(`Stats rebuilt: ${sessions.size} sessions, ${result.totalMessages} messages`);
+    console.log(`Stats rebuilt (incremental merge): ${sessions.size} live sessions, ${mergedDailyActivity.length} total days preserved`);
   } catch (e) {
     console.error('Stats rebuild failed:', e.message);
   } finally {
