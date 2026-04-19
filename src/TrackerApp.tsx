@@ -321,7 +321,12 @@ export default function TrackerApp() {
   const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastFittedDateRef = useRef<string | null>(null)
 
-  const loadClaudeStats = useCallback(async () => {
+  const lastClaudeStatsFetch = useRef(0)
+
+  const loadClaudeStats = useCallback(async (force?: boolean) => {
+    const now = Date.now()
+    if (!force && now - lastClaudeStatsFetch.current < 60_000) return
+    lastClaudeStatsFetch.current = now
     try {
       const [statsRes, pingsRes] = await Promise.all([
         fetch('/api/claude-stats'),
@@ -362,15 +367,23 @@ export default function TrackerApp() {
     // no-op: chart now uses activity state directly
   }, [])
 
-  const loadActivity = useCallback(async () => {
+  const lastActivityFetch = useRef<{ key: string; time: number }>({ key: '', time: 0 })
+
+  const loadActivity = useCallback(async (force?: boolean) => {
     if (repos.length === 0) { setActivity([]); setPrData([]); return }
+    const { since, until } = getDateRange(dateRange, customDate || undefined)
+    const params = new URLSearchParams({ since, until })
+    if (config.githubUsername) params.set('author', config.githubUsername)
+
+    // Throttle: skip if same params fetched within 60s
+    const fetchKey = params.toString()
+    const now = Date.now()
+    if (!force && fetchKey === lastActivityFetch.current.key && now - lastActivityFetch.current.time < 60_000) return
+    lastActivityFetch.current = { key: fetchKey, time: now }
+
     setLoading(true)
     setError(null)
     try {
-      const { since, until } = getDateRange(dateRange, customDate || undefined)
-      const params = new URLSearchParams({ since, until })
-      if (config.githubUsername) params.set('author', config.githubUsername)
-
       const [actRes, prRes] = await Promise.all([
         fetch(`/api/activity?${params}`),
         fetch(`/api/prs?${params}`),
