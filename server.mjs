@@ -62,16 +62,40 @@ function parseGitHubUrl(url) {
   return m ? { owner: m[1], repo: m[2].replace(/\.git$/, '') } : null;
 }
 
-// Simple in-memory cache (10 min TTL)
-const cache = new Map();
-const CACHE_TTL = 10 * 60 * 1000;
+// Persistent disk-backed cache with 1-hour TTL
+const CACHE_FILE = path.join(DATA_DIR, 'github-cache.json');
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+let cache = new Map();
 
-// Sweep expired cache entries every 30 min to prevent memory leak
+// Load cache from disk on startup
+try {
+  if (existsSync(CACHE_FILE)) {
+    const entries = JSON.parse(await fs.readFile(CACHE_FILE, 'utf-8'));
+    const now = Date.now();
+    for (const [key, val] of entries) {
+      if (now - val.time < CACHE_TTL) cache.set(key, val);
+    }
+  }
+} catch { /* start fresh */ }
+
+let cacheWritePending = false;
+function scheduleCacheWrite() {
+  if (cacheWritePending) return;
+  cacheWritePending = true;
+  setTimeout(async () => {
+    cacheWritePending = false;
+    try { await fs.writeFile(CACHE_FILE, JSON.stringify([...cache])); } catch { /* ignore */ }
+  }, 2000);
+}
+
+// Sweep expired cache entries every 30 min
 setInterval(() => {
   const now = Date.now();
+  let swept = false;
   for (const [key, val] of cache) {
-    if (now - val.time >= CACHE_TTL) cache.delete(key);
+    if (now - val.time >= CACHE_TTL) { cache.delete(key); swept = true; }
   }
+  if (swept) scheduleCacheWrite();
 }, 30 * 60 * 1000);
 
 // Cap persistent stats caches to prevent unbounded file growth
@@ -113,6 +137,7 @@ async function githubFetch(endpoint) {
 
   const data = await res.json();
   cache.set(endpoint, { data, time: Date.now() });
+  scheduleCacheWrite();
   return data;
 }
 
@@ -136,6 +161,7 @@ app.put('/api/config', async (req, res) => {
     if (githubToken) existing.githubToken = githubToken;
     await writeJSON(CONFIG_FILE, existing);
     cache.clear();
+    scheduleCacheWrite();
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
