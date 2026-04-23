@@ -15,7 +15,7 @@ milestones:
     depends_on: []
     complexity_flags: []
     open_questions: []
-    commit_hash: "3d38eb9"
+    commit_hash: "6f8de29"
     description: |
       新建 src/CareerApp.tsx 作为 /career/* 的顶层 app 壳（类似 LearnApp / TrackerApp），
       内部用 BrowserRouter nested Routes。修改 src/App.tsx 注册 <Route path="/career/*"
