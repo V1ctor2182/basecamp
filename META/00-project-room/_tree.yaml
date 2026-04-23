@@ -158,7 +158,7 @@ tree:
         - "00-project-room/04-career-system/08-human-gate-tracker"
     - id: "00-project-room/04-career-system/01-foundation"
       type: sub-epic
-      lifecycle: in_progress
+      lifecycle: active
       owner: fullstack
       parent: "00-project-room/04-career-system"
       children:
@@ -179,7 +179,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/01-foundation/03-llm-cost-observability"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: fullstack
       parent: "00-project-room/04-career-system/01-foundation"
       children: []

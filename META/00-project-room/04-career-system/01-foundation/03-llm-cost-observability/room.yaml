@@ -3,9 +3,9 @@ room:
   name: "LLM 成本观测"
   parent: "00-project-room/04-career-system/01-foundation"
   type: feature
-  lifecycle: planning
+  lifecycle: active
   created_at: "2026-04-22"
-  updated_at: "2026-04-22"
+  updated_at: "2026-04-23"
   owner: fullstack
   contributors: []
   prompt_test:

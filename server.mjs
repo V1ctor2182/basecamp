@@ -6,6 +6,7 @@ import { createInterface } from 'readline';
 import { execSync } from 'child_process';
 import path from 'path';
 import os from 'os';
+import { z } from 'zod';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const app = express();
@@ -19,11 +20,17 @@ const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const COMMIT_STATS_FILE = path.join(DATA_DIR, 'commit-stats.json');
 const PR_STATS_FILE = path.join(DATA_DIR, 'pr-stats.json');
 
+// Career system data
+const CAREER_DIR = path.join(DATA_DIR, 'career');
+const LLM_COSTS_FILE = path.join(CAREER_DIR, 'llm-costs.jsonl');
+
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(REPOS_FILE)) writeFileSync(REPOS_FILE, '[]');
 if (!existsSync(CONFIG_FILE)) writeFileSync(CONFIG_FILE, '{}');
 if (!existsSync(COMMIT_STATS_FILE)) writeFileSync(COMMIT_STATS_FILE, '{}');
 if (!existsSync(PR_STATS_FILE)) writeFileSync(PR_STATS_FILE, '{}');
+if (!existsSync(CAREER_DIR)) mkdirSync(CAREER_DIR, { recursive: true });
+if (!existsSync(LLM_COSTS_FILE)) writeFileSync(LLM_COSTS_FILE, '');
 
 // Helpers
 async function readJSON(file) { return JSON.parse(await fs.readFile(file, 'utf-8')); }
@@ -264,25 +271,34 @@ app.get('/api/activity', async (req, res) => {
 
     const results = await Promise.allSettled(
       repos.map(async (repo) => {
-        // Fetch commits from default branch (1 request per repo, not N per branch)
-        let endpoint = `/repos/${repo.id}/commits?per_page=100`;
-        if (since) endpoint += `&since=${since}`;
-        if (until) endpoint += `&until=${until}`;
-        if (author) endpoint += `&author=${author}`;
-        const commits = await githubFetch(endpoint);
-        const commitList = Array.isArray(commits) ? commits : [];
+        // Fetch all branches, then commits per branch, dedupe by sha
+        const branches = await githubFetch(`/repos/${repo.id}/branches?per_page=100`).catch(() => []);
+        const branchList = Array.isArray(branches) ? branches : [];
+
+        const commitsBySha = new Map(); // sha -> { commit, branches: Set }
+        await pLimit(branchList, async (br) => {
+          let endpoint = `/repos/${repo.id}/commits?per_page=100&sha=${encodeURIComponent(br.name)}`;
+          if (since) endpoint += `&since=${since}`;
+          if (until) endpoint += `&until=${until}`;
+          if (author) endpoint += `&author=${author}`;
+          const commits = await githubFetch(endpoint).catch(() => []);
+          for (const c of (Array.isArray(commits) ? commits : [])) {
+            if (!commitsBySha.has(c.sha)) commitsBySha.set(c.sha, { commit: c, branches: new Set() });
+            commitsBySha.get(c.sha).branches.add(br.name);
+          }
+        }, 5);
 
         return {
           repo: repo.id,
           repoUrl: repo.url,
-          branches: [],
-          commits: commitList.map(c => ({
+          branches: branchList.map(b => b.name),
+          commits: [...commitsBySha.values()].map(({ commit: c, branches: brs }) => ({
             sha: c.sha,
             message: c.commit.message,
             author: c.commit.author.name,
             date: c.commit.committer.date,
             url: c.html_url,
-            branch: '',
+            branch: [...brs].join(', '),
           })),
         };
       })
@@ -1025,6 +1041,110 @@ app.post('/api/claude-ping', async (req, res) => {
 app.get('/api/claude-pings', async (_req, res) => {
   try {
     res.json(JSON.parse(await fs.readFile(PINGS_FILE, 'utf-8')));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Career System: LLM cost observability
+// See META/.../01-foundation/03-llm-cost-observability
+// ─────────────────────────────────────────────────────────────
+
+// Zod schema — input record (ts auto-filled server-side)
+const CostRecordInput = z.object({
+  caller: z.string().min(1),             // e.g. 'evaluator:stage-a', 'tailor', 'applier'
+  model: z.string().min(1),              // e.g. 'claude-haiku-4-5', 'claude-sonnet-4-6'
+  input_tokens: z.number().int().nonnegative(),
+  output_tokens: z.number().int().nonnegative(),
+  cost_usd: z.number().nonnegative(),    // caller computes (model price × tokens)
+  session_id: z.string().optional(),
+  job_id: z.string().optional(),
+});
+
+async function appendCostRecord(input) {
+  const parsed = CostRecordInput.parse(input);  // throws ZodError on bad input
+  const record = { ts: new Date().toISOString(), ...parsed };
+  await fs.appendFile(LLM_COSTS_FILE, JSON.stringify(record) + '\n');
+  return record;
+}
+
+async function readCostRecords({ start, end, caller, model } = {}) {
+  let raw = '';
+  try { raw = await fs.readFile(LLM_COSTS_FILE, 'utf-8'); } catch { return []; }
+  const records = [];
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    try { records.push(JSON.parse(line)); } catch {
+      console.warn('[llm-costs] skipping malformed line:', line.slice(0, 80));
+    }
+  }
+  return records.filter(r => {
+    if (start && r.ts < start) return false;
+    if (end && r.ts > end) return false;
+    if (caller && r.caller !== caller) return false;
+    if (model && r.model !== model) return false;
+    return true;
+  });
+}
+
+function aggregateCosts(records, groupBy) {
+  if (!groupBy) {
+    return records.reduce((acc, r) => {
+      acc.total_cost += r.cost_usd;
+      acc.total_tokens += r.input_tokens + r.output_tokens;
+      acc.record_count += 1;
+      return acc;
+    }, { total_cost: 0, total_tokens: 0, record_count: 0 });
+  }
+  const buckets = {};
+  for (const r of records) {
+    let key;
+    if (groupBy === 'day') key = r.ts.slice(0, 10);
+    else if (groupBy === 'caller') key = r.caller;
+    else if (groupBy === 'model') key = r.model;
+    else throw new Error(`Unsupported groupBy: ${groupBy}`);
+    if (!buckets[key]) buckets[key] = { total_cost: 0, total_tokens: 0, record_count: 0 };
+    buckets[key].total_cost += r.cost_usd;
+    buckets[key].total_tokens += r.input_tokens + r.output_tokens;
+    buckets[key].record_count += 1;
+  }
+  return buckets;
+}
+
+// POST /api/career/llm-costs — caller appends a record
+app.post('/api/career/llm-costs', async (req, res) => {
+  try {
+    const record = await appendCostRecord(req.body);
+    res.status(201).json(record);
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid record', details: e.issues });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/career/llm-costs
+//   (no query)        → today's aggregate { total_cost, total_tokens, record_count }
+//   ?start=&end=      → ISO range filter
+//   ?caller= / ?model= → exact match filter
+//   ?groupBy=day|caller|model → bucketed aggregate
+app.get('/api/career/llm-costs', async (req, res) => {
+  try {
+    const { start, end, caller, model, groupBy } = req.query;
+    let filterStart = start, filterEnd = end;
+    // Default (no query params): today aggregate (local timezone day start → now)
+    const defaultMode = !start && !end && !caller && !model && !groupBy;
+    if (defaultMode) {
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      filterStart = todayStart.toISOString();
+    }
+    const records = await readCostRecords({ start: filterStart, end: filterEnd, caller, model });
+    if (groupBy) return res.json(aggregateCosts(records, groupBy));
+    if (defaultMode) return res.json(aggregateCosts(records));
+    res.json(records);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -1,5 +1,73 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-llm-costs-infra"
+    name: "data/career/llm-costs.jsonl 写/读 API + 2 REST endpoints + Zod schema"
+    status: completed
+    actual_lines: 115  # server.mjs +110 行 + package.json +1 行
+    actual_files:
+      - "server.mjs"
+      - "package.json"
+    estimated_files:
+      - "server.mjs"
+      - "package.json"          # add zod dep
+    estimated_lines: 130
+    depends_on: []
+    complexity_flags: [first_of_kind]     # 首次引入 zod 到项目
+    open_questions: []
+    commit_hash: null
+    description: |
+      纯 backend infra：data/career/llm-costs.jsonl 的 append + read + 聚合 API，
+      供 06-evaluator / 03-cv-engine/05-tailor / 07-applier 共用。
+
+      实现:
+      - npm install zod (首次引入，后续 Finder Job Schema 等也会用)
+      - server.mjs 加:
+        - LLM_COSTS_FILE = path.join(DATA_DIR, 'career', 'llm-costs.jsonl')
+        - init (existsSync 创建 data/career + 空 llm-costs.jsonl)
+        - CostRecordSchema (zod): caller / model / input_tokens /
+          output_tokens / cost_usd + optional session_id + optional job_id
+          (ts 由 server 自动填，caller 不需要传)
+        - appendCostRecord(record) — Schema 验证 + 填 ts + fs.appendFile
+        - readCostRecords({start, end, caller, model}) — 读文件 + 行级 filter
+        - aggregateCosts(records, groupBy: "day"|"caller"|"model") — 聚合
+      - POST /api/career/llm-costs — body = record (无 ts), 400 on validation error
+      - GET /api/career/llm-costs
+        - 无 query: 返回今日聚合 {total_cost, total_tokens, record_count}
+        - ?start=&end=&caller=&model= query filter
+        - ?groupBy=day|caller|model: 返回聚合
+
+      Record Schema (zod):
+        {
+          ts: string (ISO, 自动填),
+          caller: string,
+          model: string,
+          input_tokens: number (int, >= 0),
+          output_tokens: number (int, >= 0),
+          cost_usd: number (>= 0),
+          session_id?: string,
+          job_id?: string
+        }
+
+      验收:
+      - curl POST 一条合法 record → 201 + jsonl 里出现
+      - curl POST 缺 model 字段 → 400 + zod error detail
+      - curl GET (无 query) → 今日聚合（first time 返回 {cost: 0, tokens: 0, count: 0}）
+      - curl GET ?groupBy=day → 按日期分组
+      - 坏格式 JSONL 行跳过 + warn (不 crash)
+      - 并发 append 安全（fs.appendFile 天然原子 for small writes）
+commits:
+  - hash: "TBD"
+    date: "2026-04-23"
+    message: "[04-career-system/01-foundation/03-llm-cost-observability] m1: llm-costs.jsonl 写/读 API + Zod schema + 2 endpoints (ROOM 完成)"
+    files_changed: 3
+    specs_affected:
+      - "change-2026-04-23-m1-llm-costs-infra (created)"
+      - "room.yaml (lifecycle: planning → active)"
+      - "_tree.yaml (lifecycle: planning → active)"
+    milestones_affected:
+      - "m1-llm-costs-infra (→ completed, ROOM COMPLETE)"
+
+current_sprint: "Sprint 1 — Foundation"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 100
+status_note: "🎉 m1 ✅ completed。Room active。01-foundation sub-epic 全部 3 feature 完成。Sprint 1 CLOSED。下一个 Sprint: 02-profile (01-identity / 02-preferences / 03-narrative-proof)"
+last_updated: "2026-04-23"
