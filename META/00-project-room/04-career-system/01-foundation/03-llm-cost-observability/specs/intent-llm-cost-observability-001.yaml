@@ -1,0 +1,22 @@
+spec_id: "intent-llm-cost-observability-001"
+type: intent
+state: active
+intent:
+  summary: "通用 data/career/llm-costs.jsonl append 写入 + 读取 API（纯 infra，无 LLM 调用）"
+  detail: |
+    提供 career-system 所有 LLM 调用方（06-evaluator、03-cv-engine/05-tailor、07-applier 等）共用的成本日志 infra。一条 record 的 schema：{ts, caller, model, input_tokens, output_tokens, cost_usd, session_id?, job_id?}。append-only 到 data/career/llm-costs.jsonl；提供读取 API 支持按时间范围 / caller / model 过滤聚合。本 feature 不含业务策略（budget 阈值 / UI banner 属于 06-evaluator/04-budget-gate 消费本 infra）。验收：其他模块调 API append 一条 record，jsonl 里出现；读 API 能按日期聚合得到今日总成本。文件位置：server.mjs 加 /api/career/llm-costs 的 POST / GET endpoint + 底层 append/read helper。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [infra, observability, jsonl]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.8
+  source_ref: "career-architecture/llm-strategy.md + appendix.md 决策问题 #5"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

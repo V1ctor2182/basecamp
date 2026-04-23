@@ -1,0 +1,22 @@
+spec_id: "intent-career-foundation-001"
+type: intent
+state: active
+intent:
+  summary: "career-system 的基础设施层：tab 壳 + 数据目录布局 + LLM 成本 infra"
+  detail: |
+    3 个 feature 共同组成 career-system 的底座：(1) 01-career-tab-shell — /career 路由骨架 + 子路由导航（所有 UI feature 挂这下面）；(2) 02-career-data-layout — data/career/ 目录结构 + gitignore 规则（所有后续 feature 的数据存储位置）；(3) 03-llm-cost-observability — llm-costs.jsonl append/read 通用 infra（所有 LLM 调用方共享的成本日志）。本 sub-epic 不含业务逻辑，只是基础设施 — 所有下游 sub-epic（02-profile 到 08-human-gate-tracker）都依赖它。Sprint 1 交付 = 本 sub-epic 全部完成 = career tab 能看见 + data 目录就绪 + 成本 infra 就位。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: epic
+  domain: "04-career-system"
+  tags: [sub-epic, infrastructure]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/implementation.md#phase-0"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

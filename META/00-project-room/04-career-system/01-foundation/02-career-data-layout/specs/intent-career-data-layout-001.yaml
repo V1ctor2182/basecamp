@@ -1,0 +1,22 @@
+spec_id: "intent-career-data-layout-001"
+type: intent
+state: active
+intent:
+  summary: "建立 data/career/ 目录结构 + .gitignore 规则，所有 career-system 子模块的本地存储底座"
+  detail: |
+    按 career-architecture/data-model.md 的文件清单建立 data/career/ 下的目录层级：identity.yml / preferences.yml / cv.gdoc-id / narrative.md / proof-points.md / story-bank.md / portals.yml / pipeline.json / scan-history.jsonl / applications.json / resumes/ / qa-bank/ / reports/ / output/ / drafts/ / feedback/ / apply-sessions/ / site-adapters/ / .playwright/profile/ / .oauth.json 等。同时更新 .gitignore：commit 的白名单（配置 + 可复用知识）vs gitignore（个人敏感 + 易变 + 大量数据，见 §Git 策略）。本 feature 不写任何业务逻辑，只负责目录初始化脚本 + gitignore 规则 + 每个子目录的 README.md 说明。验收：跑一次初始化脚本后目录存在；git status 里 identity.yml / outputs / drafts 等被忽略。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [infra, filesystem, gitignore]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/data-model.md"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"
