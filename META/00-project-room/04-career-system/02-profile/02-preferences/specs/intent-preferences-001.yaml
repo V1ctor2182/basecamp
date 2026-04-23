@@ -1,0 +1,22 @@
+spec_id: "intent-preferences-001"
+type: intent
+state: active
+intent:
+  summary: "preferences.yml CRUD + Settings → Preferences 页（含 hard_filters 编辑器）"
+  detail: |
+    所有"主观判断 / 筛选规则 / 评分权重"的集中配置：targets（目标岗位 / seniority）、comp_target（薪资区间）、location（accept_any / remote_only / hybrid_max_days_onsite）、hard_filters（9 种规则：company_blocklist / title_blocklist / title_allowlist / jd_text_blocklist / location / seniority / posted_within_days / comp_floor / source_filter）、soft_preferences、scoring_weights、thresholds（strong/worth/consider/skip_below）、evaluator_strategy（stage_a/stage_b 配置 + Block 开关）。Finder、Evaluator、Shortlist UI 都读它。前端 Settings → Preferences 页：结构化表单编辑（tag input 组件用于关键词列表，CodeMirror 后门编辑完整 YAML），支持 preview dry-run（用当前 pipeline 最近 100 岗位跑一遍看 drop 变化）+ git 历史（追踪偏好演化）。preferences.yml commit 进 git。验收：修改 hard_filters 后 preview 能看到新增 drop 的岗位；保存后 Finder 下次 scan 用新规则。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [frontend, backend, config, hard-filters]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/01-profile.md#1b-preferencesyml-你想要什么 + 03-finder.md#hard-filter-规则清单"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

@@ -1,0 +1,22 @@
+spec_id: "intent-profile-001"
+type: intent
+state: active
+intent:
+  summary: "Profile 层：你是谁（identity） + 你想要什么（preferences） + 叙事 + QA Bank"
+  detail: |
+    career-system 所有下游模块的上下文来源，4 个 feature：(1) 01-identity — identity.yml（填表事实信息，稳定，一年改几次，敏感 gitignored）；(2) 02-preferences — preferences.yml（偏好 + hard_filters + 评分权重，持续迭代，可 commit 追踪演化）；(3) 03-narrative-proof — narrative.md + proof-points.md（叙事定位 + 项目指标详细版，markdown 编辑）；(4) 04-qa-bank — legal.yml + templates.md + history.jsonl 三层 QA Bank（Applier 填表的答案源）。分成两文件的核心思路：identity 稳定敏感 vs preferences 迭代可 commit（两者所有权和变化频率不同）。Applier 只读 identity + qa-bank；Evaluator 只读 preferences + narrative + proof-points + cv.md（权限分离）。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: epic
+  domain: "04-career-system"
+  tags: [sub-epic, profile, context]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/01-profile.md"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"
