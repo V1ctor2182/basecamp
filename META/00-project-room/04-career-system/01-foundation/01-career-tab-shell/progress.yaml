@@ -109,7 +109,7 @@ milestones:
     depends_on: ["m3-settings-nested"]
     complexity_flags: []
     open_questions: []
-    commit_hash: "TBD"
+    commit_hash: "844e192"
     description: |
       LearnApp.tsx sidebar 在 "Work Tracker" 下方加 "Career" Link (Briefcase icon
       + "Career" 文字)，复用 sidebar-tracker-link class 自动一致样式。CareerApp
