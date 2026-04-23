@@ -1,0 +1,22 @@
+spec_id: "constraint-jd-enrich-001"
+type: constraint
+state: active
+intent:
+  summary: "必须在 hard_filter 之后跑 + 失败必须显式标 needs_manual_enrich"
+  detail: |
+    (1) JD Enrich MUST 在 hard_filter 之后执行 — 对已被 filter 丢掉的岗位不抓 JD（避免 2-5s × 被过滤数的无效开销 + 避免 Playwright 过多并发）；(2) 三层 fallback 的**任何一层**失败都 MUST 显式设置 Job.needs_manual_enrich = true，绝不能返回空 description 静默继续（否则 Evaluator 会在没 JD 的情况下瞎评）；(3) Playwright 每个 URL MUST 有超时（默认 15s），超时标 manual；(4) description 长度 > 500 视为已有，跳过 enrich（避免重复抓）。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [ordering, failure-mode, playwright]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/03-finder.md#jd-补全"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"
