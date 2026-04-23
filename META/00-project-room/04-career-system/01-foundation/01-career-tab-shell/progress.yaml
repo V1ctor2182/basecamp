@@ -25,7 +25,7 @@ milestones:
 
   - id: "m2-top-level-tabs"
     name: "6 顶级子路由 + Tab 导航"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/CareerNav.tsx"
       - "src/career/Overview.tsx"
@@ -34,18 +34,30 @@ milestones:
       - "src/career/Applied.tsx"
       - "src/career/Prep.tsx"
       - "src/CareerApp.tsx"
+    actual_files:
+      - "src/career/CareerNav.tsx"
+      - "src/career/Overview.tsx"
+      - "src/career/Pipeline.tsx"
+      - "src/career/Shortlist.tsx"
+      - "src/career/Applied.tsx"
+      - "src/career/Prep.tsx"
+      - "src/career/Reports.tsx"   # extra: reports also dynamic route
+      - "src/CareerApp.tsx"
+      - "src/career.css"           # extra: nav + page styles
     estimated_lines: 120
+    actual_lines: 220   # 7 pages avg 15 + nav 30 + App.tsx 45 + css 80
     depends_on: ["m1-careerapp-shell"]
     complexity_flags: []
     open_questions: []
+    commit_hash: "TBD"
     description: |
-      CareerNav 组件渲染水平 tab bar（Overview / Pipeline / Shortlist / Applied / Prep /
-      Settings），active state 用 useMatch。CareerApp.tsx 的 Routes 加 6 个顶级：
-      /career/overview → Overview, /pipeline → Pipeline, /shortlist → Shortlist,
-      /applied → Applied, /prep/:company? → Prep, /settings/* → SettingsLayout
-      (m3 做)。/career 默认 redirect /career/overview。Dynamic route /prep/:company?
-      无参数时显示 empty state + 示例公司列表。5 个占位子组件结构简单：标题 +
-      "TODO: {page} content" + 留 ref 到对应架构模块。
+      CareerNav 组件用 NavLink 渲染水平 tab bar（6 tabs: Overview / Pipeline /
+      Shortlist / Applied / Prep / Settings），active state 通过 NavLink isActive
+      prop。CareerApp.tsx 的 Routes 配 6 顶级 + 2 dynamic + 1 fallback：
+      index → Navigate /career/overview, overview/pipeline/shortlist/applied 直接
+      渲染，prep + prep/:company 两个 Route（无参数显示 empty state），
+      reports + reports/:id 类似，settings/* 暂占位到 m3，* fallback redirect
+      overview。7 个占位组件（含 Reports 额外加）结构简单：标题 + todo + empty + ref。
 
   - id: "m3-settings-nested"
     name: "Settings 嵌套子路由 + 左侧 sidebar + 6 子页占位"
@@ -89,5 +101,5 @@ milestones:
       state / hover 样式 / 颜色对比度。
 current_sprint: "Sprint 1 — Foundation"
 blockers: []
-status_note: "m1 ✅ completed. 下一个: m2-top-level-tabs (Tab 导航 + 5 占位)"
+status_note: "m1 ✅ + m2 ✅ completed. 下一个: m3-settings-nested (Settings 嵌套 + 6 子页)"
 last_updated: "2026-04-23"

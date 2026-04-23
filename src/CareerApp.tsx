@@ -1,6 +1,23 @@
-import { Link } from 'react-router-dom'
+import { Link, Routes, Route, Navigate } from 'react-router-dom'
 import { ArrowLeft, Briefcase } from 'lucide-react'
+import CareerNav from './career/CareerNav'
+import Overview from './career/Overview'
+import Pipeline from './career/Pipeline'
+import Shortlist from './career/Shortlist'
+import Applied from './career/Applied'
+import Prep from './career/Prep'
+import Reports from './career/Reports'
 import './career.css'
+
+function SettingsPlaceholder() {
+  return (
+    <div className="c-page">
+      <h2>Settings</h2>
+      <p className="c-page-todo">Identity / Preferences / Portals / QA Bank / Narrative / Resumes 子页。</p>
+      <p className="c-page-empty">Coming in m3.</p>
+    </div>
+  )
+}
 
 export default function CareerApp() {
   return (
@@ -15,13 +32,22 @@ export default function CareerApp() {
         </div>
       </header>
 
+      <CareerNav />
+
       <main className="c-body">
-        <div className="c-placeholder">
-          <Briefcase size={48} strokeWidth={1.5} />
-          <h2>Career System</h2>
-          <p>AI 求职自动化 — 多简历定制、AI 评分、半自动填表、全本地数据</p>
-          <p className="c-coming-soon">Coming Soon</p>
-        </div>
+        <Routes>
+          <Route index element={<Navigate to="overview" replace />} />
+          <Route path="overview" element={<Overview />} />
+          <Route path="pipeline" element={<Pipeline />} />
+          <Route path="shortlist" element={<Shortlist />} />
+          <Route path="applied" element={<Applied />} />
+          <Route path="prep" element={<Prep />} />
+          <Route path="prep/:company" element={<Prep />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="reports/:id" element={<Reports />} />
+          <Route path="settings/*" element={<SettingsPlaceholder />} />
+          <Route path="*" element={<Navigate to="overview" replace />} />
+        </Routes>
       </main>
     </div>
   )
