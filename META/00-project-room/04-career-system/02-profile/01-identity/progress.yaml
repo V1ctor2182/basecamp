@@ -88,7 +88,7 @@ milestones:
       Save 按钮灰色 + email 输入 "abc" → inline error "invalid email"。
 
 commits:
-  - hash: "TBD"
+  - hash: "829691d"
     date: "2026-04-23"
     message: "[04-career-system/02-profile/01-identity] m1: Backend GET/PUT /api/career/identity + Zod IdentitySchema + yaml IO"
     files_changed: 3
