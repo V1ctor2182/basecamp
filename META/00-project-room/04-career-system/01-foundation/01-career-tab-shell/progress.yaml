@@ -85,7 +85,7 @@ milestones:
     depends_on: ["m2-top-level-tabs"]
     complexity_flags: []
     open_questions: []
-    commit_hash: "TBD"
+    commit_hash: "81b75e9"
     description: |
       SettingsLayout 组件：左 sidebar NavLink 列出 6 sub-route + <Outlet />。
       6 个占位子组件各一个文件（标题 + todo + empty + spec ref）。CareerApp.tsx
