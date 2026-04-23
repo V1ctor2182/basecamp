@@ -1,0 +1,22 @@
+spec_id: "intent-stage-b-sonnet-001"
+type: intent
+state: active
+intent:
+  summary: "Sonnet 深评（Stage B）：完整 A-G Block 报告 + 总分 + prompt caching"
+  detail: |
+    Evaluator 三阶段漏斗中的 Stage B。输入：JD 全文 + 完整 cv.md（Auto-Select 或用户指定的 base）+ narrative.md + proof-points.md + identity.yml + preferences.yml + qa-bank（templates/history 作 few-shot 参考）。输出：reports/{jobId}.md — 7 个 Block 的完整报告（A Role Summary / B CV Match 现状 / C Level & Strategy / D Comp & Demand + WebSearch Levels.fyi-Glassdoor / E Personalization Plan — CV 改写建议 → Tailor Engine 消费 / F Interview Plan 6-10 STAR+R 故事 / G Posting Legitimacy + Playwright 验证岗位活跃度）+ 加权总分 X.X/5 按 preferences.scoring_weights。调 claude-sonnet-4-6，每个 ~$0.15-0.30。**Prompt caching 关键**：cv.md + narrative.md + proof-points.md + identity.yml 是大共享上下文，开 caching 省 90% 重复 token 成本。可选工具：WebSearch（Block D 用）、Playwright（Block G 用）都通过 tools API 传给 Sonnet。成本走 01-foundation/03-llm-cost-observability。支持批量 + 并发 3。验收：对 ~30 个 Stage A 通过的 Job 跑 Stage B，产出 reports/{jobId}.md 结构完整（A-G 7 block）+ 总分合理；Block E 的建议能被 Tailor Engine 消费；总成本 < $6。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [backend, llm, claude-api, sonnet, evaluator, prompt-cache]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/05-evaluator.md#stage-b-sonnet-深评 + block-a-g"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

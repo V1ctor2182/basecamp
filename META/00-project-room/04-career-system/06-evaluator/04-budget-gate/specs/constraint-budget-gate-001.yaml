@@ -1,0 +1,22 @@
+spec_id: "constraint-budget-gate-001"
+type: constraint
+state: active
+intent:
+  summary: "超预算只暂停 Stage B，不暂停 Stage A；banner 显式提示不静默"
+  detail: |
+    (1) daily_budget_usd 达到时 MUST 暂停 Stage B（贵的 Sonnet），但 Stage A (Haiku, ~$0.01/个) 继续可用 — Haiku 太便宜没必要限；(2) 超预算时 MUST 弹 Banner 提示"今日 Sonnet 预算 $10 用尽，明天继续或去 Settings 提高上限"，绝不能静默返回 error 让用户摸不着头脑；(3) 用户的 Force Sonnet override MUST 照算进今日成本（不给白嫖通道），但允许执行；(4) 跨日重置 MUST 按用户本地时区的 00:00（不是 UTC），避免用户在晚上 11 点以为还能跑但因为 UTC 换日导致预算早已重置超支。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [cost-control, user-feedback, timezone]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/05-evaluator.md#成本监控"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

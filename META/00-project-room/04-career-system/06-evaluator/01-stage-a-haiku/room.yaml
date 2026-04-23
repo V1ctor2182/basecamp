@@ -1,0 +1,18 @@
+room:
+  id: "00-project-room/04-career-system/06-evaluator/01-stage-a-haiku"
+  name: "Stage A - Haiku"
+  parent: "00-project-room/04-career-system/06-evaluator"
+  type: feature
+  lifecycle: planning
+  created_at: "2026-04-22"
+  updated_at: "2026-04-22"
+  owner: backend
+  contributors: []
+  prompt_test:
+    passable: false
+    last_tested: null
+    token_count: null
+  depends_on:
+    - "00-project-room/04-career-system/05-finder/05-scan-scheduler"
+    - "00-project-room/04-career-system/02-profile/02-preferences"
+    - "00-project-room/04-career-system/03-cv-engine/01-resume-index"

@@ -1,0 +1,22 @@
+spec_id: "constraint-stage-a-haiku-001"
+type: constraint
+state: active
+intent:
+  summary: "阈值可 override + 归档不是删除 + Force Sonnet 永远可用"
+  detail: |
+    (1) 默认阈值 3.5 MUST 可在 preferences.yml.thresholds.skip_below 里 override，不能硬编码；(2) Stage A < 阈值的 Job MUST 状态改为 Archived 但保留记录（applications.json 或 pipeline.json 里可查）——绝不删除，用户可能想回头翻；(3) UI MUST 永远提供 "Force Sonnet" override — 即使 Haiku 评 1.5，用户也能强制跑 Stage B（前提是今日预算未超）。因为 Haiku 有时会错（你比 Haiku 更了解自己）；(4) Stage A 的 reason 字段 MUST 保存 — 后续用户 review 低分岗位时能看到 LLM 的判断理由。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [user-override, audit-trail]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/05-evaluator.md#stage-a + override"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"
