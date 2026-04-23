@@ -100,7 +100,7 @@ commits:
       - "change-2026-04-23-m1-identity-backend (created)"
     milestones_affected:
       - "m1-identity-backend (→ completed)"
-  - hash: "TBD"
+  - hash: "4b445a1"
     date: "2026-04-23"
     message: "[04-career-system/02-profile/01-identity] m2: Settings 页 ATS 风格 6-section form (ROOM 完成)"
     files_changed: 2
