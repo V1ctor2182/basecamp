@@ -55,7 +55,7 @@ milestones:
       - 坏格式 JSONL 行跳过 + warn (不 crash)
       - 并发 append 安全（fs.appendFile 天然原子 for small writes）
 commits:
-  - hash: "TBD"
+  - hash: "c91c6a5"
     date: "2026-04-23"
     message: "[04-career-system/01-foundation/03-llm-cost-observability] m1: llm-costs.jsonl 写/读 API + Zod schema + 2 endpoints (ROOM 完成)"
     files_changed: 3
