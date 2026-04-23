@@ -178,7 +178,12 @@ milestones:
 
   - id: "m3-hard-filters-editor"
     name: "Section 7 Hard Filters (9 sub-sections) + Preview dry-run stub"
-    status: pending
+    status: completed
+    actual_lines: 495
+    actual_files:
+      - "src/career/settings/Preferences.tsx"
+      - "src/career/settings/ats-form.css"
+      - "server.mjs"
     estimated_files:
       - "src/career/settings/Preferences.tsx"
       - "server.mjs"
@@ -281,9 +286,19 @@ commits:
       - "change-2026-04-23-m2-preferences-form-static (created)"
     milestones_affected:
       - "m2-preferences-form-static (→ completed)"
+  - hash: "TBD"
+    date: "2026-04-23"
+    message: "[04-career-system/02-profile/02-preferences] m3: Section 7 Hard Filters (8 sub-sections 短路顺序) + Preview stub (ROOM COMPLETE)"
+    files_changed: 6
+    specs_affected:
+      - "change-2026-04-23-m3-hard-filters-editor (created)"
+      - "room.yaml (lifecycle: in_progress → active)"
+      - "_tree.yaml (lifecycle: in_progress → active)"
+    milestones_affected:
+      - "m3-hard-filters-editor (→ completed, ROOM COMPLETE)"
 
 current_sprint: "Sprint 2 — Profile"
 blockers: []
-completion: 66
-status_note: "m1 + m2 completed (2026-04-23)。下一步 m3 Section 7 hard_filters + Preview dry-run stub。"
+completion: 100
+status_note: "🎉 ROOM 完成 (3 milestones done, lifecycle active)。Section 7 hard_filters + Preview stub 就位，等 05-finder/03-dedupe 替换 stub。下一个 Room: 02-profile/03-narrative-proof"
 last_updated: "2026-04-23"

@@ -1,0 +1,127 @@
+spec_id: "change-2026-04-23-m3-hard-filters-editor"
+type: change
+state: active
+intent:
+  summary: "m3: Section 7 Hard Filters (9 sub-sections, 短路顺序) + Preview dry-run (UI + backend stub)"
+  detail: |
+    完成 Preferences 表单最后一段 — Section 7 Hard Filters + Preview bar。
+    Section 7 共 8 个 sub-section (9 条规则，其中 title_blocklist 和
+    title_allowlist 合并成一个 sub-section 因为属同一个筛选维度)，按
+    constraint-preferences-001 + architecture/03-finder.md 的短路顺序
+    排列并用 ①–⑧ ordinal badge 明示顺序。
+
+    Preview dry-run 采用 Q3=a (UI + backend stub) 决策 — UI 完整、后端
+    返 mock 数据标 `stub: true`。真正的 dry-run 逻辑等 05-finder/03-dedupe
+    ship 后替换。
+
+    Files modified:
+      - src/career/settings/Preferences.tsx (586 → 827 lines, +241)
+        - PreviewResult type
+        - preview/previewing/previewError state
+        - runPreview() → POST /api/career/preferences/preview
+        - Section 7 with 8 sub-sections (ordinal-labeled):
+          ① source_filter — TagInput blocked_sources
+          ② company_blocklist — TagInput
+          ③ title_blocklist + title_allowlist — 2 TagInput 并列
+             (help: allowlist 非空时要求命中任一; blocklist 任一命中 drop)
+          ④ location — allowed_countries / allowed_cities /
+             disallowed_countries 三 TagInput
+          ⑤ seniority — TagInput (IC3 / Senior / Staff...)
+          ⑥ posted_within_days — number input (0 = 不限)
+          ⑦ comp_floor — base_min / total_min + currency
+          ⑧ jd_text_blocklist — TagInput + ⚠️ help
+             "需先 JD Enrich 完成才评估"
+        - Preview bar at end of Section 7:
+          - "Run Preview" button (af-btn-secondary)
+          - Loading state + error state
+          - 4-stat grid: Total / Would drop (red) / Would pass (green) /
+            New drops vs saved
+          - ⚠️ stub warning when response.stub === true
+          - Collapsible breakdown <details>: 9 rules with drop counts
+      - src/career/settings/ats-form.css (511 → 695 lines, +184):
+        - .af-subsection / .af-subsection-title / .af-subsection-desc
+          (background card per filter rule)
+        - .af-filter-ordinal (22x22 蓝圆 badge with number)
+        - .af-preview-bar / .af-preview-header / .af-preview-title
+        - .af-btn-secondary (白底灰边 — 对比 primary 深色)
+        - .af-preview-stub-warning (黄色警告条)
+        - .af-preview-result / .af-preview-stat / .af-preview-stat-value
+          / .af-preview-stat-label (4-col grid with big numbers)
+        - .af-preview-breakdown / .af-preview-breakdown-row /
+          .af-preview-breakdown-rule (monospace) / .af-preview-breakdown-drops
+          (red for >0, gray for 0)
+        - .af-preview-loading / .af-preview-error
+      - server.mjs (+70 lines):
+        - POST /api/career/preferences/preview stub endpoint
+        - Accepts full preferences body (not only stored — lets UI preview
+          unsaved form state)
+        - Heuristic drop counting by # non-empty entries per rule
+        - Overlap-aware via min() clamp so total <= TOTAL (100)
+        - new_drops = diff between submitted and persisted filter counts
+        - Returns {total_jobs, would_drop, would_pass, new_drops, breakdown[],
+          stub: true, note}
+        - 400 if body missing hard_filters
+        - ⚠️ MUST be replaced by 05-finder/03 with real pipeline evaluation
+
+    Verification:
+      - tsc --noEmit ✓
+      - vite build ✓ (8.15s)
+      - Backend smoke test (3 cases, all passed):
+        1. Empty filters → 0 drops, 100 pass, stub:true ✓
+        2. Full filters (5 blocklists + location + days + comp) → 39 drops,
+           61 pass, 18 new_drops, breakdown has per-rule counts ✓
+        3. Missing hard_filters in body → 400 "Missing hard_filters in body" ✓
+
+    Locked design decisions (plan-milestones Phase 3):
+      - Q3=a Preview dry-run: **UI + backend stub** (mock data now, real
+        逻辑 05-finder/03 替换)
+
+    ROOM-complete milestone — 本 m3 是 02-preferences 的最后一个 milestone:
+      - room.yaml lifecycle: in_progress → active
+      - _tree.yaml 同步
+      - spec.md 汇总完整 ATS form + 8 sub-section + preview 说明
+      - 向上传播: 02-preferences=100, 02-profile=50, 04-career-system=19
+
+    Downstream:
+      - 05-finder/03-dedupe-hard-filter MUST 实现真正的 drop 逻辑并替换
+        `/api/career/preferences/preview` 的 stub 实现 (保持接口 shape
+        不变 — 前端 UI 无需改动)
+      - 05-finder/03-dedupe-hard-filter MUST 按 constraint-preferences-001
+        的短路顺序评估 (当前 UI 的 ordinal 已按此顺序展示)
+      - 06-evaluator 读 preferences.scoring_weights / thresholds 打分
+      - 06-evaluator 读 preferences.evaluator_strategy.stage_a/b 的 blocks
+        开关决定 prompt
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m3, frontend, backend, preview, stub, hard-filters, room-complete]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit TBD"
+relations:
+  - "implements intent-preferences-001 (m3/3, ROOM COMPLETE)"
+  - "depends_on change-2026-04-23-m2-preferences-form-static"
+  - "enforces constraint-preferences-001 (ordinal ①–⑧ 按短路顺序展示)"
+  - "provides-stub-for 05-finder/03-dedupe-hard-filter (preview endpoint shape)"
+anchors:
+  - file: "src/career/settings/Preferences.tsx"
+    symbols:
+      - "PreviewResult"
+      - "runPreview"
+  - file: "src/career/settings/ats-form.css"
+    symbols:
+      - ".af-subsection"
+      - ".af-filter-ordinal"
+      - ".af-preview-bar"
+      - ".af-btn-secondary"
+      - ".af-preview-stat"
+      - ".af-preview-breakdown"
+  - file: "server.mjs"
+    symbols:
+      - "POST /api/career/preferences/preview"
+created_at: "2026-04-23"
+updated_at: "2026-04-23"

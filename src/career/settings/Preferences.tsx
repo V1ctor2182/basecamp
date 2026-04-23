@@ -73,6 +73,16 @@ const SCORING_LABELS: { key: keyof ScoringWeights; label: string }[] = [
   { key: 'growth_signal', label: 'Growth Signal' },
 ]
 
+type PreviewResult = {
+  total_jobs: number
+  would_drop: number
+  would_pass: number
+  new_drops: number
+  breakdown: { rule: string; drops: number }[]
+  stub: boolean
+  note?: string
+}
+
 function BLANK(): Preferences {
   return {
     targets: [],
@@ -150,6 +160,9 @@ export default function Preferences() {
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [serverError, setServerError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<PreviewResult | null>(null)
+  const [previewing, setPreviewing] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
 
   const { missing, malformed } = useMemo(() => validate(prefs), [prefs])
   const missingCount = Object.keys(missing).length
@@ -178,6 +191,26 @@ export default function Preferences() {
     setPrefs(prev => ({ ...prev, [key]: value }))
     setDirty(true)
     setSavedAt(null)
+  }
+
+  async function runPreview() {
+    setPreviewing(true); setPreviewError(null)
+    try {
+      const r = await fetch('/api/career/preferences/preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(prefs),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setPreviewError(j.error || `HTTP ${r.status}`)
+        return
+      }
+      setPreview(await r.json())
+    } catch (e) {
+      setPreviewError(e instanceof Error ? e.message : 'Network error')
+    } finally {
+      setPreviewing(false)
+    }
   }
 
   async function save() {
@@ -539,6 +572,214 @@ export default function Preferences() {
               )
             })}
           </div>
+        </div>
+      </section>
+
+      {/* Section 7: Hard Filters */}
+      <section className="af-section">
+        <h3 className="af-section-title">Hard Filters</h3>
+        <p className="af-section-desc">
+          按顺序短路评估 — 上面规则命中立刻归档，不进下游。顺序：
+          source → company → title → location → seniority → posted_days → comp → jd_text。
+          空字段 = 不过滤。
+        </p>
+
+        <div className="af-subsection">
+          <div className="af-subsection-title">
+            <span className="af-filter-ordinal">1</span> source_filter
+          </div>
+          <p className="af-subsection-desc">屏蔽整个源 (最先跑 — 省调用成本)。典型值: linkedin / indeed / glassdoor。</p>
+          <TagInput value={prefs.hard_filters.source_filter.blocked_sources}
+            onChange={v => patch('hard_filters', {
+              ...prefs.hard_filters, source_filter: { blocked_sources: v },
+            })}
+            placeholder="linkedin, indeed (Enter to add)" />
+        </div>
+
+        <div className="af-subsection">
+          <div className="af-subsection-title">
+            <span className="af-filter-ordinal">2</span> company_blocklist
+          </div>
+          <p className="af-subsection-desc">屏蔽特定公司。大小写不敏感。</p>
+          <TagInput value={prefs.hard_filters.company_blocklist}
+            onChange={v => patch('hard_filters', { ...prefs.hard_filters, company_blocklist: v })}
+            placeholder="Palantir, Oracle, Meta" />
+        </div>
+
+        <div className="af-subsection">
+          <div className="af-subsection-title">
+            <span className="af-filter-ordinal">3</span> title filters
+          </div>
+          <p className="af-subsection-desc">
+            allowlist 非空时只保留 title 命中任一关键词的岗位；blocklist 任一命中就 drop。
+          </p>
+          <div className="af-field-row">
+            <Field label="title_blocklist">
+              <TagInput value={prefs.hard_filters.title_blocklist}
+                onChange={v => patch('hard_filters', { ...prefs.hard_filters, title_blocklist: v })}
+                placeholder="Intern, Manager, Director" />
+            </Field>
+            <Field label="title_allowlist">
+              <TagInput value={prefs.hard_filters.title_allowlist}
+                onChange={v => patch('hard_filters', { ...prefs.hard_filters, title_allowlist: v })}
+                placeholder="Software Engineer, SDE, Backend" />
+            </Field>
+          </div>
+        </div>
+
+        <div className="af-subsection">
+          <div className="af-subsection-title">
+            <span className="af-filter-ordinal">4</span> location
+          </div>
+          <p className="af-subsection-desc">全空 = 不过滤。allowed 非空时只保留命中者；disallowed 任一命中就 drop。</p>
+          <Field label="allowed_countries">
+            <TagInput value={prefs.hard_filters.location.allowed_countries}
+              onChange={v => patch('hard_filters', {
+                ...prefs.hard_filters, location: { ...prefs.hard_filters.location, allowed_countries: v },
+              })}
+              placeholder="United States, Canada" />
+          </Field>
+          <Field label="allowed_cities">
+            <TagInput value={prefs.hard_filters.location.allowed_cities}
+              onChange={v => patch('hard_filters', {
+                ...prefs.hard_filters, location: { ...prefs.hard_filters.location, allowed_cities: v },
+              })}
+              placeholder="New York, San Francisco, Remote" />
+          </Field>
+          <Field label="disallowed_countries">
+            <TagInput value={prefs.hard_filters.location.disallowed_countries}
+              onChange={v => patch('hard_filters', {
+                ...prefs.hard_filters, location: { ...prefs.hard_filters.location, disallowed_countries: v },
+              })}
+              placeholder="China, Russia" />
+          </Field>
+        </div>
+
+        <div className="af-subsection">
+          <div className="af-subsection-title">
+            <span className="af-filter-ordinal">5</span> seniority
+          </div>
+          <p className="af-subsection-desc">非空时只保留 seniority 命中任一的岗位。</p>
+          <TagInput value={prefs.hard_filters.seniority.allowed}
+            onChange={v => patch('hard_filters', {
+              ...prefs.hard_filters, seniority: { allowed: v },
+            })}
+            placeholder="IC3, IC4, Senior, Staff" />
+        </div>
+
+        <div className="af-subsection">
+          <div className="af-subsection-title">
+            <span className="af-filter-ordinal">6</span> posted_within_days
+          </div>
+          <p className="af-subsection-desc">只保留过去 N 天内发布的岗位。0 = 不限。</p>
+          <Field label="days">
+            <input type="number" className="af-input af-input-number" min={0} placeholder="30"
+              value={prefs.hard_filters.posted_within_days}
+              onChange={e => patch('hard_filters', {
+                ...prefs.hard_filters, posted_within_days: Number(e.target.value) || 0,
+              })} />
+          </Field>
+        </div>
+
+        <div className="af-subsection">
+          <div className="af-subsection-title">
+            <span className="af-filter-ordinal">7</span> comp_floor
+          </div>
+          <p className="af-subsection-desc">薪资地板 — 岗位明示 (或通过 Levels.fyi 推断) 低于此值直接 drop。</p>
+          <div className="af-field-row">
+            <Field label="base_min">
+              <input type="number" className="af-input af-input-number" min={0} placeholder="150000"
+                value={prefs.hard_filters.comp_floor.base_min ?? ''}
+                onChange={e => patch('hard_filters', {
+                  ...prefs.hard_filters,
+                  comp_floor: { ...prefs.hard_filters.comp_floor, base_min: numOrUndef(e.target.value) },
+                })} />
+            </Field>
+            <Field label="total_min">
+              <input type="number" className="af-input af-input-number" min={0} placeholder="200000"
+                value={prefs.hard_filters.comp_floor.total_min ?? ''}
+                onChange={e => patch('hard_filters', {
+                  ...prefs.hard_filters,
+                  comp_floor: { ...prefs.hard_filters.comp_floor, total_min: numOrUndef(e.target.value) },
+                })} />
+            </Field>
+          </div>
+          <Field label="currency">
+            <select className="af-select af-input-number"
+              value={prefs.hard_filters.comp_floor.currency}
+              onChange={e => patch('hard_filters', {
+                ...prefs.hard_filters,
+                comp_floor: { ...prefs.hard_filters.comp_floor, currency: e.target.value },
+              })}>
+              {CURRENCY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        <div className="af-subsection">
+          <div className="af-subsection-title">
+            <span className="af-filter-ordinal">8</span> jd_text_blocklist
+          </div>
+          <p className="af-subsection-desc">
+            ⚠️ 需先 JD Enrich 完成才评估（最贵，最后跑）。JD 正文包含任一关键词 → drop。
+          </p>
+          <TagInput value={prefs.hard_filters.jd_text_blocklist}
+            onChange={v => patch('hard_filters', { ...prefs.hard_filters, jd_text_blocklist: v })}
+            placeholder="on-call, weekend, 996" />
+        </div>
+
+        {/* Preview dry-run bar */}
+        <div className="af-preview-bar">
+          <div className="af-preview-header">
+            <span className="af-preview-title">Preview on recent 100 jobs</span>
+            <button type="button" className="af-btn-secondary"
+              disabled={previewing}
+              onClick={runPreview}>
+              {previewing ? 'Running…' : 'Run Preview'}
+            </button>
+          </div>
+          {previewing && <div className="af-preview-loading">Evaluating hard_filters against 100 sample jobs…</div>}
+          {previewError && <div className="af-preview-error">Error: {previewError}</div>}
+          {preview && (
+            <>
+              {preview.stub && (
+                <div className="af-preview-stub-warning">
+                  ⚠️ Mock data — real pipeline dry-run ships with 05-finder/03-dedupe-hard-filter
+                </div>
+              )}
+              <div className="af-preview-result">
+                <div className="af-preview-stat">
+                  <span className="af-preview-stat-value">{preview.total_jobs}</span>
+                  <span className="af-preview-stat-label">Total</span>
+                </div>
+                <div className="af-preview-stat">
+                  <span className="af-preview-stat-value" style={{ color: '#cf222e' }}>{preview.would_drop}</span>
+                  <span className="af-preview-stat-label">Would drop</span>
+                </div>
+                <div className="af-preview-stat">
+                  <span className="af-preview-stat-value" style={{ color: '#1a7f37' }}>{preview.would_pass}</span>
+                  <span className="af-preview-stat-label">Would pass</span>
+                </div>
+                <div className="af-preview-stat">
+                  <span className="af-preview-stat-value">{preview.new_drops}</span>
+                  <span className="af-preview-stat-label">New drops vs saved</span>
+                </div>
+              </div>
+              <details className="af-preview-breakdown">
+                <summary>Show breakdown by rule ({preview.breakdown.length})</summary>
+                <ul className="af-preview-breakdown-list">
+                  {preview.breakdown.map(b => (
+                    <li className="af-preview-breakdown-row" key={b.rule}>
+                      <span className="af-preview-breakdown-rule">{b.rule}</span>
+                      <span className={`af-preview-breakdown-drops${b.drops === 0 ? ' af-preview-breakdown-drops-zero' : ''}`}>
+                        {b.drops} drop{b.drops === 1 ? '' : 's'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </>
+          )}
         </div>
       </section>
 

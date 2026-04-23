@@ -1,11 +1,11 @@
 milestones: []
 current_sprint: "Sprint 2 — Profile"
 blockers: []
-completion: 42   # avg(100, 66, 0, 0) = 41.5 across 4 features
+completion: 50   # avg(100, 100, 0, 0) = 50 across 4 features
 children_completion:
   "01-identity": 100  # ✅ active
-  "02-preferences": 66  # m1 backend + m2 前 6 sections done
+  "02-preferences": 100  # ✅ active — m1+m2+m3 done (ROOM COMPLETE)
   "03-narrative-proof": 0
   "04-qa-bank": 0
-status_note: "Sprint 2 进行中。01-identity ✅ 100%。02-preferences 66% (m1 backend + m2 前 6 sections)。下一步 m3 hard_filters + Preview。"
+status_note: "Sprint 2 进行中。01-identity ✅ 100%。02-preferences ✅ 100% (ROOM COMPLETE 2026-04-23)。下一个 feature: 03-narrative-proof"
 last_updated: "2026-04-23"
