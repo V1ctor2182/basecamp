@@ -11,7 +11,7 @@ milestones:
     depends_on: []
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "0b5b617"
     description: |
       data/career/preferences.yml CRUD API + Zod 校验（partial-save 风格 — 和
       m3-identity 一致）。
@@ -260,7 +260,7 @@ milestones:
       - curl POST /api/career/preferences/preview 返回 mock breakdown
 
 commits:
-  - hash: "d3704c3"
+  - hash: "0b5b617"
     date: "2026-04-23"
     message: "[04-career-system/02-profile/02-preferences] m1: Backend GET/PUT /api/career/preferences + Zod PreferencesSchema + yaml IO"
     files_changed: 4

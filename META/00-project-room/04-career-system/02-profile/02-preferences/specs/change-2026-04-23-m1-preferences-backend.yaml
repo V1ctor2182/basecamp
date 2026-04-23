@@ -61,7 +61,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit d3704c3"
+  source_ref: "commit 0b5b617"
 relations:
   - "implements intent-preferences-001 (m1/3)"
   - "clones pattern from change-2026-04-23-m1-identity-backend + change-2026-04-23-m3-partial-save"
