@@ -1,0 +1,22 @@
+spec_id: "constraint-non-standard-controls-001"
+type: constraint
+state: active
+intent:
+  summary: "失败必须 fallback 到 Manual；Low confidence 字段必须阻塞 review"
+  detail: |
+    (1) 任何控件的 high-confidence strategy 失败 → try medium-confidence → 再失败 → MUST 标记为 Manual 让用户处理，MUST NOT 强行填错数据（"填错"的代价是整个申请被 ATS 判断为 bot 或数据错误拒掉）；(2) Draft JSON 中 confidence = "Low" 的字段 MUST 在 UI 上阻塞 "Approve All" 按钮 — 用户必须逐个 review 才能过；Medium 默认高亮但可一键过；High 默认静默过；(3) CAPTCHA / reCAPTCHA 检测到 MUST 立即暂停 agent + 显式通知用户在浏览器里手动解决，绝不尝试绕过（任何自动化 CAPTCHA 方案都违反 ToS + 风险高）；(4) 富文本编辑器 (TinyMCE / Quill / Draft.js) 默认 Manual fallback — 这类控件 DOM 结构每家不同，强行填容易丢格式。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [fallback, human-gate, captcha]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/06-applier.md#6.4"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

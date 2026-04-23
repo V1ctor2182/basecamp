@@ -1,0 +1,22 @@
+spec_id: "intent-non-standard-controls-001"
+type: intent
+state: active
+intent:
+  summary: "21 种非标控件策略 + 置信度分级 + 红框高亮 Manual fallback"
+  detail: |
+    普通 input 用 page.fill() 一行搞定，真实表单大量自定义控件需要特殊处理。覆盖 21 种控件（见架构文档 §6.4 完整表）：HTML5 date / React DatePicker / MUI DatePicker / Flatpickr / 分离式 month-day-year select / 未知日历 (Manual) / Google Places autocomplete / Algolia Places / 自定义地址补全 (Manual) / Radio button (标准 vs div[role=radio]) / Checkbox / Multi-select chip/tag / Select (标准 vs custom combobox vs 搜索式) / TinyMCE/Quill/Draft.js 富文本 / Slider/Range / CAPTCHA (必须 Manual) / Shadow DOM / iframe 表单。通用处理：先 try high-confidence strategy → 失败 fallback 到 medium-confidence → 再失败标记 Manual。**不强行填**：失败就停，不让 agent 把错数据填进去。置信度分级：🟢 High (approve all 直接过) / 🟡 Medium (高亮建议 review) / 🔴 Low (阻塞必须 review) / ⚠️ Manual (Applier 不填，用户在浏览器处理)。手工补救 UX：浏览器里该字段红框高亮 + 滚到中心 + Dashboard 弹 "请去浏览器填 X，完成后回来点 Continue" + 提供建议值 Copy to Clipboard + Continue/Skip/Abort 选项。验收：对有 date picker + multi-select chips + CAPTCHA 的表单跑一遍，日历和 chip 能自动填，CAPTCHA 触发 Manual fallback 红框高亮 + dashboard 提示；用户手填完点 Continue 后继续。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [backend, playwright, controls, fallback]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/06-applier.md#6.4-非标准控件处理"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

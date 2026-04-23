@@ -1,0 +1,22 @@
+spec_id: "intent-playwright-runtime-001"
+type: intent
+state: active
+intent:
+  summary: "独立 Chromium + 持久化 profile + 反检测 + 截图留证（Mode 2 底座）"
+  detail: |
+    Mode 2 Full Agent 的运行时基础。设计：(1) 独立 userDataDir 在 data/career/.playwright/profile/（和用户日常 Chrome / Arc 完全隔离，不共享 cookies）；(2) 持久化 profile — 用 launchPersistentContext，不每次开空白（累积"人类指纹"应对 Cloudflare / reCAPTCHA）；(3) 单例 browser — dashboard 生命周期里只开一个 Chromium 实例，多个 apply 复用；(4) Headful 默认 — 用户能看到填表过程，反 bot 检测宽容度更高；(5) 反检测加固 — playwright-extra + stealth 插件、navigator.webdriver=false、真实 UA、100-400ms 随机延迟；(6) 截图留证 — 投递过程每步截图存到 data/career/.playwright/screenshots/{jobId}/；(7) 崩溃恢复 — Applier Chromium 崩了不影响 dashboard，重启时清理 session。后端 server.mjs 启动时 lazy init browser；dashboard 关闭时 cleanup。data/career/.playwright/ 整个目录 gitignored。验收：启动 Applier 能看到独立 Chromium 弹出；访问任意 ATS 页面后 cookie 持久化到下次重启仍在；stealth 测试 cn.bot-detect-test.com 通过。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [backend, playwright, browser, stealth]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/06-applier.md#6.1-运行时环境"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

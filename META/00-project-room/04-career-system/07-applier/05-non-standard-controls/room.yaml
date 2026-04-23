@@ -1,0 +1,16 @@
+room:
+  id: "00-project-room/04-career-system/07-applier/05-non-standard-controls"
+  name: "Non-Standard Controls"
+  parent: "00-project-room/04-career-system/07-applier"
+  type: feature
+  lifecycle: backlog
+  created_at: "2026-04-22"
+  updated_at: "2026-04-22"
+  owner: backend
+  contributors: []
+  prompt_test:
+    passable: false
+    last_tested: null
+    token_count: null
+  depends_on:
+    - "00-project-room/04-career-system/07-applier/02-playwright-runtime"

@@ -1,0 +1,22 @@
+spec_id: "constraint-mode1-simplify-hybrid-001"
+type: constraint
+state: active
+intent:
+  summary: "永远不自动点 Submit；状态只在用户明确 Mark submitted 后才改 Applied"
+  detail: |
+    (1) Mode 1 MUST NOT 实现任何自动提交逻辑 — 本 feature 只生成 drafts/{jobId}.json 供用户复制粘贴，绝不触发浏览器动作（即使未来加 Playwright 自动化，也归 Mode 2 的 feature，不能在 Mode 1 里悄悄做）；(2) applications.json 的 status Evaluated → Applied 的转换 MUST 且仅在用户点 UI 的 "Mark submitted" 按钮后发生，绝不能因为生成了 draft 就推测已投；(3) qa-bank/history.jsonl 的 append MUST 同时发生（"Mark submitted" 时一起），不能在生成 draft 时提前写（否则用户没投也会污染 few-shot 上下文）；(4) UI 的 "Mark submitted" 按钮 MUST 二次确认（modal "你确定已在浏览器点过 Submit 吗？"），防止误触。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [human-gate, no-auto-submit, confirmation]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/06-applier.md#mode-1 + ethical-use"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"
