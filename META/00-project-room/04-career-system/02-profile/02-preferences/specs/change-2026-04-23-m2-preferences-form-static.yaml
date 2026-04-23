@@ -89,7 +89,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit e17f096"
 relations:
   - "implements intent-preferences-001 (m2/3)"
   - "depends_on change-2026-04-23-m1-preferences-backend"

@@ -88,7 +88,7 @@ milestones:
     depends_on: ["m1-preferences-backend"]
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "e17f096"
     description: |
       替换 Preferences.tsx 占位为真实 ATS 风格 6-section 表单（Section 7
       hard_filters 在 m3 做）。复用 Identity 的 ats-form.css (`.af-*` classes)。
@@ -273,7 +273,7 @@ commits:
       - "change-2026-04-23-m1-preferences-backend (created)"
     milestones_affected:
       - "m1-preferences-backend (→ completed)"
-  - hash: "TBD"
+  - hash: "e17f096"
     date: "2026-04-23"
     message: "[04-career-system/02-profile/02-preferences] m2: Settings → Preferences 前 6 Section + TagInput 共享组件"
     files_changed: 4
