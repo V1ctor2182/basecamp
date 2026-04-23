@@ -1,0 +1,22 @@
+spec_id: "intent-markdown-to-template-001"
+type: intent
+state: active
+intent:
+  summary: "轻量 markdown → 模板正文 HTML 转换器（CV 专用子集）"
+  detail: |
+    把 resume markdown 转成适合 CV 模板的 HTML 片段。不用 pandoc 这种全套 markdown 引擎（太重 + 输出 HTML 带默认样式冲突模板）。只支持 CV 里真正用到的子集：# / ## / ### headings、无序列表（项目 bullets）、粗体、斜体、链接、段落。解析完成后输出**纯语义 HTML**（h1/h2/ul/li/strong/em/a/p），没有任何样式类（样式由 01-html-template 的 CSS 模板统一管）。这样 template 和 content 两层解耦：换模板只改 CSS，改内容只改 markdown。提供 markdownToTemplateHtml(md: string) → string 的纯函数，后端和前端都能用（前端 PDF 预览时也走同一条转换路径）。验收：喂一份典型 CV markdown（有 summary 段、experience 段含 bullets、projects 段有多层 heading），产出 HTML 能被 CSS 模板正常渲染，视觉符合预期。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [backend, markdown, html, parser]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.8
+  source_ref: "career-architecture/04-renderer.md#样式层-内容层"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

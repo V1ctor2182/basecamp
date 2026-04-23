@@ -1,0 +1,22 @@
+spec_id: "intent-html-template-001"
+type: intent
+state: active
+intent:
+  summary: "HTML + CSS 模板 + Playwright 渲染 PDF（主 renderer 实现）"
+  detail: |
+    career-system 的默认 PDF 渲染器。输入：tailored markdown（或 base.md）+ resume 的 metadata.renderer 配置（template / font / accent_color）。流程：(1) 调 04-renderer/02-markdown-to-template 把 markdown 转成模板正文 HTML；(2) 注入到固定的 CSS 模板（样式层：字体 / 颜色 / 间距 / 分区样式）；(3) Playwright headless 打开 HTML 渲染成 PDF。模板初版按用户的 Google Doc PDF 视觉一比一复刻（~1 小时手工调 CSS）。后端 POST /api/career/cv/render { markdownPath, resumeId } → output/{name}.pdf。支持预览模式（返回 PDF blob 让前端 iframe/object 实时显示）。验收：给一份 tailored markdown 跑 render，产出的 PDF 视觉和 Google Doc 导出接近；支持至少 1 种模板变体（backend / applied-ai 不同 accent color）。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [backend, playwright, pdf, html-template]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/04-renderer.md"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"
