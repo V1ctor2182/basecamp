@@ -152,7 +152,7 @@ commits:
       - "_tree.yaml (lifecycle: planning → active)"
     milestones_affected:
       - "m2-identity-form-ui (→ completed, ROOM COMPLETE)"
-  - hash: "TBD"
+  - hash: "a783b17"
     date: "2026-04-23"
     message: "[04-career-system/02-profile/01-identity] m3: Partial save — 填一点存一点，仅 malformed 阻塞 save"
     files_changed: 2
