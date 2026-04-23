@@ -1,0 +1,22 @@
+spec_id: "constraint-tailor-engine-001"
+type: constraint
+state: active
+intent:
+  summary: "MUST NOT 捏造经历或指标；产出后必须显示 diff 给用户审"
+  detail: |
+    (1) Prompt 硬编码："If a metric or claim is not in the source base.md or proof-points.md, DO NOT invent it. Only reorganize or rephrase existing content."；(2) 产出 output/{jobId}-{resumeId}.md 后 UI MUST 在渲染 PDF 前展示 base.md vs tailored 的 markdown diff 让用户审批；(3) 用户拒绝后可以给 LLM 补 hint 重跑（例 "不要动 Summary"）；(4) 只有用户明确 Approve 后才触发 PDF 渲染。(5) 测试：给一份 base.md 明确没有 "10x performance" 这种指标，tailor 产出里不能出现这类数字。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [llm-safety, no-fabrication, human-gate]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/02-cv-engine.md#2.7-tailor-engine"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

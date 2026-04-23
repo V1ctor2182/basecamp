@@ -1,0 +1,22 @@
+spec_id: "intent-tailor-engine-001"
+type: intent
+state: active
+intent:
+  summary: "读 base.md + Block E 改写建议 → 定制 markdown + 渲染 PDF"
+  detail: |
+    针对某个具体 Job 把 base resume 微调后产出 tailored 版本。流程：(1) 解析 resumeId（传入或 Auto-Select 选）；(2) 读 resumes/{resumeId}/base.md + metadata.yml 的 emphasize 字段；(3) 读 reports/{jobId}.md 的 Block E（Personalization Plan）；(4) 调 Claude Sonnet：按 JD 关键词重排经历顺序 / 改写 Summary 注入 2-3 个 JD 核心关键词 / 在 bullet 里注入 ATS 关键词（**不改变事实**）/ 遵守 emphasize 侧重；(5) 输出 output/{jobId}-{resumeId}.md（tailored markdown）；(6) 调 04-renderer/01-html-template 产出 output/{jobId}-{resumeId}.pdf。Prompt 硬约束："If a metric or claim is not in the source base.md or proof-points.md, DO NOT invent it."；产出后 UI 显示 base vs tailored 的 diff 让用户审。后端 POST /api/career/cv/tailor { jobId, resumeId?, reportId }。验收：对 shortlist 4.0+ 的一个岗位跑 tailor，产出 markdown 里明显反映 Block E 的建议（关键词注入 / 排序 / Summary 改写），但所有指标和经历都能在 base.md 里找到出处。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [backend, llm, cv-tailor, claude-api]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/02-cv-engine.md#2.7-tailor-engine"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

@@ -1,0 +1,22 @@
+spec_id: "constraint-google-docs-sync-001"
+type: constraint
+state: active
+intent:
+  summary: "Sync 前必须快照 + OAuth token 必须 gitignored"
+  detail: |
+    (1) 每次 Sync 之前 MUST 把当前 resumes/{id}/base.md copy 到 resumes/{id}/versions/{timestamp}.md（防止 Google Doc 错误覆盖本地的回滚能力）；(2) data/career/.oauth.json（refresh token）MUST 在 .gitignore，绝不能 push 到任何 remote；(3) Google Doc 是该 resume 的 source of truth — 如果某份 resume 是 source: google_doc，则不能同时在 UI 的 in-ui-editor 编辑（避免两边改造成冲突），UI 层禁用该 resume 的编辑按钮；(4) OAuth 失败时提示用户重新授权，不能静默失败。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [security, oauth, gitignore]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/02-cv-engine.md#2.5"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"
