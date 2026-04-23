@@ -25,6 +25,7 @@ const PR_STATS_FILE = path.join(DATA_DIR, 'pr-stats.json');
 const CAREER_DIR = path.join(DATA_DIR, 'career');
 const LLM_COSTS_FILE = path.join(CAREER_DIR, 'llm-costs.jsonl');
 const IDENTITY_FILE = path.join(CAREER_DIR, 'identity.yml');
+const PREFERENCES_FILE = path.join(CAREER_DIR, 'preferences.yml');
 
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(REPOS_FILE)) writeFileSync(REPOS_FILE, '[]');
@@ -1235,6 +1236,227 @@ app.put('/api/career/identity', async (req, res) => {
   } catch (e) {
     if (e instanceof z.ZodError) {
       return res.status(400).json({ error: 'Invalid identity', details: e.issues });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Career System: Preferences (你想要什么) — data/career/preferences.yml
+// See META/.../02-profile/02-preferences
+// ─────────────────────────────────────────────────────────────
+
+// Partial-save design (same as identity m3): permissive schema — structure
+// validated but content not. Missing fields don't block save; format errors
+// caught on frontend. Finder/Evaluator re-check completeness at use-time.
+const TargetRoleSchema = z.object({
+  title: z.string(),
+  seniority: z.string(),
+  function: z.string().optional(),
+});
+
+const CompTargetSchema = z.object({
+  base_min: z.number().optional(),
+  base_max: z.number().optional(),
+  total_min: z.number().optional(),
+  total_max: z.number().optional(),
+  currency: z.string(),
+});
+
+const LocationPrefSchema = z.object({
+  accept_any: z.boolean(),
+  remote_only: z.boolean(),
+  hybrid_max_days_onsite: z.number().optional(),
+  preferred_cities: z.array(z.string()),
+  acceptable_countries: z.array(z.string()),
+});
+
+const HardFiltersSchema = z.object({
+  source_filter: z.object({
+    blocked_sources: z.array(z.string()),
+  }),
+  company_blocklist: z.array(z.string()),
+  title_blocklist: z.array(z.string()),
+  title_allowlist: z.array(z.string()),
+  location: z.object({
+    allowed_countries: z.array(z.string()),
+    allowed_cities: z.array(z.string()),
+    disallowed_countries: z.array(z.string()),
+  }),
+  seniority: z.object({
+    allowed: z.array(z.string()),
+  }),
+  posted_within_days: z.number(),
+  comp_floor: z.object({
+    base_min: z.number().optional(),
+    total_min: z.number().optional(),
+    currency: z.string(),
+  }),
+  jd_text_blocklist: z.array(z.string()),
+});
+
+const SoftPreferencesSchema = z.object({
+  company_types: z.array(z.string()),
+  remote_culture: z.array(z.string()),
+  tech_stack_preferred: z.array(z.string()),
+  tech_stack_avoid: z.array(z.string()),
+  industries_preferred: z.array(z.string()),
+  industries_avoid: z.array(z.string()),
+});
+
+const ScoringWeightsSchema = z.object({
+  tech_match: z.number(),
+  comp_match: z.number(),
+  location_match: z.number(),
+  company_match: z.number(),
+  growth_signal: z.number(),
+});
+
+const ThresholdsSchema = z.object({
+  strong: z.number(),
+  worth: z.number(),
+  consider: z.number(),
+  skip_below: z.number(),
+});
+
+const EvaluatorStrategySchema = z.object({
+  stage_a: z.object({
+    enabled: z.boolean(),
+    model: z.string(),
+    threshold: z.number(),
+  }),
+  stage_b: z.object({
+    enabled: z.boolean(),
+    model: z.string(),
+    blocks: z.object({
+      block_b: z.boolean(),
+      block_c: z.boolean(),
+      block_d: z.boolean(),
+      block_e: z.boolean(),
+      block_f: z.boolean(),
+      block_g: z.boolean(),
+    }),
+  }),
+});
+
+const PreferencesSchema = z.object({
+  targets: z.array(TargetRoleSchema),
+  comp_target: CompTargetSchema,
+  location: LocationPrefSchema,
+  hard_filters: HardFiltersSchema,
+  soft_preferences: SoftPreferencesSchema,
+  scoring_weights: ScoringWeightsSchema,
+  thresholds: ThresholdsSchema,
+  evaluator_strategy: EvaluatorStrategySchema,
+});
+
+function defaultPreferences() {
+  return {
+    targets: [],
+    comp_target: {
+      currency: 'USD',
+    },
+    location: {
+      accept_any: false,
+      remote_only: false,
+      preferred_cities: [],
+      acceptable_countries: [],
+    },
+    hard_filters: {
+      source_filter: { blocked_sources: [] },
+      company_blocklist: [],
+      title_blocklist: [],
+      title_allowlist: [],
+      location: {
+        allowed_countries: [],
+        allowed_cities: [],
+        disallowed_countries: [],
+      },
+      seniority: { allowed: [] },
+      posted_within_days: 0,
+      comp_floor: { currency: 'USD' },
+      jd_text_blocklist: [],
+    },
+    soft_preferences: {
+      company_types: [],
+      remote_culture: [],
+      tech_stack_preferred: [],
+      tech_stack_avoid: [],
+      industries_preferred: [],
+      industries_avoid: [],
+    },
+    scoring_weights: {
+      tech_match: 0.2,
+      comp_match: 0.2,
+      location_match: 0.2,
+      company_match: 0.2,
+      growth_signal: 0.2,
+    },
+    thresholds: {
+      strong: 4.5,
+      worth: 4.0,
+      consider: 3.5,
+      skip_below: 3.0,
+    },
+    evaluator_strategy: {
+      stage_a: {
+        enabled: true,
+        model: 'claude-haiku-4-5',
+        threshold: 3.5,
+      },
+      stage_b: {
+        enabled: true,
+        model: 'claude-sonnet-4-6',
+        blocks: {
+          block_b: true,
+          block_c: false,
+          block_d: false,
+          block_e: true,
+          block_f: false,
+          block_g: false,
+        },
+      },
+    },
+  };
+}
+
+async function readPreferences() {
+  try {
+    const raw = await fs.readFile(PREFERENCES_FILE, 'utf-8');
+    if (!raw.trim()) return defaultPreferences();
+    const loaded = yaml.load(raw);
+    return { ...defaultPreferences(), ...loaded };
+  } catch (e) {
+    if (e.code === 'ENOENT') return defaultPreferences();
+    throw e;
+  }
+}
+
+async function writePreferences(obj) {
+  const parsed = PreferencesSchema.parse(obj);
+  const yamlText = yaml.dump(parsed, { lineWidth: 120, noRefs: true });
+  await fs.writeFile(PREFERENCES_FILE, yamlText, 'utf-8');
+  return parsed;
+}
+
+// GET — returns current preferences or defaultPreferences() if file missing
+app.get('/api/career/preferences', async (_req, res) => {
+  try {
+    const prefs = await readPreferences();
+    res.json(prefs);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT — replaces preferences fully (zod-validated)
+app.put('/api/career/preferences', async (req, res) => {
+  try {
+    const saved = await writePreferences(req.body);
+    res.json(saved);
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid preferences', details: e.issues });
     }
     res.status(500).json({ error: e.message });
   }

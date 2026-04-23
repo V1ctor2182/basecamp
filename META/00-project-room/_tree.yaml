@@ -201,7 +201,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/02-profile/02-preferences"
       type: feature
-      lifecycle: planning
+      lifecycle: in_progress
       owner: fullstack
       parent: "00-project-room/04-career-system/02-profile"
       children: []

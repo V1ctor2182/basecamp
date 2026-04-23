@@ -1,15 +1,15 @@
 milestones: []
 current_sprint: "Sprint 2 — Profile"
 blockers: []
-completion: 16  # avg(100, 25, 0, 0, 0, 0, 0, 0) = 15.6 across 8 sub-epics
+completion: 17  # avg(100, 33, 0, 0, 0, 0, 0, 0) = 16.6 across 8 sub-epics
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
-  "02-profile": 25      # 🔄 Sprint 2 进行中 (01-identity ✅ active, 3 features 未启动)
+  "02-profile": 33      # 🔄 Sprint 2 进行中 (01-identity ✅ 100, 02-preferences 33/m1)
   "03-cv-engine": 0
   "04-renderer": 0
   "05-finder": 0
   "06-evaluator": 0
   "07-applier": 0
   "08-human-gate-tracker": 0
-status_note: "🎉 Sprint 1 完成 (01-foundation 100%)。Sprint 2 准备: 02-profile (01-identity → 02-preferences → 03-narrative-proof)。"
+status_note: "🎉 Sprint 1 完成 (01-foundation 100%)。Sprint 2: 02-profile 33% (01-identity ✅, 02-preferences m1/3 backend)。"
 last_updated: "2026-04-23"
