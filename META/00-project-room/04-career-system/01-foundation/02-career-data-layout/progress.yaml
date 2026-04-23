@@ -15,7 +15,7 @@ milestones:
     depends_on: []
     complexity_flags: []
     open_questions: []
-    commit_hash: "TBD"
+    commit_hash: "fe23daf"
     learning: |
       gitignore 父目录被 excluded 后 `!` 无法 re-include 子文件。
       原方案 `data/` 整目录 gitignore → 改成 `data/*.json` + `data/*.jsonl`
