@@ -1,5 +1,125 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-dirs-and-gitignore"
+    name: "目录骨架 + .gitignore 白名单例外规则 + 顶层 README"
+    status: completed
+    estimated_files:
+      - ".gitignore"
+      - "data/career/README.md"
+      - "data/career/{12 dirs}/.gitkeep"
+    actual_files:
+      - ".gitignore"
+      - "data/career/README.md"
+      - "data/career/{resumes, qa-bank, site-adapters, reports, output, drafts, feedback, apply-sessions}/.gitkeep"   # 8 .gitkeep (.playwright/ 运行时创建 不加 .gitkeep)
+    estimated_lines: 80
+    actual_lines: 135   # gitignore 新增 45 行 + README 75 行 + 8 .gitkeep 占 15 行 metadata
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "TBD"
+    learning: |
+      gitignore 父目录被 excluded 后 `!` 无法 re-include 子文件。
+      原方案 `data/` 整目录 gitignore → 改成 `data/*.json` + `data/*.jsonl`
+      保持 data/ 目录可见，然后 career-system exceptions 用显式黑名单
+      列每个敏感文件。比 "先 un-ignore 后再精确黑名单" 的多层反转简单 10x。
+    description: |
+      建立 data/career/ 目录结构 + .gitignore 白名单例外规则。
+
+      目录结构 (12 subdirs):
+        data/career/resumes/
+        data/career/qa-bank/
+        data/career/site-adapters/
+        data/career/reports/
+        data/career/output/
+        data/career/drafts/
+        data/career/feedback/
+        data/career/apply-sessions/
+        data/career/.playwright/profile/
+        data/career/.playwright/downloads/
+        data/career/.playwright/screenshots/
+        （加 resumes/ 和 qa-bank/ 本身共 12 个）
+
+      Git 规则（在现有 "data/" 整目录 gitignore 基础上加例外）：
+        !data/career/                             # un-ignore 整个 career dir
+        data/career/**                            # 默认全 ignore
+        !data/career/README.md                    # commit 顶层 README
+        !data/career/preferences.yml              # commit 配置
+        !data/career/portals.yml
+        !data/career/narrative.md
+        !data/career/proof-points.md
+        !data/career/story-bank.md
+        !data/career/cv.gdoc-id
+        !data/career/resumes/                     # un-ignore 再精确排除
+        !data/career/resumes/index.yml
+        !data/career/resumes/*/
+        data/career/resumes/*/*
+        !data/career/resumes/*/metadata.yml
+        !data/career/qa-bank/
+        !data/career/qa-bank/templates.md
+        !data/career/site-adapters/
+        !data/career/site-adapters/*.yml
+        # .example 文件也 commit 供用户参考
+        !data/career/*.yml.example -> 本 plan 定 .example.yml 风格
+        !data/career/**/*.example.yml
+
+      每个空目录放 .gitkeep（Git 不追踪空目录）。顶层 data/career/README.md
+      简要说明目录用途 + 哪些文件是 committed config vs gitignored data。
+
+      验收: `git check-ignore data/career/identity.yml` 返回 matched (ignored);
+      `git check-ignore data/career/preferences.yml` 返回 exit 1 (not ignored);
+      `ls data/career/` 看到所有 12 subdirs 存在。
+
+  - id: "m2-readmes-and-examples"
+    name: "子目录 README + 示例/模板文件 + init 脚本"
+    status: pending
+    estimated_files:
+      - "data/career/resumes/README.md"
+      - "data/career/qa-bank/README.md"
+      - "data/career/reports/README.md"
+      - "data/career/output/README.md"
+      - "data/career/drafts/README.md"
+      - "data/career/feedback/README.md"
+      - "data/career/apply-sessions/README.md"
+      - "data/career/site-adapters/README.md"
+      - "data/career/.playwright/README.md"
+      - "data/career/preferences.example.yml"
+      - "data/career/portals.example.yml"
+      - "data/career/qa-bank/legal.example.yml"
+      - "data/career/qa-bank/templates.md"
+      - "data/career/resumes/index.yml"
+      - "scripts/init-career.sh"
+      - "package.json"
+    estimated_lines: 200
+    depends_on: ["m1-dirs-and-gitignore"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      填充每个目录的文档 + 给用户现成的模板。
+
+      子目录 README.md (9 个) — 每个说明：该目录存什么 / 文件格式 / 生命周期
+      （谁写谁读）/ 是否 committed。
+
+      示例/模板文件 (4 个 .example.yml + 2 个真实模板):
+        - preferences.example.yml — 完整示例 (targets/comp/location/
+          hard_filters/scoring_weights/thresholds 全部字段 + 注释)
+        - portals.example.yml — Greenhouse/Ashby/Lever/github-md 示例
+        - qa-bank/legal.example.yml — legal + EEO + personal 字段 + 注释
+        - qa-bank/templates.md — Why us / Why role / Weakness / Salary /
+          Start date / Why leaving 6 个开放题模板（这个是真实 committed）
+        - resumes/index.yml — 空 resumes 数组 + 注释示例
+
+      scripts/init-career.sh — 一键初始化：
+        - mkdir -p 所有 12 subdirs
+        - cp 每个 .example.yml 到真实文件名（如果真实文件不存在）
+        - 不覆盖已有文件
+        - 输出每一步做了什么
+
+      package.json 加 "scripts": { "init:career": "bash scripts/init-career.sh" }
+
+      验收: `npm run init:career` 跑完，data/career/ 下 preferences.yml /
+      portals.yml / qa-bank/legal.yml 三个真实文件出现（从 .example 复制）；
+      git status 不 track 这 3 个真实文件（因为它们是 committed 的 .example
+      的副本，本身是用户数据应 gitignored — 通过上面的 gitignore 规则保证）。
+current_sprint: "Sprint 1 — Foundation"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "m1 ✅ completed. 下一个: m2-readmes-and-examples (子 README + 模板 + init 脚本)"
+last_updated: "2026-04-23"
