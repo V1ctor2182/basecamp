@@ -91,6 +91,48 @@ milestones:
       重启 server → 重新加载看到刚填的值；故意清空 name → 不通过 validation →
       Save 按钮灰色 + email 输入 "abc" → inline error "invalid email"。
 
+  - id: "m3-partial-save"
+    name: "Partial save: 填一点存一点，不要求全部必填才能 save"
+    status: completed
+    actual_lines: 75
+    actual_files:
+      - "server.mjs"
+      - "src/career/settings/Identity.tsx"
+    estimated_files:
+      - "server.mjs"
+      - "src/career/settings/Identity.tsx"
+    estimated_lines: 80
+    depends_on: ["m2-identity-form-ui"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: null
+    description: |
+      m2 原设计 Save 按钮要全部必填填完才亮（Q4 全部必填）。m3 放宽：允许
+      增量 save，但仍区分两类错误：
+
+      **Missing required**（字段空，允许 save）:
+        - backend IdentitySchema 去掉 .min(1) + array .min(0) 允许空
+        - 前端仍红星 + 行内 "Required" 提示但不阻塞 Save
+      **Malformed format**（email/URL 格式错，阻塞 save）:
+        - 前端 validate 分开 missing vs malformed
+        - Save disabled 只当 malformed.length > 0 或 saving
+
+      实现:
+      - server.mjs IdentitySchema: z.string().min(1) → z.string() 全部；
+        array min 保持 z.array() 无 min；enum 保持（只有 Native/Fluent/.../Basic）;
+        boolean 保持必填（默认值由前端提供）
+      - Identity.tsx validate() 返 {missing, malformed}；Save disabled
+        = malformed.length>0 || saving
+      - Status bar 显示双计数: "3 required missing · 0 format errors"
+      - isValid 还保留用于将来 Applier 判断 identity 是否"完整到可用"
+
+      验收:
+      - 只填 name + email → Save 成功 → file 写入 partial identity
+      - 重启 server + 回 UI → 字段值恢复 + 红星仍提示未填
+      - email 填 "abc" → Save 按钮灰
+      - email 清空（不填） → Save 按钮亮（missing 不阻塞）
+      - curl 直接 PUT {"name":"X"} → 200（backend 接受 partial）
+
 commits:
   - hash: "829691d"
     date: "2026-04-23"
@@ -110,9 +152,17 @@ commits:
       - "_tree.yaml (lifecycle: planning → active)"
     milestones_affected:
       - "m2-identity-form-ui (→ completed, ROOM COMPLETE)"
+  - hash: "TBD"
+    date: "2026-04-23"
+    message: "[04-career-system/02-profile/01-identity] m3: Partial save — 填一点存一点，仅 malformed 阻塞 save"
+    files_changed: 2
+    specs_affected:
+      - "change-2026-04-23-m3-partial-save (created)"
+    milestones_affected:
+      - "m3-partial-save (→ completed)"
 
 current_sprint: "Sprint 2 — Profile"
 blockers: []
 completion: 100
-status_note: "🎉 ROOM 完成 (m1 + m2 done, lifecycle active)。下一个 Room: 02-profile/02-preferences"
+status_note: "🎉 ROOM 完成 + m3 partial-save UX 加强 (3 milestones done, lifecycle active)。下一个 Room: 02-profile/02-preferences"
 last_updated: "2026-04-23"

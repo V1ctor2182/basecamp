@@ -1157,41 +1157,46 @@ app.get('/api/career/llm-costs', async (req, res) => {
 // See META/.../02-profile/01-identity
 // ─────────────────────────────────────────────────────────────
 
+// Partial-save design (m3): allow incremental save.
+// All strings accept empty; arrays min 0. Format checks (email/URL) happen
+// on frontend (malformed blocks save). Backend is permissive — shape is
+// validated, content is not. Applier/Evaluator re-check completeness at
+// use-time before consuming identity.
 const EducationEntrySchema = z.object({
-  school: z.string().min(1),
-  degree: z.string().min(1),
-  graduation: z.string().min(1),    // "2026" or "May 2026" — free text
-  gpa: z.string().optional(),       // only optional field
+  school: z.string(),
+  degree: z.string(),
+  graduation: z.string(),
+  gpa: z.string().optional(),
 });
 
 const LanguageEntrySchema = z.object({
-  lang: z.string().min(1),
+  lang: z.string(),
   level: z.enum(['Native', 'Fluent', 'Conversational', 'Basic']),
 });
 
 const IdentitySchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  phone: z.string().min(1),
+  name: z.string(),
+  email: z.string(),                      // format-check done on frontend
+  phone: z.string(),
   links: z.object({
-    linkedin: z.string().url(),
-    github: z.string().url(),
-    portfolio: z.string().url(),
+    linkedin: z.string(),                 // URL format-check done on frontend
+    github: z.string(),
+    portfolio: z.string(),
   }),
   location: z.object({
-    current_city: z.string().min(1),
-    current_country: z.string().min(1),
+    current_city: z.string(),
+    current_country: z.string(),
   }),
   legal: z.object({
-    visa_status: z.string().min(1),
-    visa_expiration: z.string().min(1),
+    visa_status: z.string(),
+    visa_expiration: z.string(),
     needs_sponsorship_now: z.boolean(),
     needs_sponsorship_future: z.boolean(),
     authorized_us_yes_no: z.boolean(),
-    citizenship: z.string().min(1),
+    citizenship: z.string(),
   }),
-  education: z.array(EducationEntrySchema).min(1),
-  languages: z.array(LanguageEntrySchema).min(1),
+  education: z.array(EducationEntrySchema),
+  languages: z.array(LanguageEntrySchema),
 });
 
 async function readIdentity() {

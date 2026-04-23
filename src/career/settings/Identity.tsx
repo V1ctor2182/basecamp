@@ -40,32 +40,44 @@ function isUrl(s: string) {
 }
 function isEmail(s: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) }
 
-function validate(id: Identity): Record<string, string> {
-  const e: Record<string, string> = {}
-  if (!id.name.trim()) e.name = 'Required'
-  if (!id.email.trim()) e.email = 'Required'
-  else if (!isEmail(id.email)) e.email = 'Invalid email'
-  if (!id.phone.trim()) e.phone = 'Required'
-  if (!id.links.linkedin) e['links.linkedin'] = 'Required'
-  else if (!isUrl(id.links.linkedin)) e['links.linkedin'] = 'Must be a valid URL'
-  if (!id.links.github) e['links.github'] = 'Required'
-  else if (!isUrl(id.links.github)) e['links.github'] = 'Must be a valid URL'
-  if (!id.links.portfolio) e['links.portfolio'] = 'Required'
-  else if (!isUrl(id.links.portfolio)) e['links.portfolio'] = 'Must be a valid URL'
-  if (!id.location.current_city.trim()) e['location.current_city'] = 'Required'
-  if (!id.location.current_country.trim()) e['location.current_country'] = 'Required'
-  if (!id.legal.visa_status.trim()) e['legal.visa_status'] = 'Required'
-  if (!id.legal.visa_expiration.trim()) e['legal.visa_expiration'] = 'Required'
-  if (!id.legal.citizenship.trim()) e['legal.citizenship'] = 'Required'
+// Split validation: missing required (doesn't block save) vs malformed (blocks save).
+// m3: allow partial save — user fills one section at a time, saves between.
+type ValidationResult = {
+  missing: Record<string, true>        // empty but required (red * stays, doesn't block save)
+  malformed: Record<string, string>    // bad format (red border + blocks save)
+}
+
+function validate(id: Identity): ValidationResult {
+  const missing: Record<string, true> = {}
+  const malformed: Record<string, string> = {}
+
+  if (!id.name.trim()) missing.name = true
+  if (!id.email.trim()) missing.email = true
+  else if (!isEmail(id.email)) malformed.email = 'Invalid email'
+  if (!id.phone.trim()) missing.phone = true
+
+  if (!id.links.linkedin) missing['links.linkedin'] = true
+  else if (!isUrl(id.links.linkedin)) malformed['links.linkedin'] = 'Must be a valid URL'
+  if (!id.links.github) missing['links.github'] = true
+  else if (!isUrl(id.links.github)) malformed['links.github'] = 'Must be a valid URL'
+  if (!id.links.portfolio) missing['links.portfolio'] = true
+  else if (!isUrl(id.links.portfolio)) malformed['links.portfolio'] = 'Must be a valid URL'
+
+  if (!id.location.current_city.trim()) missing['location.current_city'] = true
+  if (!id.location.current_country.trim()) missing['location.current_country'] = true
+  if (!id.legal.visa_status.trim()) missing['legal.visa_status'] = true
+  if (!id.legal.visa_expiration.trim()) missing['legal.visa_expiration'] = true
+  if (!id.legal.citizenship.trim()) missing['legal.citizenship'] = true
+
   id.education.forEach((row, i) => {
-    if (!row.school.trim()) e[`education.${i}.school`] = 'Required'
-    if (!row.degree.trim()) e[`education.${i}.degree`] = 'Required'
-    if (!row.graduation.trim()) e[`education.${i}.graduation`] = 'Required'
+    if (!row.school.trim()) missing[`education.${i}.school`] = true
+    if (!row.degree.trim()) missing[`education.${i}.degree`] = true
+    if (!row.graduation.trim()) missing[`education.${i}.graduation`] = true
   })
   id.languages.forEach((row, i) => {
-    if (!row.lang.trim()) e[`languages.${i}.lang`] = 'Required'
+    if (!row.lang.trim()) missing[`languages.${i}.lang`] = true
   })
-  return e
+  return { missing, malformed }
 }
 
 export default function Identity() {
@@ -76,8 +88,11 @@ export default function Identity() {
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [serverError, setServerError] = useState<string | null>(null)
 
-  const errors = useMemo(() => validate(identity), [identity])
-  const isValid = Object.keys(errors).length === 0
+  const { missing, malformed } = useMemo(() => validate(identity), [identity])
+  const missingCount = Object.keys(missing).length
+  const malformedCount = Object.keys(malformed).length
+  const canSave = malformedCount === 0    // missing 不阻塞 save (m3 partial-save)
+  const isComplete = missingCount === 0 && malformedCount === 0
 
   // Load on mount
   useEffect(() => {
@@ -124,10 +139,19 @@ export default function Identity() {
 
   if (!loaded) return <div className="af-loading">Loading identity…</div>
 
-  const showErr = (key: string) => (dirty || savedAt !== null ? errors[key] : undefined)
+  // Show inline error: malformed always (red border + message); missing only after
+  // user has interacted (shown subtly — we still display red * on label but don't
+  // fill the "error" slot until interaction to avoid first-load-all-red).
+  const showErr = (key: string): string | undefined => {
+    if (malformed[key]) return malformed[key]
+    if ((dirty || savedAt !== null) && missing[key]) return 'Required'
+    return undefined
+  }
+  // Red border only for malformed (hard errors). Missing uses subtle red *.
+  const showBad = (key: string) => Boolean(malformed[key])
 
   return (
-    <form className="af-form" onSubmit={e => { e.preventDefault(); if (isValid) save() }}>
+    <form className="af-form" onSubmit={e => { e.preventDefault(); if (canSave && dirty) save() }}>
       <div className="af-form-header">
         <h2 className="af-form-title">Identity</h2>
         <p className="af-form-subtitle">
@@ -141,19 +165,19 @@ export default function Identity() {
         <p className="af-section-desc">基本联系方式。所有 ATS 表单都会问。</p>
 
         <Field label="Full Name" required error={showErr('name')}>
-          <input className={`af-input${showErr('name') ? ' af-input-error' : ''}`}
+          <input className={`af-input${showBad('name') ? ' af-input-error' : ''}`}
             placeholder="Chenyang Zhang" value={identity.name}
             onChange={e => update('name', e.target.value)} />
         </Field>
 
         <div className="af-field-row">
           <Field label="Email" required error={showErr('email')}>
-            <input className={`af-input${showErr('email') ? ' af-input-error' : ''}`} type="email"
+            <input className={`af-input${showBad('email') ? ' af-input-error' : ''}`} type="email"
               placeholder="name@example.com" value={identity.email}
               onChange={e => update('email', e.target.value)} />
           </Field>
           <Field label="Phone" required error={showErr('phone')}>
-            <input className={`af-input${showErr('phone') ? ' af-input-error' : ''}`} type="tel"
+            <input className={`af-input${showBad('phone') ? ' af-input-error' : ''}`} type="tel"
               placeholder="+1-555-555-5555" value={identity.phone}
               onChange={e => update('phone', e.target.value)} />
           </Field>
@@ -166,17 +190,17 @@ export default function Identity() {
         <p className="af-section-desc">LinkedIn / GitHub / 个人网站 URL，ATS 常会单独问这 3 个字段。</p>
 
         <Field label="LinkedIn" required error={showErr('links.linkedin')}>
-          <input className={`af-input${showErr('links.linkedin') ? ' af-input-error' : ''}`} type="url"
+          <input className={`af-input${showBad('links.linkedin') ? ' af-input-error' : ''}`} type="url"
             placeholder="https://linkedin.com/in/your-handle" value={identity.links.linkedin}
             onChange={e => update('links', { ...identity.links, linkedin: e.target.value })} />
         </Field>
         <Field label="GitHub" required error={showErr('links.github')}>
-          <input className={`af-input${showErr('links.github') ? ' af-input-error' : ''}`} type="url"
+          <input className={`af-input${showBad('links.github') ? ' af-input-error' : ''}`} type="url"
             placeholder="https://github.com/your-handle" value={identity.links.github}
             onChange={e => update('links', { ...identity.links, github: e.target.value })} />
         </Field>
         <Field label="Portfolio / Personal Website" required error={showErr('links.portfolio')}>
-          <input className={`af-input${showErr('links.portfolio') ? ' af-input-error' : ''}`} type="url"
+          <input className={`af-input${showBad('links.portfolio') ? ' af-input-error' : ''}`} type="url"
             placeholder="https://yourdomain.com" value={identity.links.portfolio}
             onChange={e => update('links', { ...identity.links, portfolio: e.target.value })} />
         </Field>
@@ -188,12 +212,12 @@ export default function Identity() {
         <p className="af-section-desc">当前地点。用于 ATS 默认地址字段 + Evaluator 地点匹配。</p>
         <div className="af-field-row">
           <Field label="Current City" required error={showErr('location.current_city')}>
-            <input className={`af-input${showErr('location.current_city') ? ' af-input-error' : ''}`}
+            <input className={`af-input${showBad('location.current_city') ? ' af-input-error' : ''}`}
               placeholder="New York, NY" value={identity.location.current_city}
               onChange={e => update('location', { ...identity.location, current_city: e.target.value })} />
           </Field>
           <Field label="Current Country" required error={showErr('location.current_country')}>
-            <input className={`af-input${showErr('location.current_country') ? ' af-input-error' : ''}`}
+            <input className={`af-input${showBad('location.current_country') ? ' af-input-error' : ''}`}
               placeholder="United States" value={identity.location.current_country}
               onChange={e => update('location', { ...identity.location, current_country: e.target.value })} />
           </Field>
@@ -209,19 +233,19 @@ export default function Identity() {
 
         <div className="af-field-row">
           <Field label="Visa Status" required error={showErr('legal.visa_status')}>
-            <input className={`af-input${showErr('legal.visa_status') ? ' af-input-error' : ''}`}
+            <input className={`af-input${showBad('legal.visa_status') ? ' af-input-error' : ''}`}
               placeholder="F-1 OPT / H1B / GC / US Citizen / ..." value={identity.legal.visa_status}
               onChange={e => update('legal', { ...identity.legal, visa_status: e.target.value })} />
           </Field>
           <Field label="Visa Expiration" required error={showErr('legal.visa_expiration')}>
-            <input className={`af-input${showErr('legal.visa_expiration') ? ' af-input-error' : ''}`}
+            <input className={`af-input${showBad('legal.visa_expiration') ? ' af-input-error' : ''}`}
               placeholder="YYYY-MM-DD" value={identity.legal.visa_expiration}
               onChange={e => update('legal', { ...identity.legal, visa_expiration: e.target.value })} />
           </Field>
         </div>
 
         <Field label="Citizenship" required error={showErr('legal.citizenship')}>
-          <input className={`af-input${showErr('legal.citizenship') ? ' af-input-error' : ''}`}
+          <input className={`af-input${showBad('legal.citizenship') ? ' af-input-error' : ''}`}
             placeholder="China (PRC) / United States / ..." value={identity.legal.citizenship}
             onChange={e => update('legal', { ...identity.legal, citizenship: e.target.value })} />
         </Field>
@@ -255,18 +279,18 @@ export default function Identity() {
                 </button>
               </div>
               <Field label="School" required error={showErr(`education.${i}.school`)}>
-                <input className={`af-input${showErr(`education.${i}.school`) ? ' af-input-error' : ''}`}
+                <input className={`af-input${showBad(`education.${i}.school`) ? ' af-input-error' : ''}`}
                   placeholder="Columbia University" value={row.school}
                   onChange={e => update('education', identity.education.map((r, j) => j === i ? { ...r, school: e.target.value } : r))} />
               </Field>
               <div className="af-field-row">
                 <Field label="Degree" required error={showErr(`education.${i}.degree`)}>
-                  <input className={`af-input${showErr(`education.${i}.degree`) ? ' af-input-error' : ''}`}
+                  <input className={`af-input${showBad(`education.${i}.degree`) ? ' af-input-error' : ''}`}
                     placeholder="MS Data Science" value={row.degree}
                     onChange={e => update('education', identity.education.map((r, j) => j === i ? { ...r, degree: e.target.value } : r))} />
                 </Field>
                 <Field label="Graduation" required error={showErr(`education.${i}.graduation`)}>
-                  <input className={`af-input${showErr(`education.${i}.graduation`) ? ' af-input-error' : ''}`}
+                  <input className={`af-input${showBad(`education.${i}.graduation`) ? ' af-input-error' : ''}`}
                     placeholder="2026" value={row.graduation}
                     onChange={e => update('education', identity.education.map((r, j) => j === i ? { ...r, graduation: e.target.value } : r))} />
                 </Field>
@@ -302,7 +326,7 @@ export default function Identity() {
               </div>
               <div className="af-field-row">
                 <Field label="Language" required error={showErr(`languages.${i}.lang`)}>
-                  <input className={`af-input${showErr(`languages.${i}.lang`) ? ' af-input-error' : ''}`}
+                  <input className={`af-input${showBad(`languages.${i}.lang`) ? ' af-input-error' : ''}`}
                     placeholder="English" value={row.lang}
                     onChange={e => update('languages', identity.languages.map((r, j) => j === i ? { ...r, lang: e.target.value } : r))} />
                 </Field>
@@ -327,14 +351,25 @@ export default function Identity() {
 
       {/* Submit bar */}
       <div className="af-submit-bar">
-        <span className={`af-submit-status${dirty ? ' af-submit-dirty' : savedAt ? ' af-submit-saved' : ''}`}>
+        <span className={`af-submit-status${dirty ? ' af-submit-dirty' : savedAt && isComplete ? ' af-submit-saved' : ''}`}>
           {saving ? 'Saving…' :
            serverError ? `Error: ${serverError}` :
-           dirty ? 'Unsaved changes' :
-           savedAt ? `Saved at ${savedAt}` :
-           !isValid ? `${Object.keys(errors).length} field(s) need attention` : 'Ready'}
+           dirty ? (
+             malformedCount > 0
+               ? `${malformedCount} format error${malformedCount > 1 ? 's' : ''} — fix to save`
+               : missingCount > 0
+                 ? `Unsaved changes · ${missingCount} required still missing (OK to save partial)`
+                 : 'Unsaved changes · ready to save'
+           ) :
+           savedAt ? (
+             isComplete
+               ? `✓ Saved at ${savedAt} · complete`
+               : `✓ Saved at ${savedAt} · ${missingCount} required still missing`
+           ) :
+           missingCount > 0 ? `${missingCount} required field${missingCount > 1 ? 's' : ''} still missing` :
+           'Ready'}
         </span>
-        <button type="submit" className="af-btn-primary" disabled={!isValid || saving}>
+        <button type="submit" className="af-btn-primary" disabled={!canSave || saving || !dirty}>
           {saving ? 'Saving…' : 'Save Identity'}
         </button>
       </div>
