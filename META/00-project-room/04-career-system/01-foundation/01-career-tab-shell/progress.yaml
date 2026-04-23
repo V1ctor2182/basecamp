@@ -49,7 +49,7 @@ milestones:
     depends_on: ["m1-careerapp-shell"]
     complexity_flags: []
     open_questions: []
-    commit_hash: "TBD"
+    commit_hash: "2304730"
     description: |
       CareerNav 组件用 NavLink 渲染水平 tab bar（6 tabs: Overview / Pipeline /
       Shortlist / Applied / Prep / Settings），active state 通过 NavLink isActive
