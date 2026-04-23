@@ -128,7 +128,7 @@ commits:
       - "change-2026-04-23-m1-dirs-and-gitignore (created)"
     milestones_affected:
       - "m1-dirs-and-gitignore (→ completed)"
-  - hash: "TBD"
+  - hash: "50a41d7"
     date: "2026-04-23"
     message: "[04-career-system/01-foundation/02-career-data-layout] m2: 8 子 README + 4 examples + templates.md + init-career.sh (ROOM 完成)"
     files_changed: 15
