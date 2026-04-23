@@ -1,0 +1,22 @@
+spec_id: "intent-application-state-001"
+type: intent
+state: active
+intent:
+  summary: "applications.json schema + 状态机 + timeline append-only"
+  detail: |
+    所有 career-system 申请的单一 source of truth。数据模型 data/career/applications.json（数组）每条：id (jobId + date 构成) / company / role / url / score (Evaluator 打的总分) / status (Evaluated / Applied / Responded / Interview / Offer / Rejected / Discarded / SKIP) / legitimacy (Block G 判定: High Confidence / Proceed with Caution / Suspicious) / reportPath / pdfPath / resumeId / timeline (append-only event log: {ts, event, note?}) / followup ({nextAt, reason})。状态机：Evaluated → Applied → Responded → Interview → (Offer|Rejected)。不能跳过中间态；timeline 事件 append-only 绝不改历史。后端 GET /api/career/applications (list) + POST /api/career/applications/:id (update status + 自动 append timeline event)。写操作要原子（file lock 或 atomic rename 避免并发破坏）。Evaluator Stage B 完成后自动 insert 一条 status=Evaluated；Applier Mode 1 "Mark submitted" 后升为 Applied。验收：跑 20 个岗位评估 + 3 个 apply，applications.json 内容完整 + status 正确；手动修改某条的 status 经由 API → timeline 自动多一条事件记录。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [backend, json, state-machine, source-of-truth]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/07-gate-tracker.md#applicationsjson"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"
