@@ -75,7 +75,12 @@ milestones:
 
   - id: "m2-preferences-form-static"
     name: "Settings → Preferences 前 6 Section + TagInput 共享组件"
-    status: pending
+    status: completed
+    actual_lines: 864
+    actual_files:
+      - "src/career/TagInput.tsx"
+      - "src/career/settings/Preferences.tsx"
+      - "src/career/settings/ats-form.css"
     estimated_files:
       - "src/career/settings/Preferences.tsx"
       - "src/career/TagInput.tsx"
@@ -268,9 +273,17 @@ commits:
       - "change-2026-04-23-m1-preferences-backend (created)"
     milestones_affected:
       - "m1-preferences-backend (→ completed)"
+  - hash: "TBD"
+    date: "2026-04-23"
+    message: "[04-career-system/02-profile/02-preferences] m2: Settings → Preferences 前 6 Section + TagInput 共享组件"
+    files_changed: 4
+    specs_affected:
+      - "change-2026-04-23-m2-preferences-form-static (created)"
+    milestones_affected:
+      - "m2-preferences-form-static (→ completed)"
 
 current_sprint: "Sprint 2 — Profile"
 blockers: []
-completion: 33
-status_note: "m1 completed (2026-04-23)。下一步 m2 前 6 sections + TagInput 共享组件。"
+completion: 66
+status_note: "m1 + m2 completed (2026-04-23)。下一步 m3 Section 7 hard_filters + Preview dry-run stub。"
 last_updated: "2026-04-23"

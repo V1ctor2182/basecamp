@@ -1,0 +1,121 @@
+spec_id: "change-2026-04-23-m2-preferences-form-static"
+type: change
+state: active
+intent:
+  summary: "m2: Settings → Preferences 前 6 Section ATS 风格表单 + shared TagInput component"
+  detail: |
+    替换 Preferences.tsx 占位为真实 6-section ATS 风格表单。Section 7 Hard
+    Filters 留给 m3。复用 Identity 的 ats-form.css (.af-*) + 追加 TagInput
+    / slider / block-card / toggle 样式。
+
+    Files created:
+      - src/career/TagInput.tsx (58 lines) — 共享 tag-input 组件。props:
+        value/onChange/placeholder/disabled。Enter / Tab / 逗号 触发 commit，
+        Backspace 在空 input 删最后一个 tag，× 按钮删除单个 tag。后续
+        QA Bank / site-adapters / narrative 等都会复用。
+
+    Files modified:
+      - src/career/settings/Preferences.tsx (10 → 586 lines)
+        - TypeScript types 镜像 server.mjs 的 Zod schemas
+        - BLANK() 兜底（和 server defaultPreferences 一致）
+        - validate(prefs) → {missing, malformed} 模式（同 Identity m3
+          partial-save）
+        - useEffect load GET + beforeunload 拦截 + save PUT
+        - 6 Sections:
+          1. Target Roles (加减行 widget: title* + seniority dropdown* + function?)
+          2. Compensation (base_min/max + total_min/max + currency，全可选 +
+             number format-validated)
+          3. Location (accept_any / remote_only toggle, hybrid days,
+             preferred_cities / acceptable_countries TagInput)
+          4. Soft Preferences (6 TagInput 2x3 网格)
+          5. Scoring & Thresholds:
+             - 5 slider (0-1 step 0.05) + 实时 sum display +
+               sum≠1.00±0.01 时 warning (warning only, 不阻塞 save)
+             - 4 threshold number inputs (1-5 scale) + order check
+               (strong≥worth≥consider≥skip_below) malformed 才 block
+          6. Evaluator Strategy:
+             - stage_a enabled + model + threshold
+             - stage_b enabled + model + 6 Block cards (2 cols):
+               - Block B / Block E: toggle disabled + "Required by Tailor" badge
+               - 其他 4 Block: toggle 可切换
+        - Sticky submit bar (status + Save) 复用 Identity pattern
+      - src/career/settings/ats-form.css (281 → 511 lines, +230 lines)
+        - TagInput styles: .af-tag-input / .af-tag-pill / .af-tag-remove /
+          .af-tag-input-field (圆角 pill, focus-within 蓝环, disabled 灰底)
+        - Slider styles: .af-slider-row (3-col grid label/slider/value) +
+          .af-slider-sum (ok 绿 / bad 黄 状态)
+        - Block cards: .af-block-card-grid (2 cols) / .af-block-card
+          (.af-block-card-on 蓝边 / .af-block-card-disabled 灰底) /
+          .af-block-card-title / .af-block-card-desc / .af-block-card-badge
+        - Toggle switch (.af-toggle / .af-toggle-on) — 36x20 圆滑开关
+        - .af-strategy-row (3-col grid for stage_a/b rows)
+        - .af-input-number (宽度 cap 180px)
+
+    Locked design decisions (plan-milestones Phase 3):
+      - Q1=a scoring_weights: **manual sliders** (5 sliders 0-1 step 0.05)
+        + sum-validate warning (不阻塞 save — partial-save 精神)
+      - Q2=c stage_b_blocks: **cards with descriptions** (2-col grid,
+        title + desc + toggle 右上, Block B/E disabled + badge)
+      - Q4=a TagInput location: **shared component** at src/career/TagInput.tsx
+        (not settings/-local — QA Bank / site-adapters 都会用)
+
+    Validation 分层 (和 m3-identity 一致):
+      - missing: targets 空 / targets[].title/seniority 空 → 不阻塞 save
+      - malformed: comp_target 数字字段负数 / thresholds 顺序不对 →
+        阻塞 save
+      - scoring_weights sum ≠ 1.0 → warning only (not malformed)
+
+    Verification:
+      - tsc --noEmit: 无错误
+      - vite build: ✓ built in 9.74s 无错
+      - 待手工 smoke (Q3 preview stub 在 m3 前无需):
+        1. /career/settings/preferences 加载默认 defaults
+        2. 填 targets[0] + save → reload 看到值
+        3. 调 slider → sum 实时更新 + 绿/黄切换
+        4. Block B/E toggle 不可点击 + badge
+        5. comp_target.base_min = -100 → malformed block save
+        6. thresholds.strong < worth → malformed block save
+
+    Downstream:
+      - Section 7 hard_filters 在 m3 做 (含 Preview dry-run stub)
+      - TagInput 后续被 QA Bank / site-adapters / narrative 复用
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m2, frontend, react, taginput, ats-form, partial-save]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit TBD"
+relations:
+  - "implements intent-preferences-001 (m2/3)"
+  - "depends_on change-2026-04-23-m1-preferences-backend"
+  - "clones ATS-form pattern from change-2026-04-23-m2-identity-form-ui"
+  - "provides shared TagInput to future QA Bank / site-adapters / narrative"
+anchors:
+  - file: "src/career/TagInput.tsx"
+    symbols: ["default", "Props"]
+  - file: "src/career/settings/Preferences.tsx"
+    symbols:
+      - "default"
+      - "Preferences"
+      - "BLANK"
+      - "validate"
+      - "sumWeights"
+      - "BLOCK_META"
+      - "SCORING_LABELS"
+  - file: "src/career/settings/ats-form.css"
+    symbols:
+      - ".af-tag-input"
+      - ".af-tag-pill"
+      - ".af-slider-row"
+      - ".af-slider-sum"
+      - ".af-block-card"
+      - ".af-block-card-grid"
+      - ".af-toggle"
+      - ".af-strategy-row"
+created_at: "2026-04-23"
+updated_at: "2026-04-23"

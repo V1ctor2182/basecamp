@@ -20,10 +20,10 @@ hard_filters 必须按短路顺序评估 + 任一 drop 立刻 archive
 
 ## Milestones (planned 2026-04-23)
 
-**3 milestones 规划完成**（~600 lines 估算，1/3 完成）:
+**3 milestones 规划完成**（~600 lines 估算，2/3 完成）:
 
 - ✅ **m1-preferences-backend** (`0b5b617`, 220 lines 实际) — `server.mjs` Zod PreferencesSchema (permissive, partial-save 风格) + GET/PUT `/api/career/preferences` + defaultPreferences() 兜底
-- **m2-preferences-form-static** (~280 lines) — `Preferences.tsx` 前 6 Section (Target Roles / Compensation / Location / Soft Preferences / Scoring & Thresholds / Evaluator Strategy) + 新 `TagInput.tsx` 共享组件 + ats-form.css 追加样式
+- ✅ **m2-preferences-form-static** (TBD, 864 lines 实际, 创建 TagInput + 更新 Preferences + 追加 ats-form.css) — `Preferences.tsx` 前 6 Section (Target Roles / Compensation / Location / Soft Preferences / Scoring & Thresholds / Evaluator Strategy) + 新 `TagInput.tsx` 共享组件 + ats-form.css 追加样式
 - **m3-hard-filters-editor** (~180 lines) — Section 7 Hard Filters (9 sub-sections, ordinal-labeled 短路顺序 ①–⑧) + Preview dry-run bar (UI + backend stub 返 mock breakdown)
 
 **Locked design decisions** (plan-milestones Phase 3):
@@ -42,6 +42,7 @@ hard_filters 必须按短路顺序评估 + 任一 drop 立刻 archive
 - [intent-preferences-001](specs/intent-preferences-001.yaml) — preferences.yml CRUD + Settings → Preferences 页（含 hard_filters 编辑器）
 - [constraint-preferences-001](specs/constraint-preferences-001.yaml) — hard_filters 必须按短路顺序评估 + 任一 drop 立刻 archive
 - [change-2026-04-23-m1-preferences-backend](specs/change-2026-04-23-m1-preferences-backend.yaml) — m1 backend API (PreferencesSchema + GET/PUT + defaults)
+- [change-2026-04-23-m2-preferences-form-static](specs/change-2026-04-23-m2-preferences-form-static.yaml) — m2 Settings → Preferences 前 6 section + shared TagInput
 
 ---
 
