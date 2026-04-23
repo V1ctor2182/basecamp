@@ -37,7 +37,11 @@ milestones:
 
   - id: "m2-identity-form-ui"
     name: "Settings → Identity 页 ATS 风格结构化表单"
-    status: pending
+    status: completed
+    actual_lines: 570
+    actual_files:
+      - "src/career/settings/ats-form.css"
+      - "src/career/settings/Identity.tsx"
     estimated_files:
       - "src/career/settings/Identity.tsx"
       - "src/career/settings/ats-form.css"
@@ -96,9 +100,19 @@ commits:
       - "change-2026-04-23-m1-identity-backend (created)"
     milestones_affected:
       - "m1-identity-backend (→ completed)"
+  - hash: "TBD"
+    date: "2026-04-23"
+    message: "[04-career-system/02-profile/01-identity] m2: Settings 页 ATS 风格 6-section form (ROOM 完成)"
+    files_changed: 2
+    specs_affected:
+      - "change-2026-04-23-m2-identity-form-ui (created)"
+      - "room.yaml (lifecycle: planning → active)"
+      - "_tree.yaml (lifecycle: planning → active)"
+    milestones_affected:
+      - "m2-identity-form-ui (→ completed, ROOM COMPLETE)"
 
 current_sprint: "Sprint 2 — Profile"
 blockers: []
-completion: 50
-status_note: "m1 ✅ completed (backend)。下一个: m2-identity-form-ui (ATS 风格 6-section 表单)"
+completion: 100
+status_note: "🎉 ROOM 完成 (m1 + m2 done, lifecycle active)。下一个 Room: 02-profile/02-preferences"
 last_updated: "2026-04-23"

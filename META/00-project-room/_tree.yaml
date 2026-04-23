@@ -195,7 +195,7 @@ tree:
         - "00-project-room/04-career-system/02-profile/04-qa-bank"
     - id: "00-project-room/04-career-system/02-profile/01-identity"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: fullstack
       parent: "00-project-room/04-career-system/02-profile"
       children: []
