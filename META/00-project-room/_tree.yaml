@@ -1,0 +1,451 @@
+tree:
+  root: "00-project-room"
+  generated_at: "2026-04-22"
+  nodes:
+    - id: "00-project-room"
+      type: project
+      lifecycle: active
+      owner: fullstack
+      parent: null
+      children:
+        - "00-project-room/01-foundation"
+        - "00-project-room/02-knowledge-base"
+        - "00-project-room/03-work-tracker"
+        - "00-project-room/04-career-system"
+    - id: "00-project-room/01-foundation"
+      type: epic
+      lifecycle: active
+      owner: fullstack
+      parent: "00-project-room"
+      children:
+        - "00-project-room/01-foundation/01-server-bootstrap"
+        - "00-project-room/01-foundation/02-dashboard-shell"
+        - "00-project-room/01-foundation/03-github-api-cache"
+    - id: "00-project-room/01-foundation/01-server-bootstrap"
+      type: feature
+      lifecycle: active
+      owner: backend
+      parent: "00-project-room/01-foundation"
+      children: []
+    - id: "00-project-room/01-foundation/02-dashboard-shell"
+      type: feature
+      lifecycle: active
+      owner: frontend
+      parent: "00-project-room/01-foundation"
+      children: []
+    - id: "00-project-room/01-foundation/03-github-api-cache"
+      type: feature
+      lifecycle: active
+      owner: backend
+      parent: "00-project-room/01-foundation"
+      children: []
+    - id: "00-project-room/02-knowledge-base"
+      type: epic
+      lifecycle: active
+      owner: fullstack
+      parent: "00-project-room"
+      children:
+        - "00-project-room/02-knowledge-base/01-multi-dir-management"
+        - "00-project-room/02-knowledge-base/02-markdown-viewer"
+        - "00-project-room/02-knowledge-base/03-markdown-editor"
+        - "00-project-room/02-knowledge-base/04-mermaid-diagrams"
+        - "00-project-room/02-knowledge-base/05-file-operations"
+        - "00-project-room/02-knowledge-base/06-enhance-kit-widgets"
+    - id: "00-project-room/02-knowledge-base/01-multi-dir-management"
+      type: feature
+      lifecycle: active
+      owner: fullstack
+      parent: "00-project-room/02-knowledge-base"
+      children: []
+    - id: "00-project-room/02-knowledge-base/02-markdown-viewer"
+      type: feature
+      lifecycle: active
+      owner: frontend
+      parent: "00-project-room/02-knowledge-base"
+      children: []
+    - id: "00-project-room/02-knowledge-base/03-markdown-editor"
+      type: feature
+      lifecycle: active
+      owner: frontend
+      parent: "00-project-room/02-knowledge-base"
+      children: []
+    - id: "00-project-room/02-knowledge-base/04-mermaid-diagrams"
+      type: feature
+      lifecycle: active
+      owner: frontend
+      parent: "00-project-room/02-knowledge-base"
+      children: []
+    - id: "00-project-room/02-knowledge-base/05-file-operations"
+      type: feature
+      lifecycle: active
+      owner: fullstack
+      parent: "00-project-room/02-knowledge-base"
+      children: []
+    - id: "00-project-room/02-knowledge-base/06-enhance-kit-widgets"
+      type: feature
+      lifecycle: active
+      owner: frontend
+      parent: "00-project-room/02-knowledge-base"
+      children: []
+    - id: "00-project-room/03-work-tracker"
+      type: epic
+      lifecycle: active
+      owner: fullstack
+      parent: "00-project-room"
+      children:
+        - "00-project-room/03-work-tracker/01-repo-management"
+        - "00-project-room/03-work-tracker/02-commits-view"
+        - "00-project-room/03-work-tracker/03-prs-view"
+        - "00-project-room/03-work-tracker/04-claude-usage-stats"
+        - "00-project-room/03-work-tracker/05-claude-activity-timeline"
+        - "00-project-room/03-work-tracker/06-claude-ping-hook"
+        - "00-project-room/03-work-tracker/07-rate-limit-monitor"
+    - id: "00-project-room/03-work-tracker/01-repo-management"
+      type: feature
+      lifecycle: active
+      owner: fullstack
+      parent: "00-project-room/03-work-tracker"
+      children: []
+    - id: "00-project-room/03-work-tracker/02-commits-view"
+      type: feature
+      lifecycle: active
+      owner: fullstack
+      parent: "00-project-room/03-work-tracker"
+      children: []
+    - id: "00-project-room/03-work-tracker/03-prs-view"
+      type: feature
+      lifecycle: active
+      owner: fullstack
+      parent: "00-project-room/03-work-tracker"
+      children: []
+    - id: "00-project-room/03-work-tracker/04-claude-usage-stats"
+      type: feature
+      lifecycle: active
+      owner: fullstack
+      parent: "00-project-room/03-work-tracker"
+      children: []
+    - id: "00-project-room/03-work-tracker/05-claude-activity-timeline"
+      type: feature
+      lifecycle: active
+      owner: fullstack
+      parent: "00-project-room/03-work-tracker"
+      children: []
+    - id: "00-project-room/03-work-tracker/06-claude-ping-hook"
+      type: feature
+      lifecycle: active
+      owner: backend
+      parent: "00-project-room/03-work-tracker"
+      children: []
+    - id: "00-project-room/03-work-tracker/07-rate-limit-monitor"
+      type: feature
+      lifecycle: active
+      owner: fullstack
+      parent: "00-project-room/03-work-tracker"
+      children: []
+    - id: "00-project-room/04-career-system"
+      type: epic
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room"
+      children:
+        - "00-project-room/04-career-system/01-foundation"
+        - "00-project-room/04-career-system/02-profile"
+        - "00-project-room/04-career-system/03-cv-engine"
+        - "00-project-room/04-career-system/04-renderer"
+        - "00-project-room/04-career-system/05-finder"
+        - "00-project-room/04-career-system/06-evaluator"
+        - "00-project-room/04-career-system/07-applier"
+        - "00-project-room/04-career-system/08-human-gate-tracker"
+    - id: "00-project-room/04-career-system/01-foundation"
+      type: sub-epic
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system"
+      children:
+        - "00-project-room/04-career-system/01-foundation/01-career-tab-shell"
+        - "00-project-room/04-career-system/01-foundation/02-career-data-layout"
+        - "00-project-room/04-career-system/01-foundation/03-llm-cost-observability"
+    - id: "00-project-room/04-career-system/01-foundation/01-career-tab-shell"
+      type: feature
+      lifecycle: planning
+      owner: frontend
+      parent: "00-project-room/04-career-system/01-foundation"
+      children: []
+    - id: "00-project-room/04-career-system/01-foundation/02-career-data-layout"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/01-foundation"
+      children: []
+    - id: "00-project-room/04-career-system/01-foundation/03-llm-cost-observability"
+      type: feature
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system/01-foundation"
+      children: []
+    - id: "00-project-room/04-career-system/02-profile"
+      type: sub-epic
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system"
+      children:
+        - "00-project-room/04-career-system/02-profile/01-identity"
+        - "00-project-room/04-career-system/02-profile/02-preferences"
+        - "00-project-room/04-career-system/02-profile/03-narrative-proof"
+        - "00-project-room/04-career-system/02-profile/04-qa-bank"
+    - id: "00-project-room/04-career-system/02-profile/01-identity"
+      type: feature
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system/02-profile"
+      children: []
+    - id: "00-project-room/04-career-system/02-profile/02-preferences"
+      type: feature
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system/02-profile"
+      children: []
+    - id: "00-project-room/04-career-system/02-profile/03-narrative-proof"
+      type: feature
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system/02-profile"
+      children: []
+    - id: "00-project-room/04-career-system/02-profile/04-qa-bank"
+      type: feature
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system/02-profile"
+      children: []
+    - id: "00-project-room/04-career-system/03-cv-engine"
+      type: sub-epic
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system"
+      children:
+        - "00-project-room/04-career-system/03-cv-engine/01-resume-index"
+        - "00-project-room/04-career-system/03-cv-engine/02-google-docs-sync"
+        - "00-project-room/04-career-system/03-cv-engine/03-in-ui-editor"
+        - "00-project-room/04-career-system/03-cv-engine/04-auto-select"
+        - "00-project-room/04-career-system/03-cv-engine/05-tailor-engine"
+    - id: "00-project-room/04-career-system/03-cv-engine/01-resume-index"
+      type: feature
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system/03-cv-engine"
+      children: []
+    - id: "00-project-room/04-career-system/03-cv-engine/02-google-docs-sync"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/03-cv-engine"
+      children: []
+    - id: "00-project-room/04-career-system/03-cv-engine/03-in-ui-editor"
+      type: feature
+      lifecycle: planning
+      owner: frontend
+      parent: "00-project-room/04-career-system/03-cv-engine"
+      children: []
+    - id: "00-project-room/04-career-system/03-cv-engine/04-auto-select"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/03-cv-engine"
+      children: []
+    - id: "00-project-room/04-career-system/03-cv-engine/05-tailor-engine"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/03-cv-engine"
+      children: []
+    - id: "00-project-room/04-career-system/04-renderer"
+      type: sub-epic
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system"
+      children:
+        - "00-project-room/04-career-system/04-renderer/01-html-template"
+        - "00-project-room/04-career-system/04-renderer/02-markdown-to-template"
+    - id: "00-project-room/04-career-system/04-renderer/01-html-template"
+      type: feature
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system/04-renderer"
+      children: []
+    - id: "00-project-room/04-career-system/04-renderer/02-markdown-to-template"
+      type: feature
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system/04-renderer"
+      children: []
+    - id: "00-project-room/04-career-system/05-finder"
+      type: sub-epic
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system"
+      children:
+        - "00-project-room/04-career-system/05-finder/01-source-adapters"
+        - "00-project-room/04-career-system/05-finder/02-job-schema-normalize"
+        - "00-project-room/04-career-system/05-finder/03-dedupe-hard-filter"
+        - "00-project-room/04-career-system/05-finder/04-jd-enrich"
+        - "00-project-room/04-career-system/05-finder/05-scan-scheduler"
+    - id: "00-project-room/04-career-system/05-finder/01-source-adapters"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/05-finder"
+      children: []
+    - id: "00-project-room/04-career-system/05-finder/02-job-schema-normalize"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/05-finder"
+      children: []
+    - id: "00-project-room/04-career-system/05-finder/03-dedupe-hard-filter"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/05-finder"
+      children: []
+    - id: "00-project-room/04-career-system/05-finder/04-jd-enrich"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/05-finder"
+      children: []
+    - id: "00-project-room/04-career-system/05-finder/05-scan-scheduler"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/05-finder"
+      children: []
+    - id: "00-project-room/04-career-system/06-evaluator"
+      type: sub-epic
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system"
+      children:
+        - "00-project-room/04-career-system/06-evaluator/01-stage-a-haiku"
+        - "00-project-room/04-career-system/06-evaluator/02-stage-b-sonnet"
+        - "00-project-room/04-career-system/06-evaluator/03-block-toggles"
+        - "00-project-room/04-career-system/06-evaluator/04-budget-gate"
+        - "00-project-room/04-career-system/06-evaluator/05-pipeline-ui"
+    - id: "00-project-room/04-career-system/06-evaluator/01-stage-a-haiku"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/06-evaluator"
+      children: []
+    - id: "00-project-room/04-career-system/06-evaluator/02-stage-b-sonnet"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/06-evaluator"
+      children: []
+    - id: "00-project-room/04-career-system/06-evaluator/03-block-toggles"
+      type: feature
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system/06-evaluator"
+      children: []
+    - id: "00-project-room/04-career-system/06-evaluator/04-budget-gate"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/06-evaluator"
+      children: []
+    - id: "00-project-room/04-career-system/06-evaluator/05-pipeline-ui"
+      type: feature
+      lifecycle: planning
+      owner: frontend
+      parent: "00-project-room/04-career-system/06-evaluator"
+      children: []
+    - id: "00-project-room/04-career-system/07-applier"
+      type: sub-epic
+      lifecycle: backlog
+      owner: fullstack
+      parent: "00-project-room/04-career-system"
+      children:
+        - "00-project-room/04-career-system/07-applier/01-mode1-simplify-hybrid"
+        - "00-project-room/04-career-system/07-applier/02-playwright-runtime"
+        - "00-project-room/04-career-system/07-applier/03-field-classifier"
+        - "00-project-room/04-career-system/07-applier/04-multi-step-state-machine"
+        - "00-project-room/04-career-system/07-applier/05-non-standard-controls"
+        - "00-project-room/04-career-system/07-applier/06-site-adapters"
+        - "00-project-room/04-career-system/07-applier/07-feedback-flywheel"
+    - id: "00-project-room/04-career-system/07-applier/01-mode1-simplify-hybrid"
+      type: feature
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system/07-applier"
+      children: []
+    - id: "00-project-room/04-career-system/07-applier/02-playwright-runtime"
+      type: feature
+      lifecycle: backlog
+      owner: backend
+      parent: "00-project-room/04-career-system/07-applier"
+      children: []
+    - id: "00-project-room/04-career-system/07-applier/03-field-classifier"
+      type: feature
+      lifecycle: backlog
+      owner: backend
+      parent: "00-project-room/04-career-system/07-applier"
+      children: []
+    - id: "00-project-room/04-career-system/07-applier/04-multi-step-state-machine"
+      type: feature
+      lifecycle: backlog
+      owner: backend
+      parent: "00-project-room/04-career-system/07-applier"
+      children: []
+    - id: "00-project-room/04-career-system/07-applier/05-non-standard-controls"
+      type: feature
+      lifecycle: backlog
+      owner: backend
+      parent: "00-project-room/04-career-system/07-applier"
+      children: []
+    - id: "00-project-room/04-career-system/07-applier/06-site-adapters"
+      type: feature
+      lifecycle: backlog
+      owner: backend
+      parent: "00-project-room/04-career-system/07-applier"
+      children: []
+    - id: "00-project-room/04-career-system/07-applier/07-feedback-flywheel"
+      type: feature
+      lifecycle: backlog
+      owner: fullstack
+      parent: "00-project-room/04-career-system/07-applier"
+      children: []
+    - id: "00-project-room/04-career-system/08-human-gate-tracker"
+      type: sub-epic
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system"
+      children:
+        - "00-project-room/04-career-system/08-human-gate-tracker/01-application-state"
+        - "00-project-room/04-career-system/08-human-gate-tracker/02-career-dashboard-views"
+        - "00-project-room/04-career-system/08-human-gate-tracker/03-interview-prep"
+        - "00-project-room/04-career-system/08-human-gate-tracker/04-followup-cadence"
+    - id: "00-project-room/04-career-system/08-human-gate-tracker/01-application-state"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/08-human-gate-tracker"
+      children: []
+    - id: "00-project-room/04-career-system/08-human-gate-tracker/02-career-dashboard-views"
+      type: feature
+      lifecycle: planning
+      owner: frontend
+      parent: "00-project-room/04-career-system/08-human-gate-tracker"
+      children: []
+    - id: "00-project-room/04-career-system/08-human-gate-tracker/03-interview-prep"
+      type: feature
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system/08-human-gate-tracker"
+      children: []
+    - id: "00-project-room/04-career-system/08-human-gate-tracker/04-followup-cadence"
+      type: feature
+      lifecycle: planning
+      owner: backend
+      parent: "00-project-room/04-career-system/08-human-gate-tracker"
+      children: []

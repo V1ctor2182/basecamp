@@ -1,0 +1,22 @@
+spec_id: "intent-career-system-001"
+type: intent
+state: active
+intent:
+  summary: "AI 求职自动化系统 — 多简历定制、AI 评分、半自动填表、全本地数据"
+  detail: |
+    个人向的端到端求职自动化系统，集成进 learn-dashboard。核心能力：(1) 找岗位自动化（Finder：扫 Greenhouse/Ashby/Lever API + GitHub 社区 repo + 手动粘）；(2) AI 评估 + 两阶段打分（Evaluator：Haiku 快评 + Sonnet 深评，产出 Block A-G 完整报告）；(3) 多简历针对 JD 定制（CV Engine：backend/applied-ai/fullstack 等多份 base resume，Google Docs 同步，Tailor Engine 改写 + Renderer 产出 PDF）；(4) ATS 表单半自动填（Applier：Mode 1 Simplify Hybrid 复制粘贴 / Mode 2 Playwright 全自动）；(5) 申请追踪 + follow-up + 面试准备（Tracker）；(6) 永远不自动 Submit — Human Gate 在每个关键节点（接 Simplify、Tailor 产出、Apply draft）都需要用户审批。所有数据本地 data/career/，不上云。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: epic
+  domain: "04-career-system"
+  tags: [epic, career, automation, ai]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/README.md"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"
