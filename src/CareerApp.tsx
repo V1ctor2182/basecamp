@@ -1,4 +1,5 @@
-import { Link, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Briefcase } from 'lucide-react'
 import CareerNav from './career/CareerNav'
 import Overview from './career/Overview'
@@ -16,7 +17,30 @@ import Narrative from './career/settings/Narrative'
 import Resumes from './career/settings/Resumes'
 import './career.css'
 
+const LAST_TAB_KEY = 'career-last-tab'
+const VALID_TABS = ['overview', 'pipeline', 'shortlist', 'applied', 'prep', 'reports', 'settings']
+
+function readLastTab(): string {
+  const raw = localStorage.getItem(LAST_TAB_KEY)
+  return raw && VALID_TABS.includes(raw) ? raw : 'overview'
+}
+
+function RootRedirect() {
+  return <Navigate to={readLastTab()} replace />
+}
+
 export default function CareerApp() {
+  const location = useLocation()
+
+  // Persist last top-level tab whenever route changes
+  useEffect(() => {
+    const match = location.pathname.match(/^\/career\/([^/]+)/)
+    const tab = match?.[1]
+    if (tab && VALID_TABS.includes(tab)) {
+      localStorage.setItem(LAST_TAB_KEY, tab)
+    }
+  }, [location.pathname])
+
   return (
     <div className="career">
       <header className="c-header">
@@ -33,7 +57,7 @@ export default function CareerApp() {
 
       <main className="c-body">
         <Routes>
-          <Route index element={<Navigate to="overview" replace />} />
+          <Route index element={<RootRedirect />} />
           <Route path="overview" element={<Overview />} />
           <Route path="pipeline" element={<Pipeline />} />
           <Route path="shortlist" element={<Shortlist />} />

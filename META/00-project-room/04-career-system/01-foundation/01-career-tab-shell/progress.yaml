@@ -95,22 +95,30 @@ milestones:
 
   - id: "m4-entry-point-and-polish"
     name: "LearnApp 入口 + 导航状态持久化 + 响应式 polish"
-    status: pending
+    status: completed
     estimated_files:
       - "src/LearnApp.tsx"
       - "src/CareerApp.tsx"
       - "src/career.css"
+    actual_files:
+      - "src/LearnApp.tsx"
+      - "src/CareerApp.tsx"
+      - "src/career.css"
     estimated_lines: 50
+    actual_lines: 75   # 10 LearnApp + 22 CareerApp + 42 css responsive
     depends_on: ["m3-settings-nested"]
     complexity_flags: []
     open_questions: []
+    commit_hash: "TBD"
     description: |
-      LearnApp.tsx sidebar 在现有 "Work Tracker" link 下方加 "Career" Link (Briefcase
-      图标 + "Career" 文字)。CareerApp 加 localStorage 持久化 lastCareerTab，空路径访问
-      /career 时 redirect 到上次 tab 而不是默认 overview。响应式：窄屏 (max-width
-      768px) 时 settings sidebar 折叠成 drawer / 顶部选择器。完善 career.css active
-      state / hover 样式 / 颜色对比度。
+      LearnApp.tsx sidebar 在 "Work Tracker" 下方加 "Career" Link (Briefcase icon
+      + "Career" 文字)，复用 sidebar-tracker-link class 自动一致样式。CareerApp
+      加 useEffect 监听 location 变化把 top-level tab 存 localStorage (key
+      career-last-tab)；index Route 的 RootRedirect 从 localStorage 读 lastTab
+      redirect（fallback overview）。VALID_TABS 白名单防篡改。响应式 @media
+      max-width 768px：settings sidebar 从 220px 列转为横向 pill bar +
+      overflow-x scroll，header/body padding 收缩，nav tab 字号缩小。
 current_sprint: "Sprint 1 — Foundation"
 blockers: []
-status_note: "m1 ✅ + m2 ✅ + m3 ✅ completed. 下一个: m4-entry-point-and-polish (LearnApp 入口 + 持久化 + 响应式)"
+status_note: "🎉 所有 4 milestones 完成。Room 进入 active lifecycle。下一个 Room: 01-foundation/02-career-data-layout"
 last_updated: "2026-04-23"

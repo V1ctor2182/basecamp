@@ -167,7 +167,7 @@ tree:
         - "00-project-room/04-career-system/01-foundation/03-llm-cost-observability"
     - id: "00-project-room/04-career-system/01-foundation/01-career-tab-shell"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: frontend
       parent: "00-project-room/04-career-system/01-foundation"
       children: []

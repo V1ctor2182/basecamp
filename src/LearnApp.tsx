@@ -12,7 +12,7 @@ import {
   Search, Save, Plus, FolderPlus, Eye, Code2,
   Columns2, Layers, Minus, ZoomIn, ZoomOut, Maximize2,
   Moon, Sun, Pencil, Trash2, FolderInput, PanelLeftClose, PanelLeftOpen,
-  Activity, Upload, HardDrive, X
+  Activity, Upload, HardDrive, X, Briefcase
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import './learn.css'
@@ -623,6 +623,11 @@ function LearnApp() {
             <Link to="/tracker" className="sidebar-tracker-link">
               <Activity size={15} />
               <span>Work Tracker</span>
+            </Link>
+
+            <Link to="/career" className="sidebar-tracker-link">
+              <Briefcase size={15} />
+              <span>Career</span>
             </Link>
 
             <div className="sidebar-dirs">

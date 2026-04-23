@@ -3,9 +3,9 @@ room:
   name: "Career Tab Shell"
   parent: "00-project-room/04-career-system/01-foundation"
   type: feature
-  lifecycle: planning
+  lifecycle: active
   created_at: "2026-04-22"
-  updated_at: "2026-04-22"
+  updated_at: "2026-04-23"
   owner: frontend
   contributors: []
   prompt_test:

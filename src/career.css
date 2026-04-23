@@ -191,3 +191,44 @@
 .c-settings-content {
   min-width: 0;
 }
+
+/* Responsive: narrow screens */
+@media (max-width: 768px) {
+  .c-header {
+    padding: 12px 16px;
+  }
+
+  .c-body {
+    padding: 16px;
+  }
+
+  .c-nav {
+    padding: 0 8px;
+  }
+
+  .c-nav-tab {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  /* Settings: sidebar collapses to horizontal pill bar on top */
+  .c-settings-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .c-settings-sidebar {
+    flex-direction: row;
+    gap: 4px;
+    padding: 6px;
+    position: static;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .c-settings-sidebar-link {
+    flex-shrink: 0;
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+}
