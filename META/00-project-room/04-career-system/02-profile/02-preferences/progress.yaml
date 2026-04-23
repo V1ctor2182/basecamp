@@ -191,7 +191,7 @@ milestones:
     depends_on: ["m2-preferences-form-static"]
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "b4ec665"
     description: |
       在 Preferences.tsx 加 Section 7 Hard Filters + Preview dry-run。
 
@@ -286,7 +286,7 @@ commits:
       - "change-2026-04-23-m2-preferences-form-static (created)"
     milestones_affected:
       - "m2-preferences-form-static (→ completed)"
-  - hash: "TBD"
+  - hash: "b4ec665"
     date: "2026-04-23"
     message: "[04-career-system/02-profile/02-preferences] m3: Section 7 Hard Filters (8 sub-sections 短路顺序) + Preview stub (ROOM COMPLETE)"
     files_changed: 6

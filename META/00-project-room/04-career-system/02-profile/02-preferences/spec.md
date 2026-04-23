@@ -18,7 +18,7 @@ preferences.yml CRUD + Settings → Preferences 页（含 hard_filters 编辑器
 
 - ✅ **m1-preferences-backend** (`0b5b617`, 220 lines) — Backend GET/PUT + Zod PreferencesSchema (permissive) + defaultPreferences()
 - ✅ **m2-preferences-form-static** (`e17f096`, 864 lines) — 前 6 Section ATS 风格表单 + shared `TagInput.tsx` + ats-form.css 追加样式
-- ✅ **m3-hard-filters-editor** (TBD, 495 lines, ROOM COMPLETE) — Section 7 Hard Filters (8 sub-sections, ordinal ①–⑧) + Preview dry-run bar + backend stub API
+- ✅ **m3-hard-filters-editor** (`b4ec665`, 495 lines, ROOM COMPLETE) — Section 7 Hard Filters (8 sub-sections, ordinal ①–⑧) + Preview dry-run bar + backend stub API
 
 ## Backend API
 
