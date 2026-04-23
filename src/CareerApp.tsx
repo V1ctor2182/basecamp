@@ -7,17 +7,14 @@ import Shortlist from './career/Shortlist'
 import Applied from './career/Applied'
 import Prep from './career/Prep'
 import Reports from './career/Reports'
+import SettingsLayout from './career/settings/SettingsLayout'
+import Identity from './career/settings/Identity'
+import Preferences from './career/settings/Preferences'
+import Portals from './career/settings/Portals'
+import QABank from './career/settings/QABank'
+import Narrative from './career/settings/Narrative'
+import Resumes from './career/settings/Resumes'
 import './career.css'
-
-function SettingsPlaceholder() {
-  return (
-    <div className="c-page">
-      <h2>Settings</h2>
-      <p className="c-page-todo">Identity / Preferences / Portals / QA Bank / Narrative / Resumes 子页。</p>
-      <p className="c-page-empty">Coming in m3.</p>
-    </div>
-  )
-}
 
 export default function CareerApp() {
   return (
@@ -45,7 +42,16 @@ export default function CareerApp() {
           <Route path="prep/:company" element={<Prep />} />
           <Route path="reports" element={<Reports />} />
           <Route path="reports/:id" element={<Reports />} />
-          <Route path="settings/*" element={<SettingsPlaceholder />} />
+          <Route path="settings" element={<SettingsLayout />}>
+            <Route index element={<Navigate to="identity" replace />} />
+            <Route path="identity" element={<Identity />} />
+            <Route path="preferences" element={<Preferences />} />
+            <Route path="portals" element={<Portals />} />
+            <Route path="qa-bank" element={<QABank />} />
+            <Route path="narrative" element={<Narrative />} />
+            <Route path="resumes" element={<Resumes />} />
+            <Route path="*" element={<Navigate to="identity" replace />} />
+          </Route>
           <Route path="*" element={<Navigate to="overview" replace />} />
         </Routes>
       </main>

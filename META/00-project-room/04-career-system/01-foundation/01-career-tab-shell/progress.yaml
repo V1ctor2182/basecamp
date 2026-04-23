@@ -61,7 +61,7 @@ milestones:
 
   - id: "m3-settings-nested"
     name: "Settings 嵌套子路由 + 左侧 sidebar + 6 子页占位"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/settings/SettingsLayout.tsx"
       - "src/career/settings/Identity.tsx"
@@ -70,17 +70,28 @@ milestones:
       - "src/career/settings/QABank.tsx"
       - "src/career/settings/Narrative.tsx"
       - "src/career/settings/Resumes.tsx"
+    actual_files:
+      - "src/career/settings/SettingsLayout.tsx"
+      - "src/career/settings/Identity.tsx"
+      - "src/career/settings/Preferences.tsx"
+      - "src/career/settings/Portals.tsx"
+      - "src/career/settings/QABank.tsx"
+      - "src/career/settings/Narrative.tsx"
+      - "src/career/settings/Resumes.tsx"
+      - "src/CareerApp.tsx"
+      - "src/career.css"
     estimated_lines: 100
+    actual_lines: 160
     depends_on: ["m2-top-level-tabs"]
     complexity_flags: []
     open_questions: []
+    commit_hash: "TBD"
     description: |
-      SettingsLayout 组件：左 sidebar 列出 6 个 sub-route (Identity / Preferences /
-      Portals / QA Bank / Narrative / Resumes)，主区域 <Outlet />。6 个占位子组件各
-      一个文件，结构简单（标题 + TODO 提示 + 对应 data/career/ 文件路径）。CareerApp.tsx
-      配 /career/settings/* → SettingsLayout, 内部 /identity → Identity, ...。
-      /career/settings 无 sub-route 时默认 redirect /settings/identity。active sub-route
-      样式用 useMatch 同步。
+      SettingsLayout 组件：左 sidebar NavLink 列出 6 sub-route + <Outlet />。
+      6 个占位子组件各一个文件（标题 + todo + empty + spec ref）。CareerApp.tsx
+      用 <Route path="settings" element={<SettingsLayout/>}> 嵌套 Routes，内部
+      index redirect identity + 6 sub paths + * fallback identity。CSS grid
+      2 列 (220px sidebar + 1fr content), sticky sidebar, active 高亮。
 
   - id: "m4-entry-point-and-polish"
     name: "LearnApp 入口 + 导航状态持久化 + 响应式 polish"
@@ -101,5 +112,5 @@ milestones:
       state / hover 样式 / 颜色对比度。
 current_sprint: "Sprint 1 — Foundation"
 blockers: []
-status_note: "m1 ✅ + m2 ✅ completed. 下一个: m3-settings-nested (Settings 嵌套 + 6 子页)"
+status_note: "m1 ✅ + m2 ✅ + m3 ✅ completed. 下一个: m4-entry-point-and-polish (LearnApp 入口 + 持久化 + 响应式)"
 last_updated: "2026-04-23"
