@@ -1,0 +1,95 @@
+/* Career System — learn-dashboard integration shell */
+
+.career {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: #fafafa;
+  color: #1a1a1a;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Header */
+.c-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: #fff;
+  border-bottom: 1px solid #e5e5e5;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.c-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.c-header-left h1 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: #0a0a0a;
+}
+
+.c-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: #666;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.c-back:hover {
+  background: #f0f0f0;
+  color: #0a0a0a;
+}
+
+/* Body */
+.c-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+}
+
+.c-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #666;
+  text-align: center;
+}
+
+.c-placeholder h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.c-placeholder p {
+  margin: 0;
+  max-width: 480px;
+  line-height: 1.5;
+}
+
+.c-coming-soon {
+  margin-top: 12px !important;
+  padding: 4px 12px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #888;
+  letter-spacing: 0.5px;
+}

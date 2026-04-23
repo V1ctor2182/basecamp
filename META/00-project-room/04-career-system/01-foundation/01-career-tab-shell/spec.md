@@ -16,6 +16,17 @@ learn-dashboard 新增 /career tab 壳 + 子路由骨架
 
 - [intent-career-tab-shell-001](specs/intent-career-tab-shell-001.yaml) — learn-dashboard 新增 /career tab 壳 + 子路由骨架
 
+## Milestones
+
+Planned by plan-milestones skill on 2026-04-23 (Sprint 1 — Foundation, ~350 行, 4 milestones):
+
+- ✅ **m1-careerapp-shell** — CareerApp shell + /career 路由注册 + 顶部 header (实际 130 行, 3 files)
+- ⬜ **m2-top-level-tabs** — 6 顶级子路由 + Tab 导航 (~120 行)
+- ⬜ **m3-settings-nested** — Settings 嵌套子路由 + 左侧 sidebar + 6 子页占位 (~100 行)
+- ⬜ **m4-entry-point-and-polish** — LearnApp 入口 + 导航状态持久化 + 响应式 polish (~50 行)
+
+Status: 1/4 milestones completed. See [progress.yaml](progress.yaml) for details.
+
 ---
 
 _Generated 2026-04-22 by room-init._

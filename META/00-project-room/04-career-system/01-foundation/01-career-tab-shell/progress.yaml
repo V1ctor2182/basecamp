@@ -1,5 +1,93 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-careerapp-shell"
+    name: "CareerApp shell + /career 路由注册 + 顶部 header"
+    status: completed
+    estimated_files:
+      - "src/CareerApp.tsx"
+      - "src/App.tsx"
+      - "src/career.css"
+    actual_files:
+      - "src/CareerApp.tsx"
+      - "src/App.tsx"
+      - "src/career.css"
+    estimated_lines: 80
+    actual_lines: 130   # 40 TSX + 87 CSS + 3 App.tsx
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "3d38eb9"
+    description: |
+      新建 src/CareerApp.tsx 作为 /career/* 的顶层 app 壳（类似 LearnApp / TrackerApp），
+      内部用 BrowserRouter nested Routes。修改 src/App.tsx 注册 <Route path="/career/*"
+      element={<CareerApp />}>。Header 参考 TrackerApp 风格：<Link to="/"> "← Back to Learn"
+      + Briefcase 图标 + "Career" 标题 + last updated 预留位。正文先放 "Career System —
+      Coming Soon" 占位。新建 src/career.css 放基础样式（header / layout）。
+
+  - id: "m2-top-level-tabs"
+    name: "6 顶级子路由 + Tab 导航"
+    status: pending
+    estimated_files:
+      - "src/career/CareerNav.tsx"
+      - "src/career/Overview.tsx"
+      - "src/career/Pipeline.tsx"
+      - "src/career/Shortlist.tsx"
+      - "src/career/Applied.tsx"
+      - "src/career/Prep.tsx"
+      - "src/CareerApp.tsx"
+    estimated_lines: 120
+    depends_on: ["m1-careerapp-shell"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      CareerNav 组件渲染水平 tab bar（Overview / Pipeline / Shortlist / Applied / Prep /
+      Settings），active state 用 useMatch。CareerApp.tsx 的 Routes 加 6 个顶级：
+      /career/overview → Overview, /pipeline → Pipeline, /shortlist → Shortlist,
+      /applied → Applied, /prep/:company? → Prep, /settings/* → SettingsLayout
+      (m3 做)。/career 默认 redirect /career/overview。Dynamic route /prep/:company?
+      无参数时显示 empty state + 示例公司列表。5 个占位子组件结构简单：标题 +
+      "TODO: {page} content" + 留 ref 到对应架构模块。
+
+  - id: "m3-settings-nested"
+    name: "Settings 嵌套子路由 + 左侧 sidebar + 6 子页占位"
+    status: pending
+    estimated_files:
+      - "src/career/settings/SettingsLayout.tsx"
+      - "src/career/settings/Identity.tsx"
+      - "src/career/settings/Preferences.tsx"
+      - "src/career/settings/Portals.tsx"
+      - "src/career/settings/QABank.tsx"
+      - "src/career/settings/Narrative.tsx"
+      - "src/career/settings/Resumes.tsx"
+    estimated_lines: 100
+    depends_on: ["m2-top-level-tabs"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      SettingsLayout 组件：左 sidebar 列出 6 个 sub-route (Identity / Preferences /
+      Portals / QA Bank / Narrative / Resumes)，主区域 <Outlet />。6 个占位子组件各
+      一个文件，结构简单（标题 + TODO 提示 + 对应 data/career/ 文件路径）。CareerApp.tsx
+      配 /career/settings/* → SettingsLayout, 内部 /identity → Identity, ...。
+      /career/settings 无 sub-route 时默认 redirect /settings/identity。active sub-route
+      样式用 useMatch 同步。
+
+  - id: "m4-entry-point-and-polish"
+    name: "LearnApp 入口 + 导航状态持久化 + 响应式 polish"
+    status: pending
+    estimated_files:
+      - "src/LearnApp.tsx"
+      - "src/CareerApp.tsx"
+      - "src/career.css"
+    estimated_lines: 50
+    depends_on: ["m3-settings-nested"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      LearnApp.tsx sidebar 在现有 "Work Tracker" link 下方加 "Career" Link (Briefcase
+      图标 + "Career" 文字)。CareerApp 加 localStorage 持久化 lastCareerTab，空路径访问
+      /career 时 redirect 到上次 tab 而不是默认 overview。响应式：窄屏 (max-width
+      768px) 时 settings sidebar 折叠成 drawer / 顶部选择器。完善 career.css active
+      state / hover 样式 / 颜色对比度。
+current_sprint: "Sprint 1 — Foundation"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "m1 ✅ completed. 下一个: m2-top-level-tabs (Tab 导航 + 5 占位)"
+last_updated: "2026-04-23"
