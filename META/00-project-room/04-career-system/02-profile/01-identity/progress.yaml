@@ -1,5 +1,104 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-identity-backend"
+    name: "Backend GET/PUT /api/career/identity + zod schema + YAML IO"
+    status: completed
+    actual_lines: 90
+    actual_files:
+      - "server.mjs"
+      - "package.json"
+    estimated_files:
+      - "server.mjs"
+      - "package.json"     # +js-yaml direct dep
+    estimated_lines: 80
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    commit_hash: null
+    description: |
+      data/career/identity.yml 的 REST API + 结构化验证。
+
+      实现:
+      - npm install js-yaml (从 transitive 变直接依赖)
+      - server.mjs 加:
+        - IDENTITY_FILE = path.join(CAREER_DIR, 'identity.yml')
+        - IdentitySchema (zod): name, email, phone, links {linkedin, github,
+          portfolio}, location {current_city, current_country},
+          legal {visa_status, visa_expiration, needs_sponsorship_now,
+          needs_sponsorship_future, authorized_us_yes_no, citizenship},
+          education [{school, degree, graduation, gpa?}]+,
+          languages [{lang, level}]+
+        - Q4 决策: 全部必填（除了 gpa 可选）—— Applier 需要完整 identity
+        - readIdentity() — 读 yaml + zod.parse + 文件不存在返 {}（UI 首次显示空表单）
+        - writeIdentity(obj) — zod.parse + yaml.dump + 原子写入
+        - GET /api/career/identity — 返回当前或空 {}
+        - PUT /api/career/identity — 验证 + 写入，400 on zod error
+
+      验收: curl PUT + GET 往返；zod 拒绝不完整 identity。
+
+  - id: "m2-identity-form-ui"
+    name: "Settings → Identity 页 ATS 风格结构化表单"
+    status: pending
+    estimated_files:
+      - "src/career/settings/Identity.tsx"
+      - "src/career/settings/ats-form.css"
+    estimated_lines: 280
+    depends_on: ["m1-identity-backend"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: null
+    description: |
+      替换 Identity.tsx 占位为真实 ATS 风格表单。
+
+      **设计：模仿真实 application form 的样式** (Q1=a + Q2=a + ATS 风格):
+        - Label 在字段上方 + 星号标记必填
+        - Field 是白底灰边框 + focus 蓝边 + 圆角小
+        - Error 状态红边 + 下方红字 error 消息
+        - Placeholder 示例值 (灰色)
+        - Sections 有标题 + 说明文字，分隔线明显
+        - Submit 按钮深色背景 + disabled 态灰色 (全部必填通过才亮)
+        - Typography: system-ui sans-serif, 13px labels, 14px inputs
+
+      分 6 Section:
+        1. Personal Information — name / email / phone
+        2. Links — linkedin / github / portfolio (URL format validation)
+        3. Location — current_city / current_country
+        4. Work Authorization (Legal) — visa_status / expiration /
+           sponsorship (now/future radio) / authorized_us (radio) /
+           citizenship
+        5. Education — 加减行 (school, degree, graduation year, GPA optional)
+        6. Languages — 加减行 (lang, level dropdown: Native/Fluent/Conversational)
+
+      状态管理:
+        - useEffect 初始加载 GET /api/career/identity
+        - 每字段 onChange 更新 state + 行内 validation
+        - Save 按钮 disabled until all required 填完 + 格式正确
+        - Save PUT → toast (成功 "Saved" / 失败展示 zod 错误)
+        - beforeunload event 提示 unsaved changes
+
+      新 CSS 文件 ats-form.css (可复用 — 后续 preferences/qa-bank/narrative 都用)：
+        - .af-form / .af-section / .af-section-title / .af-section-desc
+        - .af-field / .af-label / .af-required-star / .af-input / .af-select
+        - .af-error / .af-help-text
+        - .af-row (for array edit)
+        - .af-btn-primary / .af-btn-add / .af-btn-remove
+        - .af-submit-bar (sticky bottom)
+
+      验收: 打开 /career/settings/identity，填写表单，点 Save → toast 成功 →
+      重启 server → 重新加载看到刚填的值；故意清空 name → 不通过 validation →
+      Save 按钮灰色 + email 输入 "abc" → inline error "invalid email"。
+
+commits:
+  - hash: "TBD"
+    date: "2026-04-23"
+    message: "[04-career-system/02-profile/01-identity] m1: Backend GET/PUT /api/career/identity + Zod IdentitySchema + yaml IO"
+    files_changed: 3
+    specs_affected:
+      - "change-2026-04-23-m1-identity-backend (created)"
+    milestones_affected:
+      - "m1-identity-backend (→ completed)"
+
+current_sprint: "Sprint 2 — Profile"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 50
+status_note: "m1 ✅ completed (backend)。下一个: m2-identity-form-ui (ATS 风格 6-section 表单)"
+last_updated: "2026-04-23"

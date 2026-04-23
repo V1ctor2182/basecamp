@@ -1,0 +1,58 @@
+spec_id: "change-2026-04-23-m1-identity-backend"
+type: change
+state: active
+intent:
+  summary: "m1: GET/PUT /api/career/identity + IdentitySchema (zod nested) + yaml IO"
+  detail: |
+    Files modified:
+      - server.mjs (+90 行):
+        - import yaml from 'js-yaml'
+        - IDENTITY_FILE = data/career/identity.yml
+        - EducationEntrySchema (school/degree/graduation required, gpa optional)
+        - LanguageEntrySchema (lang + level enum: Native/Fluent/Conversational/Basic)
+        - IdentitySchema (zod nested): name/email/phone + links{3 URLs}
+          + location{2} + legal{6, 含 visa + sponsorship + authorized +
+          citizenship} + education[].min(1) + languages[].min(1)
+        - readIdentity() — yaml.load + 文件不存在返 null
+        - writeIdentity(obj) — zod.parse + yaml.dump + 写入
+        - GET /api/career/identity — 返 null 或 identity
+        - PUT /api/career/identity — 400 on zod error / 200 on success
+
+    Dependencies:
+      - js-yaml (从 transitive → 直接依赖)
+
+    Smoke tests (curl 5 cases, all passed):
+      1. GET empty file → null ✓
+      2. PUT 缺字段 → 400 + zod issues (email/phone/links/location 等 undefined) ✓
+      3. PUT 完整 identity (Chenyang Zhang 示例) → 200 + parsed response ✓
+      4. GET 往返 → 读到 PUT 的值 ✓
+      5. 文件内容 yaml 格式正确 (嵌套 + 数组 + 字符串引号正确处理) ✓
+      6. git check-ignore identity.yml → IGNORED ✓（敏感文件保护正确）
+
+    Design decisions (locked in plan-milestones):
+      - Q4 b: 全部必填 (except education.gpa). education/languages array
+        require min(1) — Applier 需要至少一条学历/语言才能填 ATS。
+      - visa_expiration 保持 string（未 regex 约束 YYYY-MM-DD，UI 会前端 enforce）
+      - level 用 z.enum（4 值），其他字符串 z.string().min(1)
+
+    下游 m2 (frontend ATS 风格表单) 将消费本 endpoint。
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, backend, zod, yaml, identity]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit TBD"
+relations:
+  - "implements intent-identity-001 (m1/2)"
+  - "consumes data/career/identity.yml (gitignored, from 02-career-data-layout)"
+  - "reuses zod pattern from 03-llm-cost-observability m1"
+anchors:
+  - file: "server.mjs"
+    symbols: ["IdentitySchema", "EducationEntrySchema", "LanguageEntrySchema", "readIdentity", "writeIdentity", "/api/career/identity"]
+created_at: "2026-04-23"
+updated_at: "2026-04-23"

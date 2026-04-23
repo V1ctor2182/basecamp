@@ -1,10 +1,10 @@
 milestones: []
-current_sprint: "Sprint 2 — Profile (next)"
+current_sprint: "Sprint 2 — Profile"
 blockers: []
-completion: 13  # avg(100, 0, 0, 0, 0, 0, 0, 0) = 12.5 across 8 sub-epics
+completion: 14  # avg(100, 13, 0, 0, 0, 0, 0, 0) = 14.1 across 8 sub-epics
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
-  "02-profile": 0
+  "02-profile": 13      # 🔄 Sprint 2 进行中 (01-identity m1/2 完成)
   "03-cv-engine": 0
   "04-renderer": 0
   "05-finder": 0

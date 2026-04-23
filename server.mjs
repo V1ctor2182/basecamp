@@ -7,6 +7,7 @@ import { execSync } from 'child_process';
 import path from 'path';
 import os from 'os';
 import { z } from 'zod';
+import yaml from 'js-yaml';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const app = express();
@@ -23,6 +24,7 @@ const PR_STATS_FILE = path.join(DATA_DIR, 'pr-stats.json');
 // Career system data
 const CAREER_DIR = path.join(DATA_DIR, 'career');
 const LLM_COSTS_FILE = path.join(CAREER_DIR, 'llm-costs.jsonl');
+const IDENTITY_FILE = path.join(CAREER_DIR, 'identity.yml');
 
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(REPOS_FILE)) writeFileSync(REPOS_FILE, '[]');
@@ -1146,6 +1148,89 @@ app.get('/api/career/llm-costs', async (req, res) => {
     if (defaultMode) return res.json(aggregateCosts(records));
     res.json(records);
   } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Career System: Identity (你是谁) — data/career/identity.yml
+// See META/.../02-profile/01-identity
+// ─────────────────────────────────────────────────────────────
+
+const EducationEntrySchema = z.object({
+  school: z.string().min(1),
+  degree: z.string().min(1),
+  graduation: z.string().min(1),    // "2026" or "May 2026" — free text
+  gpa: z.string().optional(),       // only optional field
+});
+
+const LanguageEntrySchema = z.object({
+  lang: z.string().min(1),
+  level: z.enum(['Native', 'Fluent', 'Conversational', 'Basic']),
+});
+
+const IdentitySchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+  phone: z.string().min(1),
+  links: z.object({
+    linkedin: z.string().url(),
+    github: z.string().url(),
+    portfolio: z.string().url(),
+  }),
+  location: z.object({
+    current_city: z.string().min(1),
+    current_country: z.string().min(1),
+  }),
+  legal: z.object({
+    visa_status: z.string().min(1),
+    visa_expiration: z.string().min(1),
+    needs_sponsorship_now: z.boolean(),
+    needs_sponsorship_future: z.boolean(),
+    authorized_us_yes_no: z.boolean(),
+    citizenship: z.string().min(1),
+  }),
+  education: z.array(EducationEntrySchema).min(1),
+  languages: z.array(LanguageEntrySchema).min(1),
+});
+
+async function readIdentity() {
+  try {
+    const raw = await fs.readFile(IDENTITY_FILE, 'utf-8');
+    if (!raw.trim()) return null;
+    return yaml.load(raw);
+  } catch (e) {
+    if (e.code === 'ENOENT') return null;
+    throw e;
+  }
+}
+
+async function writeIdentity(obj) {
+  const parsed = IdentitySchema.parse(obj);
+  const yamlText = yaml.dump(parsed, { lineWidth: 120, noRefs: true });
+  await fs.writeFile(IDENTITY_FILE, yamlText, 'utf-8');
+  return parsed;
+}
+
+// GET — returns current identity or null if not yet created
+app.get('/api/career/identity', async (_req, res) => {
+  try {
+    const identity = await readIdentity();
+    res.json(identity);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT — replaces identity fully (zod-validated)
+app.put('/api/career/identity', async (req, res) => {
+  try {
+    const saved = await writeIdentity(req.body);
+    res.json(saved);
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid identity', details: e.issues });
+    }
     res.status(500).json({ error: e.message });
   }
 });

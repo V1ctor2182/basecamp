@@ -1,5 +1,11 @@
 milestones: []
-current_sprint: null
+current_sprint: "Sprint 2 — Profile"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 13   # avg(50, 0, 0, 0) = 12.5 across 4 features
+children_completion:
+  "01-identity": 50
+  "02-preferences": 0
+  "03-narrative-proof": 0
+  "04-qa-bank": 0
+status_note: "Sprint 2 进行中。01-identity 50% (m1 backend 完成, m2 form UI 待开)。其他 3 features 未启动。"
+last_updated: "2026-04-23"
