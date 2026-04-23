@@ -1,0 +1,39 @@
+spec_id: "change-2026-04-23-m3-settings-nested"
+type: change
+state: active
+intent:
+  summary: "m3: Settings 嵌套子路由 + 左侧 sidebar + 6 子页占位"
+  detail: |
+    Files created (7):
+      - src/career/settings/SettingsLayout.tsx (30 行): 左 sidebar NavLink
+        列出 6 sub-tabs (Icon + 文字) + <Outlet />。className 函数处理 active
+      - src/career/settings/{Identity,Preferences,Portals,QABank,Narrative,
+        Resumes}.tsx (各 9-10 行): 6 占位子页，结构一致（标题 + todo + empty
+        + spec ref 到对应 02-profile / 03-cv-engine 等模块）
+    Files modified:
+      - src/CareerApp.tsx (+15 行): 删 SettingsPlaceholder 占位函数 + 替换
+        <Route path="settings/*" element={<SettingsPlaceholder />}> 为
+        <Route path="settings" element={<SettingsLayout />}> 嵌套：index
+        redirect identity + 6 sub-paths + * fallback identity
+      - src/career.css (+50 行): .c-settings-layout (grid 220px+1fr) +
+        sticky sidebar (top: 80px) + .c-settings-sidebar-link + .active
+        高亮（深色背景）
+    Verification: npx tsc --noEmit 通过。
+    Dependencies introduced: 无。
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m3, frontend, nested-routes, settings]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit 81b75e9 (pinned by cc07cf0)"
+relations:
+  - "implements intent-career-tab-shell-001 (m3/4)"
+  - "depends_on change-2026-04-23-m2-top-level-tabs"
+anchors: []
+created_at: "2026-04-23"
+updated_at: "2026-04-23"

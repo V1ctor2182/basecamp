@@ -119,7 +119,18 @@ milestones:
       portals.yml / qa-bank/legal.yml 三个真实文件出现（从 .example 复制）；
       git status 不 track 这 3 个真实文件（因为它们是 committed 的 .example
       的副本，本身是用户数据应 gitignored — 通过上面的 gitignore 规则保证）。
+commits:
+  - hash: "fe23daf"
+    date: "2026-04-23"
+    message: "[04-career-system/01-foundation/02-career-data-layout] m1: data/career/ 目录骨架 + .gitignore 白名单 + 顶层 README"
+    files_changed: 12
+    specs_affected:
+      - "change-2026-04-23-m1-dirs-and-gitignore (created)"
+    milestones_affected:
+      - "m1-dirs-and-gitignore (→ completed)"
+
 current_sprint: "Sprint 1 — Foundation"
 blockers: []
+completion: 50   # 1/2 milestones
 status_note: "m1 ✅ completed. 下一个: m2-readmes-and-examples (子 README + 模板 + init 脚本)"
 last_updated: "2026-04-23"

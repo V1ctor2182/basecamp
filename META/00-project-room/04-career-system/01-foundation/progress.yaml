@@ -1,5 +1,10 @@
 milestones: []
-current_sprint: null
+current_sprint: "Sprint 1 — Foundation"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 50   # avg(100, 50, 0) = 50 across 3 features
+children_completion:
+  "01-career-tab-shell": 100
+  "02-career-data-layout": 50
+  "03-llm-cost-observability": 0
+status_note: "Sprint 1 进行中。01-career-tab-shell 100% 完成 (room active)，02-career-data-layout 50% (m1 完成)，03-llm-cost-observability 0% (未启动)。"
+last_updated: "2026-04-23"

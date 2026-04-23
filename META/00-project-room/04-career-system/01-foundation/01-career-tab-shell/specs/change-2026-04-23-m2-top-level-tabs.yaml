@@ -1,0 +1,40 @@
+spec_id: "change-2026-04-23-m2-top-level-tabs"
+type: change
+state: active
+intent:
+  summary: "m2: 6 顶级子路由 + NavLink Tab 导航 + 7 占位页 (含 dynamic route)"
+  detail: |
+    Files created (7):
+      - src/career/CareerNav.tsx (30 行): NavLink 水平 tab bar, 6 tabs 带
+        Icon + 文字, className 函数用 isActive prop 切换 c-nav-tab-active
+      - src/career/Overview.tsx / Pipeline.tsx / Shortlist.tsx / Applied.tsx
+        (各 8-10 行): 占位页 — 标题 + todo 描述 + spec ref
+      - src/career/Prep.tsx (20 行): dynamic route /prep/:company? + useParams
+        + empty state（无参数时显示 "尚无 Interview 状态公司"）
+      - src/career/Reports.tsx (20 行): 同 Prep，dynamic /reports/:id?
+    Files modified:
+      - src/CareerApp.tsx (+40 行): import 6 pages + <CareerNav> + 替换占位
+        body 为 <Routes>。7 Route + index redirect overview + * fallback
+        overview。prep + prep/:company 两条 Route 覆盖有/无参数。reports 同理。
+        settings/* 暂占位 (m3 替换)。
+      - src/career.css (+80 行): .c-nav (scrollable tab bar), .c-nav-tab +
+        hover + active, .c-page + .c-page-todo + .c-page-empty + .c-page-ref
+    Verification: npx tsc --noEmit 通过。
+    Dependencies introduced: 无。
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m2, frontend, router, navlink]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit 2304730 (pinned by 64e1cda)"
+relations:
+  - "implements intent-career-tab-shell-001 (m2/4)"
+  - "depends_on change-2026-04-23-m1-careerapp-shell"
+anchors: []
+created_at: "2026-04-23"
+updated_at: "2026-04-23"

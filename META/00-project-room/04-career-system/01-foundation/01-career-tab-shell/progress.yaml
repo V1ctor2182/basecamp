@@ -118,7 +118,44 @@ milestones:
       redirect（fallback overview）。VALID_TABS 白名单防篡改。响应式 @media
       max-width 768px：settings sidebar 从 220px 列转为横向 pill bar +
       overflow-x scroll，header/body padding 收缩，nav tab 字号缩小。
+commits:
+  - hash: "6f8de29"
+    date: "2026-04-23"
+    message: "[04-career-system/01-foundation/01-career-tab-shell] m1: add CareerApp shell + /career route + header"
+    files_changed: 5
+    specs_affected:
+      - "change-2026-04-23-m1-careerapp-shell (created)"
+    milestones_affected:
+      - "m1-careerapp-shell (→ completed)"
+  - hash: "2304730"
+    date: "2026-04-23"
+    message: "[04-career-system/01-foundation/01-career-tab-shell] m2: 6 顶级子路由 + Tab 导航 + 7 占位页"
+    files_changed: 11
+    specs_affected:
+      - "change-2026-04-23-m2-top-level-tabs (created)"
+    milestones_affected:
+      - "m2-top-level-tabs (→ completed)"
+  - hash: "81b75e9"
+    date: "2026-04-23"
+    message: "[04-career-system/01-foundation/01-career-tab-shell] m3: Settings 嵌套路由 + 左侧 sidebar + 6 子页占位"
+    files_changed: 11
+    specs_affected:
+      - "change-2026-04-23-m3-settings-nested (created)"
+    milestones_affected:
+      - "m3-settings-nested (→ completed)"
+  - hash: "844e192"
+    date: "2026-04-23"
+    message: "[04-career-system/01-foundation/01-career-tab-shell] m4: LearnApp 入口 + localStorage 持久化 + 响应式 polish"
+    files_changed: 7
+    specs_affected:
+      - "change-2026-04-23-m4-entry-point-and-polish (created)"
+      - "room.yaml (lifecycle: planning → active)"
+      - "_tree.yaml (lifecycle: planning → active)"
+    milestones_affected:
+      - "m4-entry-point-and-polish (→ completed, ROOM COMPLETE)"
+
 current_sprint: "Sprint 1 — Foundation"
 blockers: []
+completion: 100   # 4/4 milestones
 status_note: "🎉 所有 4 milestones 完成。Room 进入 active lifecycle。下一个 Room: 01-foundation/02-career-data-layout"
 last_updated: "2026-04-23"

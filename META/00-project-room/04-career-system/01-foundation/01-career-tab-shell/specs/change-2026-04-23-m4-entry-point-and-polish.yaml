@@ -1,0 +1,40 @@
+spec_id: "change-2026-04-23-m4-entry-point-and-polish"
+type: change
+state: active
+intent:
+  summary: "m4: LearnApp sidebar 入口 + localStorage 持久化 lastTab + 响应式 < 768px"
+  detail: |
+    Files modified:
+      - src/LearnApp.tsx (+8 行): lucide import 加 Briefcase；sidebar 在
+        "Work Tracker" 下方加 "Career" Link 复用 sidebar-tracker-link class
+      - src/CareerApp.tsx (+22 行): useEffect 监听 location 把 top-level tab
+        存 localStorage (key: career-last-tab); RootRedirect 组件从 LS 读
+        lastTab redirect (fallback overview); VALID_TABS 白名单防篡改
+      - src/career.css (+42 行): @media max-width: 768px — settings sidebar
+        grid 从 220px+1fr 转成 1fr (单列)，sidebar 变横向 pill bar +
+        overflow-x scroll，header/body padding 收缩，nav tab 字号缩小
+    Room 完成标记（最后一个 milestone）:
+      - room.yaml lifecycle: planning → active
+      - _tree.yaml 该 feature 节点 lifecycle: planning → active
+      - spec.md 全量 rewrite（4 milestones 汇总 + 完整 URL 空间 + 下游 feature
+        对接点）
+    Verification: npx tsc --noEmit 通过。Dev server 手工验证：LearnApp 有 Career
+      入口 / /career → redirect overview / 窄屏 settings 折叠正常。
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m4, room-complete, frontend, responsive, persistence]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit 844e192 (pinned by 379655b)"
+relations:
+  - "implements intent-career-tab-shell-001 (m4/4, room complete)"
+  - "depends_on change-2026-04-23-m3-settings-nested"
+  - "triggers room.yaml lifecycle: planning → active"
+anchors: []
+created_at: "2026-04-23"
+updated_at: "2026-04-23"
