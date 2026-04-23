@@ -1,0 +1,140 @@
+# preferences.yml — 你想要什么
+#
+# 所有"主观判断 / 筛选规则 / 评分权重"的集中配置。
+# Finder (hard_filters) + Evaluator (scoring_weights) + Shortlist UI (thresholds) 都读它。
+# 持续迭代 — 每次评估不准就回来调。
+#
+# 使用方法：
+#   1. `npm run init:career` 会把本文件 cp 成 preferences.yml（不覆盖已有）
+#   2. 按你的实际情况填充下面的值
+#   3. preferences.yml 可以 commit（偏好不敏感，反而 git 能追踪演化）
+#
+# Schema 参考 career-architecture/01-profile.md#1b
+
+# ────────────────────────────────────────────────────
+# 目标岗位
+# ────────────────────────────────────────────────────
+targets:
+  roles:
+    - "Software Engineer (New Grad / L3-L4)"
+    - "Backend Engineer"
+    - "Applied AI / ML Engineer"
+  seniority: ["New Grad", "Junior", "Mid"]
+
+# ────────────────────────────────────────────────────
+# 薪资期望（USD 年薪）
+# ────────────────────────────────────────────────────
+comp_target:
+  base_low: 160000
+  base_high: 220000
+  total_low: 200000
+  total_high: 320000
+  currency: "USD"
+
+# ────────────────────────────────────────────────────
+# 地点偏好
+# ────────────────────────────────────────────────────
+location:
+  preferred_remote: true
+  willing_cities:
+    - "New York, NY"
+    - "San Francisco, CA"
+    - "Seattle, WA"
+  onsite_acceptable_cities:
+    - "New York, NY"            # 只接受 NYC onsite
+  hybrid_max_days_onsite: 3
+
+# ────────────────────────────────────────────────────
+# 硬过滤（满足任一项直接 archive，LLM 都不调）
+# 评估顺序见 constraint-preferences-001 (短路顺序)
+# ────────────────────────────────────────────────────
+hard_filters:
+  company_blocklist:
+    keywords: ["crypto", "casino", "gambling", "defense", "tobacco"]
+    match_mode: "contains"
+    case_sensitive: false
+
+  title_blocklist:
+    keywords: ["embedded", "firmware", "game developer", "mobile-only"]
+
+  title_allowlist:   # 可选，谨慎使用（最激进过滤）
+    # keywords: ["software engineer", "backend", "swe", "platform", "applied ai"]
+
+  jd_text_blocklist:
+    phrases:
+      - "No sponsorship"
+      - "No visa sponsorship"
+      - "Must be US citizen"
+      - "Secret clearance required"
+
+  location_filter:
+    accept_remote: true
+    accept_hybrid: true
+    remote_only: false
+
+  seniority_filter:
+    accept: ["New Grad", "Junior", "Mid"]
+
+  posted_within_days: 60
+
+  comp_floor:
+    base_min: 120000
+    currency: "USD"
+
+# ────────────────────────────────────────────────────
+# 软偏好（影响分数但不直接过滤）
+# ────────────────────────────────────────────────────
+soft_preferences:
+  prefer_company_size:
+    - "Seed-Series B (high learning, high risk)"
+    - "Large public (stability, TC)"
+  avoid_company_size:
+    - "Series C-D (often worst ratio)"
+  prefer_team_focus:
+    - "Infrastructure / platform"
+    - "Applied AI"
+    - "Developer tools"
+  avoid_industries:
+    - "Adtech"
+    - "Insurance tech"
+
+# ────────────────────────────────────────────────────
+# 评分权重（Evaluator Stage B 用, sum = 1.0）
+# ────────────────────────────────────────────────────
+scoring_weights:
+  cv_match: 0.30
+  north_star_alignment: 0.25
+  comp: 0.20
+  culture_signals: 0.15
+  red_flags: 0.10
+
+# ────────────────────────────────────────────────────
+# 分数阈值
+# ────────────────────────────────────────────────────
+thresholds:
+  strong: 4.5              # 立刻投
+  worth_applying: 4.0      # 值得投
+  consider: 3.5            # 特殊理由再投
+  skip_below: 3.5          # 低于这个直接归档（Stage A 阈值）
+
+# ────────────────────────────────────────────────────
+# Evaluator 策略
+# ────────────────────────────────────────────────────
+evaluator_strategy:
+  stage_a:
+    enabled: true
+    auto_after_enrich: true
+
+  stage_b:
+    mode: "auto-above-threshold"  # auto-above-threshold | manual-only | always
+    threshold: 3.5
+    daily_budget_usd: 10
+
+  stage_b_blocks:
+    A_role_summary:       { enabled: true }
+    B_cv_match:           { enabled: true }     # 必开
+    C_level_strategy:     { enabled: true }
+    D_comp_demand:        { enabled: false }    # 关掉省钱（自己查 Levels.fyi）
+    E_personalization:    { enabled: true }     # 必开（Tailor 依赖）
+    F_interview_plan:     { enabled: false }    # 拿到面试再开
+    G_posting_legitimacy: { enabled: true }

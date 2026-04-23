@@ -78,6 +78,13 @@ data/career/.playwright/
 !data/career/feedback/.gitkeep
 !data/career/apply-sessions/.gitkeep
 
+# Keep README.md in otherwise-ignored dirs (documentation is not data)
+!data/career/reports/README.md
+!data/career/output/README.md
+!data/career/drafts/README.md
+!data/career/feedback/README.md
+!data/career/apply-sessions/README.md
+
 # Local skill installations (npx skills add)
 .agents/
 .claude/

@@ -1,9 +1,9 @@
 milestones: []
 current_sprint: "Sprint 1 — Foundation"
 blockers: []
-completion: 6   # avg(50, 0, 0, 0, 0, 0, 0, 0) ≈ 6.25 across 8 sub-epics
+completion: 8   # avg(67, 0, 0, 0, 0, 0, 0, 0) ≈ 8.4 across 8 sub-epics
 children_completion:
-  "01-foundation": 50
+  "01-foundation": 67
   "02-profile": 0
   "03-cv-engine": 0
   "04-renderer": 0
@@ -11,5 +11,5 @@ children_completion:
   "06-evaluator": 0
   "07-applier": 0
   "08-human-gate-tracker": 0
-status_note: "开发进行中。01-foundation 50% (1 feature room 完成, 1 feature m1 完成)。其他 sub-epic 未启动。"
+status_note: "开发进行中。01-foundation 67% (2 feature rooms 完成: career-tab-shell + data-layout, 1 feature 未启动: llm-cost-observability)。其他 7 个 sub-epic 未启动。"
 last_updated: "2026-04-23"

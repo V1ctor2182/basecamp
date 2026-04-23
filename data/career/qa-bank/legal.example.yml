@@ -1,0 +1,50 @@
+# qa-bank/legal.yml — 法律/EEO 固定答案
+#
+# Applier Class 2 Legal 分类路由直接读。纯查表，不走 LLM。
+# 答案 100% 一致（同一个问题在所有 apply 里都填同样的值）。
+#
+# 使用方法：
+#   1. `npm run init:career` 会把本文件 cp 成 legal.yml（不覆盖已有）
+#   2. 按你的实际情况填（FILL_IN 位置）
+#   3. legal.yml 敏感 — MUST gitignored（.gitignore 已处理）
+#
+# Schema 参考 career-architecture/01-profile.md#qa-bank
+
+# ────────────────────────────────────────────────────
+# 工作授权 / visa
+# ────────────────────────────────────────────────────
+work_authorization:
+  status: "F-1 OPT"                  # F-1 OPT / H1B / GC / US Citizen / ...
+  expiration: "YYYY-MM-DD"           # OPT 过期日
+  requires_sponsorship_now: true
+  requires_sponsorship_future: true  # 需要 H1B / GC sponsorship
+  authorized_us_yes_no: true
+  citizenship: "China (PRC)"
+
+# ────────────────────────────────────────────────────
+# EEO (Equal Employment Opportunity)
+# 建议全填 "Decline to answer"（法律允许，避免歧视风险）
+# ────────────────────────────────────────────────────
+eeo:
+  gender: "Decline to answer"
+  ethnicity: "Decline to answer"
+  veteran: "I am not a veteran"
+  disability: "Decline to answer"
+  pronouns: "Decline to answer"      # 可选字段
+
+# ────────────────────────────────────────────────────
+# 其他常见
+# ────────────────────────────────────────────────────
+personal:
+  age_18_plus: true
+  criminal_record: false
+  can_pass_background_check: true
+  can_pass_drug_test: true
+  relocate_willing: true
+  travel_willing_percent: 25         # 0-100
+
+# ────────────────────────────────────────────────────
+# "How did you hear about us?" 默认答案
+# ────────────────────────────────────────────────────
+how_did_you_hear_default: "LinkedIn job posting"
+# 后续可以为特定公司 override（例如："Referred by friend" / "Company career site"）

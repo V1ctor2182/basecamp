@@ -7,7 +7,8 @@
     "dev": "concurrently \"portless api.victorz --app-port 4568 node server.mjs\" \"portless victorz vite\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "init:career": "bash scripts/init-career.sh"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",

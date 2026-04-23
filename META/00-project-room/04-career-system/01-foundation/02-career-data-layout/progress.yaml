@@ -70,7 +70,7 @@ milestones:
 
   - id: "m2-readmes-and-examples"
     name: "子目录 README + 示例/模板文件 + init 脚本"
-    status: pending
+    status: completed
     estimated_files:
       - "data/career/resumes/README.md"
       - "data/career/qa-bank/README.md"
@@ -128,9 +128,19 @@ commits:
       - "change-2026-04-23-m1-dirs-and-gitignore (created)"
     milestones_affected:
       - "m1-dirs-and-gitignore (→ completed)"
+  - hash: "TBD"
+    date: "2026-04-23"
+    message: "[04-career-system/01-foundation/02-career-data-layout] m2: 8 子 README + 4 examples + templates.md + init-career.sh (ROOM 完成)"
+    files_changed: 15
+    specs_affected:
+      - "change-2026-04-23-m2-readmes-and-examples (created)"
+      - "room.yaml (lifecycle: planning → active)"
+      - "_tree.yaml (lifecycle: planning → active)"
+    milestones_affected:
+      - "m2-readmes-and-examples (→ completed, ROOM COMPLETE)"
 
 current_sprint: "Sprint 1 — Foundation"
 blockers: []
-completion: 50   # 1/2 milestones
-status_note: "m1 ✅ completed. 下一个: m2-readmes-and-examples (子 README + 模板 + init 脚本)"
+completion: 100   # 2/2 milestones
+status_note: "🎉 所有 2 milestones 完成。Room 进入 active lifecycle。下一个 Room: 01-foundation/03-llm-cost-observability"
 last_updated: "2026-04-23"
