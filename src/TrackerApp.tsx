@@ -161,9 +161,6 @@ function getDateRange(range: DateRange, customDate?: Date) {
   let since: Date
   let until: Date = now
   switch (range) {
-    case 'today':
-      since = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      break
     case 'week':
       since = new Date(now)
       since.setDate(since.getDate() - 7)
@@ -282,13 +279,206 @@ function MiniCalendar({ selectedDate, onSelect, commitsByDate }: {
   )
 }
 
+type CalCommit = { sha: string; message: string; repo: string; date: Date; url: string; minutes: number }
+
+function DayTimeline({
+  date, commits, onPrev, onNext, onToday,
+}: {
+  date: Date
+  commits: CalCommit[]
+  onPrev: () => void
+  onNext: () => void
+  onToday: () => void
+}) {
+  // Hour range — pad ±1 around commit hours, default 7-22
+  let startHour = 7
+  let endHour = 22
+  if (commits.length > 0) {
+    const hours = commits.map(c => Math.floor(c.minutes / 60))
+    startHour = Math.max(0, Math.min(...hours) - 1)
+    endHour = Math.min(23, Math.max(...hours) + 1)
+  }
+  const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i)
+  const HOUR_HEIGHT = 56
+  const totalHeight = hours.length * HOUR_HEIGHT
+
+  const now = new Date()
+  const isToday = toDateKey(date) === toDateKey(now)
+  const nowMinutesIntoRange = (now.getHours() - startHour) * 60 + now.getMinutes()
+  const nowTop = (nowMinutesIntoRange / 60) * HOUR_HEIGHT
+  const showNow = isToday && nowMinutesIntoRange >= 0 && nowMinutesIntoRange <= hours.length * 60
+
+  // Sort commits by time and assign lanes to avoid overlap
+  const sorted = [...commits].sort((a, b) => a.minutes - b.minutes)
+  type Placed = CalCommit & { lane: number; top: number }
+  const placed: Placed[] = []
+  const laneEnds: number[] = [] // last commit's "end" minutes per lane (we treat each commit as 30min slot)
+  for (const c of sorted) {
+    let lane = laneEnds.findIndex(end => end <= c.minutes)
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(0) }
+    laneEnds[lane] = c.minutes + 30
+    const minutesIntoRange = c.minutes - startHour * 60
+    placed.push({ ...c, lane, top: (minutesIntoRange / 60) * HOUR_HEIGHT })
+  }
+  const numLanes = Math.max(1, laneEnds.length)
+
+  const dateLabel = date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })
+
+  return (
+    <div className="t-day-timeline">
+      <div className="t-day-timeline-header">
+        <button className="t-day-nav-btn" onClick={onPrev} title="Previous day"><ChevronLeft size={16} /></button>
+        <button className={`t-day-nav-today ${isToday ? 'is-today' : ''}`} onClick={onToday}>{isToday ? 'Today' : dateLabel}</button>
+        <button className="t-day-nav-btn" onClick={onNext} title="Next day" disabled={isToday}><ChevronRight size={16} /></button>
+        <span className="t-day-commit-count">{commits.length} commit{commits.length === 1 ? '' : 's'}</span>
+      </div>
+      <div className="t-day-timeline-body" style={{ height: totalHeight }}>
+        {/* Hour grid */}
+        <div className="t-day-hours">
+          {hours.map(h => (
+            <div key={h} className="t-day-hour-row" style={{ height: HOUR_HEIGHT }}>
+              <span className="t-day-hour-label">{String(h).padStart(2, '0')}:00</span>
+            </div>
+          ))}
+        </div>
+        {/* Track column (where dots sit) */}
+        <div className="t-day-track">
+          {placed.map(c => (
+            <div
+              key={c.sha}
+              className="t-day-dot"
+              style={{ top: c.top - 4 }}
+              title={c.date.toLocaleTimeString()}
+            />
+          ))}
+          {showNow && (
+            <div className="t-day-now-dot" style={{ top: nowTop - 5 }} />
+          )}
+        </div>
+        {/* Cards column */}
+        <div className="t-day-cards" style={{ minHeight: totalHeight }}>
+          {placed.map(c => (
+            <a
+              key={c.sha}
+              href={c.url}
+              target="_blank"
+              rel="noreferrer"
+              className="t-day-card"
+              style={{ top: c.top, left: `calc(${(c.lane / numLanes) * 100}% + 6px)`, width: `calc(${100 / numLanes}% - 12px)` }}
+            >
+              <div className="t-day-card-time">{String(Math.floor(c.minutes / 60)).padStart(2, '0')}:{String(c.minutes % 60).padStart(2, '0')}</div>
+              <div className="t-day-card-repo">{c.repo}</div>
+              <div className="t-day-card-msg">{c.message.split('\n')[0]}</div>
+            </a>
+          ))}
+          {showNow && (
+            <div className="t-day-now-line" style={{ top: nowTop }}>
+              <span className="t-day-now-label">{String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}</span>
+            </div>
+          )}
+          {commits.length === 0 && (
+            <div className="t-day-empty">No commits on this day</div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function WeekCalendar({ days, byDay }: { days: Date[]; byDay: Map<string, CalCommit[]> }) {
+  // Determine hour range to show: from earliest commit hour - 1 to latest + 1, clamped 0..23
+  const allCommits = [...byDay.values()].flat()
+  let startHour = 7
+  let endHour = 22
+  if (allCommits.length > 0) {
+    const hours = allCommits.map(c => Math.floor(c.minutes / 60))
+    startHour = Math.max(0, Math.min(...hours) - 1)
+    endHour = Math.min(23, Math.max(...hours) + 1)
+  }
+  const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i)
+  const HOUR_HEIGHT = 36 // px per hour
+  const totalHeight = hours.length * HOUR_HEIGHT
+
+  const now = new Date()
+  const todayKey = toDateKey(now)
+  const nowMinutesIntoRange = (now.getHours() - startHour) * 60 + now.getMinutes()
+  const nowTop = (nowMinutesIntoRange / 60) * HOUR_HEIGHT
+  const showNow = nowMinutesIntoRange >= 0 && nowMinutesIntoRange <= hours.length * 60
+
+  const dayLabel = (d: Date) => {
+    const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
+    return `${wd} ${d.getDate()}`
+  }
+
+  return (
+    <div className="t-week-cal">
+      <div className="t-week-cal-header">
+        <div className="t-week-cal-tz">CST</div>
+        {days.map((d, i) => {
+          const isToday = toDateKey(d) === todayKey
+          return (
+            <div key={i} className={`t-week-cal-day ${isToday ? 'today' : ''}`}>
+              {dayLabel(d)}
+            </div>
+          )
+        })}
+      </div>
+      <div className="t-week-cal-body" style={{ height: totalHeight }}>
+        <div className="t-week-cal-hours">
+          {hours.map(h => (
+            <div key={h} className="t-week-cal-hour-row" style={{ height: HOUR_HEIGHT }}>
+              <span className="t-week-cal-hour-label">{String(h).padStart(2, '0')}:00</span>
+            </div>
+          ))}
+        </div>
+        {days.map((d, i) => {
+          const key = toDateKey(d)
+          const commits = byDay.get(key) || []
+          const isToday = key === todayKey
+          return (
+            <div key={i} className={`t-week-cal-col ${isToday ? 'today' : ''}`}>
+              {hours.map(h => (
+                <div key={h} className="t-week-cal-cell" style={{ height: HOUR_HEIGHT }} />
+              ))}
+              {commits.map(c => {
+                const minutesIntoRange = c.minutes - startHour * 60
+                if (minutesIntoRange < 0 || minutesIntoRange > hours.length * 60) return null
+                const top = (minutesIntoRange / 60) * HOUR_HEIGHT
+                return (
+                  <a
+                    key={c.sha}
+                    href={c.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="t-week-cal-event"
+                    style={{ top }}
+                    title={`${c.repo}: ${c.message}\n${c.date.toLocaleString()}`}
+                  >
+                    <div className="t-week-cal-event-title">{c.repo}</div>
+                    <div className="t-week-cal-event-msg">{c.message}</div>
+                  </a>
+                )
+              })}
+              {isToday && showNow && (
+                <div className="t-week-cal-now" style={{ top: nowTop }}>
+                  <span className="t-week-cal-now-label">{String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}</span>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function TrackerApp() {
   const [repos, setRepos] = useState<Repo[]>([])
   const [config, setConfig] = useState<Config>({ githubUsername: '', hasToken: false })
   const [activity, setActivity] = useState<RepoActivity[]>([])
   const [prData, setPrData] = useState<RepoPRs[]>([])
   const [fetchErrors, setFetchErrors] = useState<{ repo: string; error: string }[]>([])
-  const [dateRange, setDateRange] = useState<DateRange>('today')
+  const [dateRange, setDateRange] = useState<DateRange>('week')
   const [customDate, setCustomDate] = useState<Date | null>(null)
   const [showCalendar, setShowCalendar] = useState(false)
   const [showChart, setShowChart] = useState(true)
@@ -313,6 +503,8 @@ export default function TrackerApp() {
   const [dayRange, setDayRange] = useState<[number, number]>([0, 24]) // hours
   const [isDragSelecting, setIsDragSelecting] = useState(false)
   const [heatmapTooltip, setHeatmapTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
+  const [modelChartMode, setModelChartMode] = useState<'tokens' | 'cost'>('cost')
+  const [weekView, setWeekView] = useState<'chart' | 'calendar'>('chart')
   const heatmapRef = useRef<HTMLDivElement>(null)
   const calendarRef = useRef<HTMLDivElement>(null)
   const activityCalRef = useRef<HTMLDivElement>(null)
@@ -580,6 +772,63 @@ export default function TrackerApp() {
     return { days: buckets, repoNames, repoMap, chartColors, isToday }
   }, [activity, prData, viewTab, dateRange, customDate])
 
+  // Day timeline — commits for the selected single day
+  const dayTimelineData = useMemo(() => {
+    const targetKey = customDate ? toDateKey(customDate) : toDateKey(new Date())
+    const commits: CalCommit[] = []
+    for (const ra of activity) {
+      const repoName = ra.repo.split('/')[1] || ra.repo
+      for (const c of ra.commits) {
+        const d = new Date(c.date)
+        if (toDateKey(d) !== targetKey) continue
+        commits.push({
+          sha: c.sha,
+          message: c.message,
+          repo: repoName,
+          date: d,
+          url: c.url,
+          minutes: d.getHours() * 60 + d.getMinutes(),
+        })
+      }
+    }
+    return commits
+  }, [activity, customDate])
+
+  // Week calendar — commits placed at their commit time on a 7-day x 24-hour grid
+  const weekCalendarData = useMemo(() => {
+    // Build the 7 days based on current dateRange (week = last 7 days ending today)
+    const { since, until } = getDateRange('week')
+    const startDay = new Date(since); startDay.setHours(0, 0, 0, 0)
+    const endDay = new Date(until); endDay.setHours(0, 0, 0, 0)
+    const days: Date[] = []
+    const cur = new Date(startDay)
+    while (cur <= endDay) {
+      days.push(new Date(cur))
+      cur.setDate(cur.getDate() + 1)
+    }
+
+    // Place each commit into the day it belongs to
+    const byDay = new Map<string, CalCommit[]>()
+    for (const ra of activity) {
+      const repoName = ra.repo.split('/')[1] || ra.repo
+      for (const c of ra.commits) {
+        const d = new Date(c.date)
+        const key = toDateKey(d)
+        if (!byDay.has(key)) byDay.set(key, [])
+        byDay.get(key)!.push({
+          sha: c.sha,
+          message: c.message,
+          repo: repoName,
+          date: d,
+          url: c.url,
+          minutes: d.getHours() * 60 + d.getMinutes(),
+        })
+      }
+    }
+
+    return { days, byDay }
+  }, [activity])
+
   const handleAddRepo = async () => {
     const url = repoUrl.trim()
     if (!url) return
@@ -702,17 +951,43 @@ export default function TrackerApp() {
     return { weeks, maxCount, monthLabels, totalMessages, firstDateStr }
   }, [claudeStats])
 
-  const claudeTokenChart = useMemo(() => {
+  // Total cost — sum from server-computed dailyCost (includes subagents).
+  // Falls back to modelUsage-based calc if dailyCost is not available.
+  const totalClaudeCost = useMemo(() => {
+    if (!claudeStats) return 0
+    if (claudeStats.dailyCost && claudeStats.dailyCost.length > 0) {
+      let total = 0
+      for (const d of claudeStats.dailyCost) {
+        for (const m of Object.keys(d.costByModel)) {
+          if (m === '<synthetic>') continue
+          total += d.costByModel[m]
+        }
+      }
+      return total
+    }
+    return Object.entries(claudeStats.modelUsage)
+      .filter(([m]) => m !== '<synthetic>')
+      .reduce((s, [m, u]) => s + calcModelCost(m, u), 0)
+  }, [claudeStats])
+
+  const claudeModelChart = useMemo(() => {
     if (!claudeStats) return null
-    const last30 = claudeStats.dailyModelTokens.slice(-30)
+    const isCost = modelChartMode === 'cost'
+    const tokenData = claudeStats.dailyModelTokens.slice(-30)
+    const costData = claudeStats.dailyCost?.slice(-30) || []
+    if (isCost && costData.length === 0) return null
+
     const root = document.documentElement
     const cs = getComputedStyle(root)
     const resolve = (v: string) => { const m = v.match(/var\((.+)\)/); return m ? cs.getPropertyValue(m[1]).trim() || '#888' : v }
 
-    // Collect all model names
     const modelSet = new Set<string>()
-    for (const d of last30) for (const m of Object.keys(d.tokensByModel)) modelSet.add(m)
-    const models = [...modelSet]
+    if (isCost) {
+      for (const d of costData) for (const m of Object.keys(d.costByModel)) modelSet.add(m)
+    } else {
+      for (const d of tokenData) for (const m of Object.keys(d.tokensByModel)) modelSet.add(m)
+    }
+    const models = [...modelSet].filter(m => m !== '<synthetic>')
 
     const modelColors: Record<string, string> = {
       'claude-opus-4-6': '#D97757',
@@ -730,6 +1005,9 @@ export default function TrackerApp() {
       return m
     }
 
+    const last30 = isCost ? costData : tokenData
+    const dates = last30.map(d => { const dt = new Date(d.date + 'T00:00:00'); return dt.toLocaleDateString([], { month: 'short', day: 'numeric' }) })
+
     return {
       grid: { left: 56, right: 12, top: 30, bottom: 28 },
       tooltip: {
@@ -737,7 +1015,9 @@ export default function TrackerApp() {
         backgroundColor: resolve('var(--bg-card)'),
         borderColor: resolve('var(--border)'),
         textStyle: { color: resolve('var(--text-primary)'), fontSize: 12 },
-        valueFormatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v),
+        valueFormatter: isCost
+          ? (v: number) => `$${v.toFixed(2)}`
+          : (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v),
       },
       legend: {
         top: 0, right: 0,
@@ -746,29 +1026,36 @@ export default function TrackerApp() {
       },
       xAxis: {
         type: 'category' as const,
-        data: last30.map(d => { const dt = parseCalendarDate(d.date); return dt.toLocaleDateString([], { month: 'short', day: 'numeric' }) }),
+        data: dates,
         axisLabel: { color: resolve('var(--text-muted)'), fontSize: 10, interval: (_i: number) => _i % Math.ceil(last30.length / 8) === 0 },
         axisLine: { lineStyle: { color: resolve('var(--border-light)') } },
         axisTick: { show: false },
       },
       yAxis: {
         type: 'value' as const,
-        axisLabel: { color: resolve('var(--text-muted)'), fontSize: 10, formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v) },
+        axisLabel: {
+          color: resolve('var(--text-muted)'), fontSize: 10,
+          formatter: isCost
+            ? (v: number) => `$${v.toFixed(0)}`
+            : (v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v),
+        },
         splitLine: { lineStyle: { color: resolve('var(--border-light)'), type: 'dashed' as const } },
       },
       series: models.map((m, i) => ({
         name: shortName(m),
         type: 'bar' as const,
-        stack: 'tokens',
+        stack: 'model',
         barWidth: '60%',
         itemStyle: {
           color: modelColors[m] || resolve(`var(--chart-${(i % 6) + 1})`),
           borderRadius: i === models.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0],
         },
-        data: last30.map(d => d.tokensByModel[m] || 0),
+        data: isCost
+          ? costData.map(d => Math.round((d.costByModel[m] || 0) * 100) / 100)
+          : tokenData.map(d => d.tokensByModel[m] || 0),
       })),
     }
-  }, [claudeStats])
+  }, [claudeStats, modelChartMode])
 
   const claudeCostChart = useMemo(() => {
     if (!claudeStats?.dailyCost) return null
@@ -1136,8 +1423,8 @@ export default function TrackerApp() {
   }
 
   const customDateLabel = customDate
-    ? customDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
-    : ''
+    ? (toDateKey(customDate) === toDateKey(new Date()) ? 'Today' : customDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }))
+    : 'Today'
 
   // ECharts option for workload chart
   const chartOption = useMemo(() => {
@@ -1304,13 +1591,31 @@ export default function TrackerApp() {
       {/* Controls */}
       <div className="t-controls">
         <div className="t-date-picker">
-          <button
-            className={`t-date-tab ${dateRange === 'today' ? 'active' : ''}`}
-            onClick={() => { setDateRange('today'); setCustomDate(null) }}
-          >
-            <Clock size={14} />
-            <span>Today</span>
-          </button>
+          <div className="t-cal-wrapper" ref={calendarRef}>
+            <button
+              className={`t-date-tab ${dateRange === 'custom' ? 'active' : ''}`}
+              onClick={() => {
+                if (dateRange !== 'custom') {
+                  const today = new Date()
+                  today.setHours(0, 0, 0, 0)
+                  setCustomDate(today)
+                  setDateRange('custom')
+                } else {
+                  setShowCalendar(!showCalendar)
+                }
+              }}
+            >
+              <Calendar size={14} />
+              <span>{dateRange === 'custom' ? customDateLabel : 'Today'}</span>
+            </button>
+            {showCalendar && (
+              <MiniCalendar
+                selectedDate={customDate}
+                onSelect={handleCalendarSelect}
+                commitsByDate={commitsByDate}
+              />
+            )}
+          </div>
           <button
             className={`t-date-tab ${dateRange === 'week' ? 'active' : ''}`}
             onClick={() => { setDateRange('week'); setCustomDate(null) }}
@@ -1368,13 +1673,47 @@ export default function TrackerApp() {
         <div className="t-chart-card">
           <div className="t-chart-header">
             <BarChart3 size={14} />
-            <span>{viewTab === 'prs' ? 'Pull Requests' : 'Workload'} — {dateRange === 'today' ? 'Today by Hour' : dateRange === 'week' ? 'Last 7 Days' : dateRange === 'month' ? 'Last 30 Days' : dateRange === 'quarter' ? 'Last 3 Months' : 'Custom'}</span>
+            <span>{viewTab === 'prs' ? 'Pull Requests' : 'Workload'} — {dateRange === 'today' ? 'Today by Hour' : dateRange === 'week' && weekView === 'calendar' ? 'This Week' : dateRange === 'week' ? 'Last 7 Days' : dateRange === 'month' ? 'Last 30 Days' : dateRange === 'quarter' ? 'Last 3 Months' : 'Custom'}</span>
+            {dateRange === 'week' && (
+              <div className="t-chart-toggle">
+                {(['chart', 'calendar'] as const).map(v => (
+                  <button key={v} className={`t-chart-toggle-btn ${weekView === v ? 'active' : ''}`} onClick={() => setWeekView(v)}>
+                    {v === 'chart' ? 'Chart' : 'Calendar'}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <ReactEChartsCore
-            echarts={echarts}
-            option={chartOption}
-            style={{ height: 200 }}
-            notMerge
+          {dateRange === 'week' && weekView === 'calendar' ? (
+            <WeekCalendar days={weekCalendarData.days} byDay={weekCalendarData.byDay} />
+          ) : (
+            <ReactEChartsCore
+              echarts={echarts}
+              option={chartOption}
+              style={{ height: 200 }}
+              notMerge
+            />
+          )}
+        </div>
+      )}
+
+      {/* Day Timeline — rendered when custom date is selected */}
+      {showChart && repos.length > 0 && dateRange === 'custom' && customDate && viewTab !== 'claude' && (
+        <div className="t-chart-card">
+          <DayTimeline
+            date={customDate}
+            commits={dayTimelineData}
+            onPrev={() => {
+              const d = new Date(customDate); d.setDate(d.getDate() - 1); setCustomDate(d)
+            }}
+            onNext={() => {
+              const d = new Date(customDate); d.setDate(d.getDate() + 1)
+              const today = new Date(); today.setHours(0, 0, 0, 0)
+              if (d <= today) setCustomDate(d)
+            }}
+            onToday={() => {
+              const today = new Date(); today.setHours(0, 0, 0, 0); setCustomDate(today)
+            }}
           />
         </div>
       )}
@@ -1663,7 +2002,7 @@ export default function TrackerApp() {
                 </div>
                 <div className="t-stat">
                   <div className="t-stat-val">
-                    {formatUSD(claudeStats.totalCostUSD ?? 0)}
+                    {formatUSD(totalClaudeCost)}
                   </div>
                   <div className="t-stat-label">Est. Cost</div>
                 </div>
@@ -1731,39 +2070,21 @@ export default function TrackerApp() {
                 </div>
               )}
 
-              {/* Token / Cost by Model (toggle) */}
-              {(claudeTokenChart || claudeCostChart) && (
+              {/* Model Usage (Tokens / Cost toggle) */}
+              {claudeModelChart && (
                 <div className="t-chart-card">
                   <div className="t-chart-header">
                     <Zap size={14} />
-                    <span>{tokenCostMode === 'tokens' ? 'Tokens by Model' : 'Daily Cost'} — Last 30 Days</span>
-                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, background: 'var(--bg-hover)', borderRadius: 6, padding: 2 }}>
-                      <button
-                        onClick={() => setTokenCostMode('tokens')}
-                        style={{
-                          padding: '2px 8px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer',
-                          background: tokenCostMode === 'tokens' ? 'var(--bg-card)' : 'transparent',
-                          color: tokenCostMode === 'tokens' ? 'var(--text-primary)' : 'var(--text-muted)',
-                          boxShadow: tokenCostMode === 'tokens' ? '0 1px 2px rgba(0,0,0,.1)' : 'none',
-                        }}
-                      >Tokens</button>
-                      <button
-                        onClick={() => setTokenCostMode('cost')}
-                        style={{
-                          padding: '2px 8px', fontSize: 11, borderRadius: 4, border: 'none', cursor: 'pointer',
-                          background: tokenCostMode === 'cost' ? 'var(--bg-card)' : 'transparent',
-                          color: tokenCostMode === 'cost' ? 'var(--text-primary)' : 'var(--text-muted)',
-                          boxShadow: tokenCostMode === 'cost' ? '0 1px 2px rgba(0,0,0,.1)' : 'none',
-                        }}
-                      >Cost</button>
+                    <span>Usage by Model — Last 30 Days</span>
+                    <div className="t-chart-toggle">
+                      {(['tokens', 'cost'] as const).map(mode => (
+                        <button key={mode} className={`t-chart-toggle-btn ${modelChartMode === mode ? 'active' : ''}`} onClick={() => setModelChartMode(mode)}>
+                          {mode === 'tokens' ? 'Tokens' : 'Cost'}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                  {tokenCostMode === 'tokens' && claudeTokenChart && (
-                    <ReactEChartsCore echarts={echarts} option={claudeTokenChart} style={{ height: 200 }} notMerge />
-                  )}
-                  {tokenCostMode === 'cost' && claudeCostChart && (
-                    <ReactEChartsCore echarts={echarts} option={claudeCostChart} style={{ height: 200 }} notMerge />
-                  )}
+                  <ReactEChartsCore echarts={echarts} option={claudeModelChart} style={{ height: 200 }} notMerge />
                 </div>
               )}
 
@@ -2196,11 +2517,11 @@ export default function TrackerApp() {
                   <Wrench size={14} />
                   <span>Model Usage Breakdown</span>
                   <span className="t-chart-header-right">
-                    est. total: {formatUSD(claudeStats.totalCostUSD ?? 0)}
+                    est. total: {formatUSD(totalClaudeCost)}
                   </span>
                 </div>
                 <div style={{ padding: '12px 16px' }}>
-                  {Object.entries(claudeStats.modelUsage).map(([model, usage]) => {
+                  {Object.entries(claudeStats.modelUsage).filter(([m]) => m !== '<synthetic>').map(([model, usage]) => {
                     const shortName = model.includes('opus-4-6') ? 'Opus 4.6' :
                       model.includes('opus-4-5') ? 'Opus 4.5' :
                       model.includes('sonnet-4-6') ? 'Sonnet 4.6' :

@@ -685,6 +685,7 @@ app.post('/api/move', async (req, res) => {
 
 // --- Claude Usage Stats ---
 const CLAUDE_STATS_FILE = path.join(DATA_DIR, 'claude-stats.json');
+const DAILY_COST_FILE = path.join(DATA_DIR, 'daily-cost.json');
 const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
 let statsRebuilding = false;
 
@@ -1531,6 +1532,76 @@ app.post('/api/career/preferences/preview', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// --- Compute dailyCost from JSONL session files and write to DAILY_COST_FILE ---
+const MODEL_PRICING = {
+  'claude-opus-4-6':            { input: 15,   output: 75,  cacheRead: 1.875, cacheWrite: 18.75 },
+  'claude-opus-4-5-20251101':   { input: 15,   output: 75,  cacheRead: 1.875, cacheWrite: 18.75 },
+  'claude-sonnet-4-6':          { input: 3,    output: 15,  cacheRead: 0.375, cacheWrite: 3.75  },
+  'claude-sonnet-4-5-20250929': { input: 3,    output: 15,  cacheRead: 0.375, cacheWrite: 3.75  },
+  'claude-haiku-4-5-20251001':  { input: 0.80, output: 4,   cacheRead: 0.08,  cacheWrite: 1.0   },
+};
+
+async function computeDailyCost() {
+  const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+  const dailyCost = {}; // date -> { model -> costUSD }
+
+  // Collect all JSONL files recursively
+  async function collectJsonl(dir) {
+    const results = [];
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) results.push(...await collectJsonl(full));
+      else if (entry.name.endsWith('.jsonl')) results.push(full);
+    }
+    return results;
+  }
+
+  const files = await collectJsonl(projectsDir);
+  for (const filePath of files) {
+    try {
+      const rl = createInterface({ input: createReadStream(filePath), crlfDelay: Infinity });
+      for await (const line of rl) {
+        if (!line.trim()) continue;
+        let record;
+        try { record = JSON.parse(line); } catch { continue; }
+        if (record.type !== 'assistant') continue;
+        const ts = record.timestamp;
+        if (!ts) continue;
+        const dt = new Date(ts);
+        const date = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+        const msg = record.message || {};
+        const model = msg.model;
+        const usage = msg.usage;
+        if (!model || !usage) continue;
+        const p = MODEL_PRICING[model];
+        if (!p) continue;
+        const cost = (
+          (usage.input_tokens || 0) * p.input +
+          (usage.output_tokens || 0) * p.output +
+          (usage.cache_read_input_tokens || 0) * p.cacheRead +
+          (usage.cache_creation_input_tokens || 0) * p.cacheWrite
+        ) / 1_000_000;
+        if (!dailyCost[date]) dailyCost[date] = {};
+        dailyCost[date][model] = (dailyCost[date][model] || 0) + cost;
+      }
+    } catch { /* skip unreadable files */ }
+  }
+
+  const dailyCostArr = Object.keys(dailyCost).sort().map(date => ({
+    date,
+    costByModel: dailyCost[date],
+  }));
+
+  // Write to our own file, never touch stats-cache
+  await fs.writeFile(DAILY_COST_FILE, JSON.stringify(dailyCostArr), 'utf-8');
+  console.log(`dailyCost computed: ${dailyCostArr.length} days`);
+}
+
+// Run on startup, then every 10 minutes
+computeDailyCost();
+setInterval(computeDailyCost, 10 * 60 * 1000);
 
 const port = process.env.PORT || 8000;
 app.listen(port, () => console.log(`API server on :${port}`));
