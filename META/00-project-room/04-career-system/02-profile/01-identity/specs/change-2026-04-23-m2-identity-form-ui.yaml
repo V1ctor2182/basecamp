@@ -1,0 +1,84 @@
+spec_id: "change-2026-04-23-m2-identity-form-ui"
+type: change
+state: active
+intent:
+  summary: "m2: Settings → Identity 页 ATS 风格 6-section 表单 + load/save/validation (ROOM 完成)"
+  detail: |
+    Files created (2):
+      - src/career/settings/ats-form.css (~220 行):
+        **共享 ATS form 样式**（Greenhouse / Workday 风格），future Preferences /
+        QA Bank / Narrative 等 settings 子页复用:
+        - .af-form / .af-section / .af-section-title / .af-section-desc
+        - .af-field / .af-label / .af-required-star / .af-input / .af-select
+        - .af-input-error (red border + 3px ring) / .af-error (red text)
+        - .af-radio-group / .af-radio-label (yes/no)
+        - .af-rows / .af-row (array edit: 灰底卡片)
+        - .af-btn-remove (red link) / .af-btn-add (dashed blue)
+        - .af-submit-bar (sticky bottom) + .af-btn-primary / disabled state
+        - 色系: #0969da focus blue / #cf222e error red / #0a0a0a primary black
+
+      - src/career/settings/Identity.tsx (完全重写, ~350 行):
+        - Identity type (完全匹配 backend IdentitySchema)
+        - BLANK_IDENTITY 初始 state (education + languages 各 1 空行)
+        - validate() 返 Record<string, string> — 字段级 error map
+          * isEmail / isUrl 格式检查
+          * Q4 全部必填 (除 education[].gpa)
+          * education + languages array min 1 enforced via Remove disabled
+        - 6 Sections:
+          1. Personal Information (name / email / phone)
+          2. Links (linkedin / github / portfolio, URL validation)
+          3. Location (current_city / current_country)
+          4. Work Authorization (visa_status / expiration / citizenship +
+             3 BoolRadio yes/no: authorized_us / sponsor_now / sponsor_future)
+          5. Education (add/remove row widget, 4 fields/row with gpa optional)
+          6. Languages (add/remove row widget, lang + level Select enum)
+        - useEffect GET /api/career/identity on mount
+        - onChange dirty flag + clear savedAt
+        - useMemo errors 推 isValid
+        - Submit: PUT /api/career/identity → toast via af-submit-status
+        - beforeunload listener (only when dirty) 拦截未保存退出
+        - Error display: 只在 dirty 或已 save 过后才显示 (避免首次加载就全红)
+        - Field / BoolRadio 两个小 helper 组件
+
+    Dependencies: 无新包（lucide-react Plus/X 已有）
+
+    Verification (typecheck):
+      - npx tsc --noEmit ✓ 无错误
+      - Type 签名与 backend zod schema 100% 对齐 (EducationEntry / LanguageEntry / Identity)
+      - Visual smoke test 留给用户在 npm run dev 后手工验证
+
+    Room 完成标记 (最后 milestone):
+      - room.yaml lifecycle: planning → active
+      - _tree.yaml 该 feature 节点 lifecycle: active
+      - spec.md 全量 rewrite (2 milestones 汇总 + ATS 设计要点 + 下游 feature)
+
+    Design inspiration: Greenhouse / Workday ATS application form
+      - Labels above fields, red * for required
+      - White bg + #d0d7de border, blue #0969da focus ring
+      - Inline errors (red border + 12px red text)
+      - Sticky submit bar (status left + button right)
+      - Save disabled until all valid
+      - Array rows in grey cards with remove button
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m2, room-complete, frontend, react, form, ats-style]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit TBD"
+relations:
+  - "implements intent-identity-001 (m2/2, ROOM COMPLETE)"
+  - "depends_on change-2026-04-23-m1-identity-backend"
+  - "triggers room.yaml lifecycle: planning → active"
+  - "introduces shared ats-form.css (future Preferences/QA Bank/Narrative reuse)"
+anchors:
+  - file: "src/career/settings/Identity.tsx"
+    symbols: ["Identity", "validate", "BLANK_IDENTITY", "Field", "BoolRadio"]
+  - file: "src/career/settings/ats-form.css"
+    symbols: [".af-form", ".af-section", ".af-field", ".af-input", ".af-submit-bar"]
+created_at: "2026-04-23"
+updated_at: "2026-04-23"

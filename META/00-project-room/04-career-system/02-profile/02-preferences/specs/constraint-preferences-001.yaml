@@ -1,0 +1,22 @@
+spec_id: "constraint-preferences-001"
+type: constraint
+state: active
+intent:
+  summary: "hard_filters 必须按短路顺序评估 + 任一 drop 立刻 archive"
+  detail: |
+    9 种 hard filter 的评估顺序（从便宜到贵，MUST 按此顺序实现 short-circuit）：(1) source_filter（最先省掉整个源）→ (2) company_blocklist → (3) title_blocklist / title_allowlist → (4) location → (5) seniority → (6) posted_within_days → (7) comp_floor → (8) jd_text_blocklist（最后，依赖 JD Enrich 完成）。任一规则判定 drop → 立即写 archive.jsonl + 归档，不进入下游 / 不评估后续规则。这个顺序保证成本和速度最优（不读 JD 正文的规则先做）。archive 记录 MUST 写 {job_id, matched_rule_id, matched_value, ts}，便于回溯 "为什么这个岗位被过滤了"。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [rules-engine, short-circuit, cost-optimization]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/03-finder.md#规则优先级和短路"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

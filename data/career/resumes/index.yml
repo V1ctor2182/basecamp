@@ -1,0 +1,31 @@
+# resumes/index.yml — 多 base resume 索引
+#
+# 每份 base resume 一条记录。用 03-cv-engine/01-resume-index 的 UI 管理。
+# 本文件 commit 进 git（resume 元数据是可复用知识）。
+# 具体 base.md 正文 gitignored（个人数据）。
+#
+# 当前示例：空数组。03-cv-engine/01-resume-index 的 UI 会帮你添加 4 份推荐:
+#   - backend       (分布式 / 微服务 / platform)
+#   - applied-ai    (LangChain / RAG / Agent)
+#   - fullstack     (React / Web / 全栈)
+#   - default       (兜底综合版)
+
+resumes: []
+
+# 未来添加后应该是这样（示例）:
+#
+# resumes:
+#   - id: backend
+#     title: "Backend & Distributed Systems"
+#     description: "突出分布式 ETL、微服务、platform 工程经验"
+#     source: "google_doc"               # "google_doc" | "manual"
+#     gdoc_id: "1abc...xyz"
+#     last_synced_at: "2026-04-23T15:30:00Z"
+#     created_at: "2026-04-23"
+#     is_default: false
+#
+#   - id: default
+#     title: "Default (General SDE)"
+#     description: "综合版，没匹配到其他方向时 fallback"
+#     source: "manual"
+#     is_default: true

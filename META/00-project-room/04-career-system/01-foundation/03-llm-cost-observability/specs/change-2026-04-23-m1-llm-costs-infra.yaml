@@ -1,0 +1,60 @@
+spec_id: "change-2026-04-23-m1-llm-costs-infra"
+type: change
+state: active
+intent:
+  summary: "m1: llm-costs.jsonl 写/读 API + 2 REST endpoints + Zod schema + 首次引入 zod (ROOM 完成)"
+  detail: |
+    Files modified:
+      - server.mjs (+~110 行):
+        - import { z } from 'zod'
+        - LLM_COSTS_FILE + CAREER_DIR constants + init (existsSync + mkdirSync)
+        - CostRecordInput (zod schema): caller / model / input_tokens /
+          output_tokens / cost_usd + optional session_id + optional job_id
+        - appendCostRecord(input) — zod parse + ts auto-fill + fs.appendFile
+        - readCostRecords({start, end, caller, model}) — read jsonl + filter
+          (skip malformed lines with warn)
+        - aggregateCosts(records, groupBy) — sum by day/caller/model or total
+        - POST /api/career/llm-costs — 201 on success / 400 on zod error
+        - GET /api/career/llm-costs — 默认今日聚合 / 支持 start/end/caller/model
+          filter / ?groupBy=day|caller|model 分组聚合
+      - package.json — +zod ^4.3.6 依赖
+
+    Smoke tests (curl live server):
+      1. POST 合法 record → 201 + jsonl 追加 ✓
+      2. POST 缺字段 → 400 + zod 详细 errors (path + expected + received) ✓
+      3. POST 第 2 条不同 caller/model → 201 ✓
+      4. GET 无 query → {total_cost: 0.26, total_tokens: 5700, record_count: 2} ✓
+      5. GET ?groupBy=caller → 按 caller 分组聚合正确 ✓
+      6. GET ?groupBy=model → 按 model 分组聚合正确 ✓
+      7. jsonl 内容验证：2 行 + ts 自动填 + 所有字段正确 ✓
+
+    Dependencies introduced (FIRST OF KIND):
+      - zod ^4.3.6 — 为未来 Finder Job Schema / Applier Draft Schema / 其他
+        input validation 铺路。本 feature 只用最基础的 z.object + z.string +
+        z.number().int().nonnegative() + z.optional()。
+
+    Room 完成标记（本 room 唯一 milestone，完成即 room complete）:
+      - room.yaml lifecycle: planning → active
+      - _tree.yaml 该 feature 节点 lifecycle: planning → active
+      - spec.md 全量 rewrite (m1 汇总 + API 速查 + 下游 caller 对接点)
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, room-complete, backend, zod, infra, first-of-kind]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit TBD (filled after commit)"
+relations:
+  - "implements intent-llm-cost-observability-001 (m1/1, ROOM COMPLETE)"
+  - "enforces constraint-llm-cost-observability-001 (infra only, no LLM / budget logic)"
+  - "triggers room.yaml lifecycle: planning → active"
+  - "introduces dependency: zod (first-of-kind)"
+anchors:
+  - file: "server.mjs"
+    symbols: ["CostRecordInput", "appendCostRecord", "readCostRecords", "aggregateCosts", "/api/career/llm-costs"]
+created_at: "2026-04-23"
+updated_at: "2026-04-23"

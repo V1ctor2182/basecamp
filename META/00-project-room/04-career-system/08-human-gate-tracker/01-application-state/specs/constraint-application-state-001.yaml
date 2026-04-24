@@ -1,0 +1,22 @@
+spec_id: "constraint-application-state-001"
+type: constraint
+state: active
+intent:
+  summary: "状态按规范流转 + timeline append-only + 写操作原子"
+  detail: |
+    (1) applications.json 的 status 转换 MUST 按合法顺序：Evaluated → Applied → Responded → Interview → (Offer | Rejected)；此外 Discarded / SKIP 可从任何非终态转入。MUST NOT 跳过中间态（例 不能从 Evaluated 直接 → Interview），否则 timeline 信息丢失；(2) timeline 事件 MUST append-only — 历史事件一旦写入不能删 / 改，保证审计留痕；如果需要更正（例 打错日期）用新事件 `correction` 类型覆盖而不是改旧事件；(3) 写 applications.json MUST 原子 — 用 atomic rename (write to .tmp + rename) 或 file lock，避免多个 API 并发写造成 json 损坏（Evaluator + Applier + 用户手改可能同时发生）；(4) 每个 status 转换 MUST 自动 append 一条 timeline event（{ts, event: "status_changed", from, to}），不需要调用方额外写。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [state-machine, append-only, atomic-write]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/07-gate-tracker.md#applicationsjson"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

@@ -1,0 +1,22 @@
+spec_id: "constraint-playwright-runtime-001"
+type: constraint
+state: active
+intent:
+  summary: "必须 headful + userDataDir 隔离 + stealth 插件必载 + 不共享日常 Chrome cookies"
+  detail: |
+    (1) Playwright MUST 用 headful 模式（{ headless: false }）— 用户能看到填表过程、反检测宽容度高、失败能立刻看到；MUST NOT 为了性能改 headless；(2) userDataDir MUST 独立为 data/career/.playwright/profile/，MUST NOT 指向用户日常 Chrome profile（~/Library/Application Support/Google/Chrome/Default 等）— 避免 cookies 串 / 日常登录态被脚本干扰；(3) playwright-extra + stealth 插件 MUST 加载 — 否则 navigator.webdriver=true 会被绝大多数反 bot 检测识破；(4) 所有 page interaction 之间 MUST 加 100-400ms 随机延迟（打字 / 点击 / 翻页），不能瞬时完成；(5) 用户日常 Chrome 必须和 Applier Chromium 完全隔离（独立 OS 进程，~200-500MB 内存独立占用）。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [isolation, stealth, anti-detection]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/06-applier.md#6.1"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

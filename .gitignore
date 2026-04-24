@@ -24,4 +24,72 @@ dist-ssr
 *.sw?
 
 # App data (contains tokens)
-data/
+# NOTE: not ignoring `data/` wholesale because data/career/ has committed
+# config/knowledge files (see career-system exceptions below). Ignore only
+# the json files that exist at data/ root (pings/stats/cache/config/repos).
+data/*.json
+data/*.jsonl
+claude-skills/
+start.sh
+.gstack/
+
+# ─────────────────────────────────────────────────────────────
+# Career System (data/career/) — explicit ignore of sensitive files
+# Managed by feature 01-foundation/02-career-data-layout. Default: files
+# are tracked UNLESS listed below. The .gitignore rules above (data/*.json)
+# no longer ignore the data/ directory itself, so data/career/** is visible.
+# ─────────────────────────────────────────────────────────────
+
+# Sensitive personal / OAuth / state data (MUST NOT commit)
+data/career/identity.yml
+data/career/.oauth.json
+data/career/cv.gdoc-id.local
+
+# Ephemeral runtime state / logs (regenerated per run)
+data/career/applications.json
+data/career/pipeline.json
+data/career/scan-history.jsonl
+data/career/archive.jsonl
+data/career/llm-costs.jsonl
+data/career/followup-templates.md
+
+# QA Bank: legal answers (EEO/visa) + history (application trail) are private
+data/career/qa-bank/legal.yml
+data/career/qa-bank/history.jsonl
+
+# Resumes: actual base.md content is private; versions/ are auto snapshots
+data/career/resumes/*/base.md
+data/career/resumes/*/base.gdoc-id
+data/career/resumes/*/versions/
+
+# Generated / transient outputs
+data/career/reports/*
+data/career/output/*
+data/career/drafts/*
+data/career/feedback/*
+data/career/apply-sessions/*
+data/career/.playwright/
+
+# Keep .gitkeep files in otherwise-ignored dirs so git retains the dir
+# (.playwright/ is runtime-created so no .gitkeep needed there)
+!data/career/reports/.gitkeep
+!data/career/output/.gitkeep
+!data/career/drafts/.gitkeep
+!data/career/feedback/.gitkeep
+!data/career/apply-sessions/.gitkeep
+
+# Keep README.md in otherwise-ignored dirs (documentation is not data)
+!data/career/reports/README.md
+!data/career/output/README.md
+!data/career/drafts/README.md
+!data/career/feedback/README.md
+!data/career/apply-sessions/README.md
+
+# Local skill installations (npx skills add)
+.agents/
+.claude/
+skills/
+skills-lock.json
+
+# Embedded repos / local workspaces
+career-ops/

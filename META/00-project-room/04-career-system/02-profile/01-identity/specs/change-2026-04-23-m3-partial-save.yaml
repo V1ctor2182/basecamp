@@ -1,0 +1,82 @@
+spec_id: "change-2026-04-23-m3-partial-save"
+type: change
+state: active
+intent:
+  summary: "m3: Allow partial save — 填一点存一点（missing 不阻塞 save, 仅 malformed 阻塞）"
+  detail: |
+    **问题**: m2 Save 按钮要求全部必填通过才亮。用户填到一半想 save 先存起
+    来不行，必须一次性填完。这违反实际使用习惯 — identity 信息很多 (18+
+    字段) 很少一次填完。
+
+    **解决**: 放宽为"增量保存"。区分两类 validation：
+      - **Missing required**: 字段空但应填 → 仅显示红 * + "Required" 文字提
+        示（在用户 interact 后）。不阻塞 save。
+      - **Malformed format**: email 非 email / URL 非 URL 格式错 → 红边 + 行
+        内 error message + 阻塞 save（防止坏数据写入文件）。
+
+    Files modified:
+      - server.mjs (IdentitySchema 放宽, ~25 行改动):
+        - EducationEntrySchema: school/degree/graduation 去掉 .min(1)
+        - LanguageEntrySchema: lang 去掉 .min(1) (level enum 保持)
+        - IdentitySchema: name/email/phone/links.*/location.*/legal.*
+          所有 .min(1) 去掉；.email() / .url() 去掉（前端保证格式）
+        - education / languages 数组去掉 .min(1) 允许空
+        - booleans 保持必填（前端总是提供默认值 false/true）
+      - src/career/settings/Identity.tsx (validate + UI, ~50 行):
+        - validate() 返 {missing, malformed} 分别 Record<key, true|string>
+        - missingCount / malformedCount / canSave = malformedCount===0
+        - isComplete = !missing && !malformed（供 Applier 将来判断用）
+        - showErr(key): 仍显示 malformed 消息或 missing 的 "Required"
+          （只在 dirty/saved 后），与 m2 一致
+        - showBad(key): 新增 — 只当 malformed 才返 true → af-input-error 红边
+        - 把所有 className 的 af-input-error 切换从 showErr → showBad
+          （missing 不上红边，只留 * 提示）
+        - Submit 按钮 disabled = !canSave || saving || !dirty
+          （!dirty 新增 — save 完再点无意义）
+        - Status bar 6 档显示: saving / error / dirty+malformed / dirty+missing /
+          dirty ready / saved+complete / saved+partial / idle+missing / idle ready
+
+    验证 (smoke test 5 cases, all passed):
+      1. PUT 只有 name，其他空 → 200 + yaml 写入 ✓
+      2. GET 往返 → 读到 partial identity ✓
+      3. 文件内容 yaml 格式正确 (空字符串 '' / 空数组 [] 合法) ✓
+      4. 追加字段 PUT (email/phone) → 200 ✓
+      5. 典型浏览器 flow 预期 (dev server 手工验证留给用户):
+         - 空表单 → Save disabled (dirty=false)
+         - 只填 name → Save 亮（missing 不 block）
+         - 填 email = "abc" → Save 灰（malformed block）
+         - 修正 email → Save 亮，点击 → toast "Saved · N required still missing"
+
+    Design rationale (change from m2 Q4 "全部必填"):
+      - identity 数据 18+ 字段 — 用户常分多次填，一次性填完不现实
+      - Applier 在真正调用时再 re-check completeness (use-time validation)
+      - 格式错（malformed）仍阻塞 save — 坏数据不该入库
+      - 红 * 持续提示缺什么，不打扰填写节奏
+
+    下游影响:
+      - Applier 读 identity 时 MUST re-check 必填字段（不能假设都填完了）
+      - CV Renderer 读 name/email/phone 如果为空应该给个合理 fallback
+      - 未来 m4 可加 auto-save (debounced) 进一步省用户点击
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m3, backend, frontend, ux, partial-save]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit TBD"
+relations:
+  - "extends intent-identity-001 (m3/3, post-room-active enhancement)"
+  - "depends_on change-2026-04-23-m2-identity-form-ui"
+  - "reverses m2 decision Q4 (全部必填 → 部分可 save)"
+  - "requires downstream (Applier, Renderer) to re-check completeness at use-time"
+anchors:
+  - file: "server.mjs"
+    symbols: ["IdentitySchema", "EducationEntrySchema", "LanguageEntrySchema"]
+  - file: "src/career/settings/Identity.tsx"
+    symbols: ["validate", "ValidationResult", "canSave", "isComplete", "showBad"]
+created_at: "2026-04-23"
+updated_at: "2026-04-23"

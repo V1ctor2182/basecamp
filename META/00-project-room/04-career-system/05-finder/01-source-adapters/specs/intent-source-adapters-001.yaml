@@ -1,0 +1,22 @@
+spec_id: "intent-source-adapters-001"
+type: intent
+state: active
+intent:
+  summary: "6 种 Source Adapter：Greenhouse / Ashby / Lever / github-md / scrape / rss / manual"
+  detail: |
+    Finder 的可插拔数据源层，每个 adapter 实现 fetch(config) → RawJobs[] 和 normalize(raw, source) → Job。初版先做 3 个主流 ATS API（零 token、无反爬）：(1) Greenhouse: https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true；(2) Ashby: https://api.ashbyhq.com/posting-api/job-board/{slug}；(3) Lever: https://api.lever.co/v0/postings/{slug}?mode=json。再加 2 个高 ROI 源：(4) github-md: 从 raw.githubusercontent.com 拉 SimplifyJobs / speedyapply 等 repo 的 README.md，按表格行解析（处理 ↳ 同公司续行 / 🔒 已关闭）；(5) manual: POST /api/career/pipeline/manual { url, note } 让用户粘 URL + Playwright 兜底抓。剩余（scrape / rss / SmartRecruiters / Recruitee / Workable）作为后续扩展，不在 MVP 里。portals.yml 配各源的 slug / config / priority。验收：配好 10 个 Greenhouse 公司 + 3 个 github-md repo 后跑一次 fetch，能拿到 100+ raw jobs；normalize 后全部通过 Zod schema 校验；Job.raw 字段保留原始数据留底。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [backend, scraping, ats-api, github-api]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/03-finder.md#源类型-1-6"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

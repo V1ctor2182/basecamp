@@ -1,0 +1,22 @@
+spec_id: "constraint-dedupe-hard-filter-001"
+type: constraint
+state: active
+intent:
+  summary: "短路顺序锁定 + archive.jsonl 必写 + id 稳定性保证"
+  detail: |
+    (1) hard filter 规则 MUST 按 constraint-preferences-001 定义的 8 步短路顺序执行（不可打乱，否则成本激增）；(2) 每次 drop MUST append 一条 record 到 data/career/archive.jsonl（含 job_id / matched_rule_id / matched_value / timestamp）；不能"静默 drop"；(3) Job.id 的稳定性 MUST 保证：同一岗位不同时间被扫，id 必须一致（规范：hash(company-slug + role-slug + normalized-url)，URL 里去 tracking params 如 utm_*、ref 等）。否则去重失效；(4) scan-history.jsonl MUST append-only（不能 rewrite），否则去重状态丢失。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [short-circuit, auditability, idempotency]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/03-finder.md#规则优先级和短路 + scan-history"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

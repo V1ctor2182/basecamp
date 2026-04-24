@@ -1,0 +1,58 @@
+spec_id: "change-2026-04-23-m2-readmes-and-examples"
+type: change
+state: active
+intent:
+  summary: "m2: 8 子 README + 4 .example/模板 + templates.md + index.yml + init-career.sh (ROOM 完成)"
+  detail: |
+    Files created (14):
+      Sub-directory READMEs (7):
+        - data/career/resumes/README.md                — 多简历目录结构 + 下游 feature
+        - data/career/qa-bank/README.md                — 三层 (legal/templates/history) 说明
+        - data/career/site-adapters/README.md          — YAML 结构 + 飞轮生成规则
+        - data/career/reports/README.md                — Block A-G 结构 + 谁读谁写
+        - data/career/output/README.md                 — tailored MD + PDF 命名规则
+        - data/career/drafts/README.md                 — JSON schema + 生命周期
+        - data/career/feedback/README.md               — 4 条飞轮数据 + 阈值
+        - data/career/apply-sessions/README.md         — multi-step state machine session
+      Example templates + real committed files (5):
+        - data/career/preferences.example.yml          — 完整 targets/comp/hard_filters/
+                                                         scoring_weights/thresholds/
+                                                         evaluator_strategy 示例
+        - data/career/portals.example.yml              — 9 ATS + 3 github-md sources +
+                                                         global_filters + scan_cadence
+        - data/career/qa-bank/legal.example.yml        — visa/EEO/personal/how_did_you_hear
+        - data/career/qa-bank/templates.md             — 6 模板 (Why us / Why role /
+                                                         STAR+R / Salary / Start / Weakness /
+                                                         Why leaving)
+        - data/career/resumes/index.yml                — 空 resumes[] + 填充示例注释
+      Infrastructure (2):
+        - scripts/init-career.sh                       — 幂等 cp .example → real file
+        - package.json (+1 script)                     — "init:career" npm script
+    Verification:
+      - npm run init:career 测试通过：生成 preferences.yml + portals.yml +
+        qa-bank/legal.yml 三个真实文件（cleanup 后不 commit）
+      - git check-ignore 验证：legal.yml IGNORED ✓，preferences.yml +
+        portals.yml TRACKED ✓（符合设计 — 偏好可 commit）
+      - 重复运行 init:career 跑第二次：skip 已存在文件，幂等
+    Room 完成标记（最后一个 milestone）:
+      - room.yaml lifecycle: planning → active
+      - _tree.yaml 该 feature 节点 lifecycle: planning → active
+      - spec.md 全量 rewrite (2 milestones 汇总 + 目录结构速查 + 下游 feature)
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m2, room-complete, docs, examples, init-script]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit TBD (filled after commit)"
+relations:
+  - "implements intent-career-data-layout-001 (m2/2, ROOM COMPLETE)"
+  - "depends_on change-2026-04-23-m1-dirs-and-gitignore"
+  - "triggers room.yaml lifecycle: planning → active"
+anchors: []
+created_at: "2026-04-23"
+updated_at: "2026-04-23"

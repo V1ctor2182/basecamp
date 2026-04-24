@@ -1,0 +1,22 @@
+spec_id: "constraint-stage-b-sonnet-001"
+type: constraint
+state: active
+intent:
+  summary: "Block B 和 Block E 必须始终启用（下游依赖） + prompt caching 必开"
+  detail: |
+    (1) Block B (CV Match) 和 Block E (Personalization Plan) MUST NOT 被关闭 —— Block B 是总分的核心依据，关了等于不打分；Block E 是 Tailor Engine 的唯一输入，关了多简历定制整个失效。UI Settings 里把这两项设为 disabled / locked 不可编辑；(2) Prompt caching MUST 开启 — cv.md + narrative.md + proof-points.md + identity.yml 作为 cache-control: ephemeral 标记，避免每次 Sonnet 重复读大上下文；(3) WebSearch / Playwright 工具调用 MUST 带超时（30s），失败后 Block D / Block G 降级为"基于 JD 文本推断 + 标注 confidence: low"，不能让整个评估挂掉；(4) 产出 reports/{jobId}.md MUST 符合标准 Block A-G 结构，Block 之间用固定 `## Block X — Title` 标题分隔（便于下游解析）。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [dependency-lock, prompt-cache, output-format]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/05-evaluator.md#block-启用开关 + llm-strategy.md"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

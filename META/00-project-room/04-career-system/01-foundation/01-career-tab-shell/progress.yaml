@@ -1,0 +1,161 @@
+milestones:
+  - id: "m1-careerapp-shell"
+    name: "CareerApp shell + /career 路由注册 + 顶部 header"
+    status: completed
+    estimated_files:
+      - "src/CareerApp.tsx"
+      - "src/App.tsx"
+      - "src/career.css"
+    actual_files:
+      - "src/CareerApp.tsx"
+      - "src/App.tsx"
+      - "src/career.css"
+    estimated_lines: 80
+    actual_lines: 130   # 40 TSX + 87 CSS + 3 App.tsx
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "6f8de29"
+    description: |
+      新建 src/CareerApp.tsx 作为 /career/* 的顶层 app 壳（类似 LearnApp / TrackerApp），
+      内部用 BrowserRouter nested Routes。修改 src/App.tsx 注册 <Route path="/career/*"
+      element={<CareerApp />}>。Header 参考 TrackerApp 风格：<Link to="/"> "← Back to Learn"
+      + Briefcase 图标 + "Career" 标题 + last updated 预留位。正文先放 "Career System —
+      Coming Soon" 占位。新建 src/career.css 放基础样式（header / layout）。
+
+  - id: "m2-top-level-tabs"
+    name: "6 顶级子路由 + Tab 导航"
+    status: completed
+    estimated_files:
+      - "src/career/CareerNav.tsx"
+      - "src/career/Overview.tsx"
+      - "src/career/Pipeline.tsx"
+      - "src/career/Shortlist.tsx"
+      - "src/career/Applied.tsx"
+      - "src/career/Prep.tsx"
+      - "src/CareerApp.tsx"
+    actual_files:
+      - "src/career/CareerNav.tsx"
+      - "src/career/Overview.tsx"
+      - "src/career/Pipeline.tsx"
+      - "src/career/Shortlist.tsx"
+      - "src/career/Applied.tsx"
+      - "src/career/Prep.tsx"
+      - "src/career/Reports.tsx"   # extra: reports also dynamic route
+      - "src/CareerApp.tsx"
+      - "src/career.css"           # extra: nav + page styles
+    estimated_lines: 120
+    actual_lines: 220   # 7 pages avg 15 + nav 30 + App.tsx 45 + css 80
+    depends_on: ["m1-careerapp-shell"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "2304730"
+    description: |
+      CareerNav 组件用 NavLink 渲染水平 tab bar（6 tabs: Overview / Pipeline /
+      Shortlist / Applied / Prep / Settings），active state 通过 NavLink isActive
+      prop。CareerApp.tsx 的 Routes 配 6 顶级 + 2 dynamic + 1 fallback：
+      index → Navigate /career/overview, overview/pipeline/shortlist/applied 直接
+      渲染，prep + prep/:company 两个 Route（无参数显示 empty state），
+      reports + reports/:id 类似，settings/* 暂占位到 m3，* fallback redirect
+      overview。7 个占位组件（含 Reports 额外加）结构简单：标题 + todo + empty + ref。
+
+  - id: "m3-settings-nested"
+    name: "Settings 嵌套子路由 + 左侧 sidebar + 6 子页占位"
+    status: completed
+    estimated_files:
+      - "src/career/settings/SettingsLayout.tsx"
+      - "src/career/settings/Identity.tsx"
+      - "src/career/settings/Preferences.tsx"
+      - "src/career/settings/Portals.tsx"
+      - "src/career/settings/QABank.tsx"
+      - "src/career/settings/Narrative.tsx"
+      - "src/career/settings/Resumes.tsx"
+    actual_files:
+      - "src/career/settings/SettingsLayout.tsx"
+      - "src/career/settings/Identity.tsx"
+      - "src/career/settings/Preferences.tsx"
+      - "src/career/settings/Portals.tsx"
+      - "src/career/settings/QABank.tsx"
+      - "src/career/settings/Narrative.tsx"
+      - "src/career/settings/Resumes.tsx"
+      - "src/CareerApp.tsx"
+      - "src/career.css"
+    estimated_lines: 100
+    actual_lines: 160
+    depends_on: ["m2-top-level-tabs"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "81b75e9"
+    description: |
+      SettingsLayout 组件：左 sidebar NavLink 列出 6 sub-route + <Outlet />。
+      6 个占位子组件各一个文件（标题 + todo + empty + spec ref）。CareerApp.tsx
+      用 <Route path="settings" element={<SettingsLayout/>}> 嵌套 Routes，内部
+      index redirect identity + 6 sub paths + * fallback identity。CSS grid
+      2 列 (220px sidebar + 1fr content), sticky sidebar, active 高亮。
+
+  - id: "m4-entry-point-and-polish"
+    name: "LearnApp 入口 + 导航状态持久化 + 响应式 polish"
+    status: completed
+    estimated_files:
+      - "src/LearnApp.tsx"
+      - "src/CareerApp.tsx"
+      - "src/career.css"
+    actual_files:
+      - "src/LearnApp.tsx"
+      - "src/CareerApp.tsx"
+      - "src/career.css"
+    estimated_lines: 50
+    actual_lines: 75   # 10 LearnApp + 22 CareerApp + 42 css responsive
+    depends_on: ["m3-settings-nested"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "844e192"
+    description: |
+      LearnApp.tsx sidebar 在 "Work Tracker" 下方加 "Career" Link (Briefcase icon
+      + "Career" 文字)，复用 sidebar-tracker-link class 自动一致样式。CareerApp
+      加 useEffect 监听 location 变化把 top-level tab 存 localStorage (key
+      career-last-tab)；index Route 的 RootRedirect 从 localStorage 读 lastTab
+      redirect（fallback overview）。VALID_TABS 白名单防篡改。响应式 @media
+      max-width 768px：settings sidebar 从 220px 列转为横向 pill bar +
+      overflow-x scroll，header/body padding 收缩，nav tab 字号缩小。
+commits:
+  - hash: "6f8de29"
+    date: "2026-04-23"
+    message: "[04-career-system/01-foundation/01-career-tab-shell] m1: add CareerApp shell + /career route + header"
+    files_changed: 5
+    specs_affected:
+      - "change-2026-04-23-m1-careerapp-shell (created)"
+    milestones_affected:
+      - "m1-careerapp-shell (→ completed)"
+  - hash: "2304730"
+    date: "2026-04-23"
+    message: "[04-career-system/01-foundation/01-career-tab-shell] m2: 6 顶级子路由 + Tab 导航 + 7 占位页"
+    files_changed: 11
+    specs_affected:
+      - "change-2026-04-23-m2-top-level-tabs (created)"
+    milestones_affected:
+      - "m2-top-level-tabs (→ completed)"
+  - hash: "81b75e9"
+    date: "2026-04-23"
+    message: "[04-career-system/01-foundation/01-career-tab-shell] m3: Settings 嵌套路由 + 左侧 sidebar + 6 子页占位"
+    files_changed: 11
+    specs_affected:
+      - "change-2026-04-23-m3-settings-nested (created)"
+    milestones_affected:
+      - "m3-settings-nested (→ completed)"
+  - hash: "844e192"
+    date: "2026-04-23"
+    message: "[04-career-system/01-foundation/01-career-tab-shell] m4: LearnApp 入口 + localStorage 持久化 + 响应式 polish"
+    files_changed: 7
+    specs_affected:
+      - "change-2026-04-23-m4-entry-point-and-polish (created)"
+      - "room.yaml (lifecycle: planning → active)"
+      - "_tree.yaml (lifecycle: planning → active)"
+    milestones_affected:
+      - "m4-entry-point-and-polish (→ completed, ROOM COMPLETE)"
+
+current_sprint: "Sprint 1 — Foundation"
+blockers: []
+completion: 100   # 4/4 milestones
+status_note: "🎉 所有 4 milestones 完成。Room 进入 active lifecycle。下一个 Room: 01-foundation/02-career-data-layout"
+last_updated: "2026-04-23"

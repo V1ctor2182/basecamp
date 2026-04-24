@@ -1,0 +1,22 @@
+spec_id: "constraint-source-adapters-001"
+type: constraint
+state: active
+intent:
+  summary: "外部 API / 爬虫必须遵守：rate limit / robots.txt / 公开 UA / 禁止 LinkedIn 类自动扫"
+  detail: |
+    (1) 每个 adapter 调用外部 API 的请求间隔 MUST ≥ 1s（即使平台允许更高频率也自我克制）；(2) HTTP adapters MUST 尊重 robots.txt — 爬之前 fetch robots.txt 检查路径；(3) User-Agent header MUST 标明本项目（例 "learn-dashboard career-system/1.0 (https://github.com/...)" 或用户邮箱），不能伪装浏览器；(4) LinkedIn / Indeed / Glassdoor / ZipRecruiter MUST NOT 自动扫 — ToS 严格禁止，风险不对等。这些平台上的岗位只能用 manual adapter 粘 URL；(5) 所有 network 错误 MUST 捕获 + 记录，不得让一个 source 挂掉整个 scan。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [ethics, tos, rate-limit, robots]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/03-finder.md#源类型-4-linkedin-不推荐 + plan review"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

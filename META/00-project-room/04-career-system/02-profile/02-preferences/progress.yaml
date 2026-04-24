@@ -1,0 +1,304 @@
+milestones:
+  - id: "m1-preferences-backend"
+    name: "Backend GET/PUT /api/career/preferences + Zod schema (permissive) + YAML IO"
+    status: completed
+    actual_lines: 220
+    actual_files:
+      - "server.mjs"
+    estimated_files:
+      - "server.mjs"
+    estimated_lines: 140
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "0b5b617"
+    description: |
+      data/career/preferences.yml CRUD API + Zod 校验（partial-save 风格 — 和
+      m3-identity 一致）。
+
+      实现:
+      - server.mjs 加:
+        - PREFERENCES_FILE = path.join(CAREER_DIR, 'preferences.yml')
+        - Zod schemas (**permissive**: 所有字段可空 / 数组可空，format 错才 block；
+          Applier/Finder/Evaluator 在 use-time re-check completeness)
+          - TargetRoleSchema: { title: string, seniority: string,
+            function?: string } — 目标岗位一条
+          - CompTargetSchema: { base_min?: number, base_max?: number,
+            total_min?: number, total_max?: number, currency: string ('USD' 等) }
+          - LocationPrefSchema: { accept_any: boolean, remote_only: boolean,
+            hybrid_max_days_onsite?: number, preferred_cities: string[],
+            acceptable_countries: string[] }
+          - HardFiltersSchema (Section 7, 9 条, 按短路顺序命名):
+            - source_filter: { blocked_sources: string[] (['linkedin', ...]) }
+            - company_blocklist: string[]
+            - title_blocklist: string[]
+            - title_allowlist: string[]
+            - location: { allowed_countries: string[], allowed_cities: string[],
+              disallowed_countries: string[] }
+            - seniority: { allowed: string[] (['IC3','IC4'...]) }
+            - posted_within_days: number (0 = 不限)
+            - comp_floor: { base_min?: number, total_min?: number, currency: string }
+            - jd_text_blocklist: string[] (必须 JD enrich 后才判)
+          - SoftPreferencesSchema: { company_types: string[] (startup/bigco/...),
+            remote_culture: string[], tech_stack_preferred: string[],
+            tech_stack_avoid: string[], industries_preferred: string[],
+            industries_avoid: string[] }
+          - ScoringWeightsSchema: { tech_match: number, comp_match: number,
+            location_match: number, company_match: number,
+            growth_signal: number } (0-1, 前端 sum-validate)
+          - ThresholdsSchema: { strong: number, worth: number,
+            consider: number, skip_below: number } (1-5 scale)
+          - EvaluatorStrategySchema: {
+              stage_a: { enabled: boolean, model: string, threshold: number },
+              stage_b: { enabled: boolean, model: string,
+                blocks: { block_b: boolean, block_c: boolean, block_d: boolean,
+                  block_e: boolean, block_f: boolean, block_g: boolean } }
+              (Block B / E 在 UI 上强制 true — Tailor 依赖 Block E)
+            }
+          - PreferencesSchema: { targets: TargetRole[], comp_target: CompTarget,
+              location: LocationPref, hard_filters: HardFilters,
+              soft_preferences: SoftPreferences, scoring_weights: ScoringWeights,
+              thresholds: Thresholds, evaluator_strategy: EvaluatorStrategy }
+        - readPreferences() — 读 yaml + zod.parse + 文件不存在返 defaultPreferences()
+        - defaultPreferences() — 返回空壳（scoring_weights 5 项 = 0.2 平均分，
+          thresholds 默认 {strong:4.5, worth:4.0, consider:3.5, skip_below:3.0}，
+          blocks 默认 B/E=true 其他 false）
+        - writePreferences(obj) — zod.parse + yaml.dump + 原子写入
+        - GET /api/career/preferences — 返回当前或 defaultPreferences()
+        - PUT /api/career/preferences — 验证 + 写入，400 on zod error
+
+      验收:
+      - curl GET 空文件 → 返回 defaultPreferences()
+      - curl PUT partial (只含 targets[0].title) → 200 + yaml 写入
+      - curl GET → 读到 partial + defaults 合并（其他字段保持默认）
+      - curl PUT malformed (comp_target.base_min="abc") → 400 + zod issues
+
+  - id: "m2-preferences-form-static"
+    name: "Settings → Preferences 前 6 Section + TagInput 共享组件"
+    status: completed
+    actual_lines: 864
+    actual_files:
+      - "src/career/TagInput.tsx"
+      - "src/career/settings/Preferences.tsx"
+      - "src/career/settings/ats-form.css"
+    estimated_files:
+      - "src/career/settings/Preferences.tsx"
+      - "src/career/TagInput.tsx"
+    estimated_lines: 280
+    depends_on: ["m1-preferences-backend"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "e17f096"
+    description: |
+      替换 Preferences.tsx 占位为真实 ATS 风格 6-section 表单（Section 7
+      hard_filters 在 m3 做）。复用 Identity 的 ats-form.css (`.af-*` classes)。
+
+      **locked decisions** (from plan-milestones Phase 3):
+        - Q1=a: scoring_weights 用 manual sliders (5 slider 0-1) + 实时 sum
+          显示 + sum != 1.0 ± 0.01 时红字警告（仍允许 save — 按 partial-save
+          精神仅在 apply/evaluate use-time re-check）
+        - Q2=c: stage_b_blocks 用 cards with descriptions（每 Block 一张卡
+          带说明；Block B 和 Block E 的卡 disabled + "Required by Tailor"
+          提示，toggle 永远 true）
+        - Q4=a: TagInput 抽成共享 component 放 `src/career/TagInput.tsx` —
+          后续 QA Bank / site-adapters / narrative 都复用
+
+      **新文件 `src/career/TagInput.tsx`** (~60 行):
+        - props: { value: string[], onChange: (v: string[]) => void,
+            placeholder?: string, disabled?: boolean }
+        - UI: 已有 tag 显示成 pill + 每个 × 删除；末尾 input，Enter/Tab/逗号
+          添加；Backspace 在空 input 删最后一个
+        - 样式复用 ats-form.css 里加的 .af-tag-input / .af-tag-pill /
+          .af-tag-remove（本 m 末尾追加到 ats-form.css）
+
+      **`src/career/settings/Preferences.tsx`** (~220 行):
+        - Pattern 复用 Identity.tsx: useEffect load GET → local state → validate
+          {missing, malformed} → canSave = malformed===0 || saving || !dirty
+          → PUT + toast + beforeunload
+        - Section 1. Target Roles (加减行 widget)
+          - targets[]: title* + seniority dropdown* (IC1-IC6/Manager/Director)
+            + function (free text optional)
+          - ≥1 条时红 * 提示
+        - Section 2. Compensation
+          - comp_target.base_min / base_max / total_min / total_max (number
+            inputs, all optional but format-validated if填) + currency
+            dropdown (USD/EUR/GBP/CAD/CNY)
+        - Section 3. Location
+          - accept_any (toggle) — on 时其他字段 disabled
+          - remote_only (toggle) — on 时 hybrid_max_days_onsite disabled
+          - hybrid_max_days_onsite (number 0-5)
+          - preferred_cities (TagInput)
+          - acceptable_countries (TagInput)
+        - Section 4. Soft Preferences (6 TagInput 网格 2 列):
+          - company_types / remote_culture / tech_stack_preferred /
+            tech_stack_avoid / industries_preferred / industries_avoid
+        - Section 5. Scoring & Thresholds
+          - scoring_weights: 5 slider (tech_match / comp_match /
+            location_match / company_match / growth_signal)，每个 0-1
+            step 0.05，slider 右边显示当前值
+          - 下方 live "Sum: 1.00 ✓" 绿色，或 "Sum: 0.87 (should be 1.00)"
+            红色警告
+          - thresholds: 4 个 number input (strong/worth/consider/skip_below)
+            step 0.1 range 1-5，显示用途说明（"strong 4.5+ 自动进 shortlist,
+            skip_below 3.0 以下归档"）
+        - Section 6. Evaluator Strategy
+          - stage_a: enabled toggle + model text ('claude-haiku-4-5')
+            + threshold number (default 3.5)
+          - stage_b: enabled toggle + model text ('claude-sonnet-4-6')
+            + 6 Block cards (Q2=c locked):
+              - 每 card: title (Block B/C/D/E/F/G) + 说明文字
+                (e.g., "Block B: Summary — 岗位总结 + 为什么值得考虑")
+                + toggle（右上）
+              - Block B 的 card: toggle disabled + "Required by Tailor" badge
+              - Block E 的 card: toggle disabled + "Required by Tailor" badge
+              - 其他 4 Block: toggle 可切换
+        - Sticky bottom submit bar (同 Identity): status 左 + Save Preferences
+          按钮右
+
+      **追加到 ats-form.css** (~40 行):
+        - .af-tag-input container (border + padding + flex wrap)
+        - .af-tag-pill (蓝色 pill with text + × button)
+        - .af-tag-remove (inline button)
+        - .af-slider-row (label + slider + value 三栏 grid)
+        - .af-block-card-grid (6 cards 2 列)
+        - .af-block-card (带 toggle 的 card)
+        - .af-block-card-disabled (灰背景 + 禁用 toggle)
+        - .af-block-card-badge (Required badge 红字)
+
+      验收:
+      - 打开 /career/settings/preferences → 看到 6 sections 填完 6 段 UI
+      - TagInput Enter 添加 + × 删除正常
+      - 调 slider → sum 实时更新 + 1.00 时绿色
+      - Block B/E toggle 点不动 + 显示 Required badge
+      - 填 target[0].title = "SDE"，点 Save → toast "Saved" → 重启 server +
+        reload 看到值恢复
+      - 清空 title → Save 仍亮（missing 不 block）+ status bar 显示
+        "N required missing"
+      - comp_target.base_min 填 "abc" → 行内 error + Save 灰
+
+  - id: "m3-hard-filters-editor"
+    name: "Section 7 Hard Filters (9 sub-sections) + Preview dry-run stub"
+    status: completed
+    actual_lines: 495
+    actual_files:
+      - "src/career/settings/Preferences.tsx"
+      - "src/career/settings/ats-form.css"
+      - "server.mjs"
+    estimated_files:
+      - "src/career/settings/Preferences.tsx"
+      - "server.mjs"
+    estimated_lines: 180
+    depends_on: ["m2-preferences-form-static"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "b4ec665"
+    description: |
+      在 Preferences.tsx 加 Section 7 Hard Filters + Preview dry-run。
+
+      **locked decisions** (from plan-milestones Phase 3):
+        - Q3=a: Preview dry-run 做 UI + 后端 stub API —— UI 先上，后端返
+          mock 数据（后续 05-finder/03-dedupe-hard-filter 做完替换真实实现）
+
+      **Preferences.tsx Section 7 Hard Filters** (~120 行):
+        - Section 标题 "Hard Filters" + desc "按顺序短路评估 —— 上面规则命中
+          立刻归档不进下游。顺序: source → company → title → location →
+          seniority → posted_days → comp → jd_text"
+        - 9 sub-sections，每个带 ordinal label "① source_filter" 等:
+          1. ① source_filter — blocked_sources: TagInput
+             (options hint: linkedin / indeed / glassdoor)
+          2. ② company_blocklist — TagInput (公司名)
+          3. ③ title_blocklist + title_allowlist — 2 TagInput 并列
+             （help text: "allowlist 非空时只要求命中任一; blocklist 任一命中就 drop"）
+          4. ④ location — allowed_countries / allowed_cities /
+             disallowed_countries 三 TagInput (全空=不过滤)
+          5. ⑤ seniority — TagInput (options hint: IC1 IC2 IC3 IC4 IC5 IC6
+             Senior Staff Principal Manager Director VP)
+          6. ⑥ posted_within_days — number input (0 = 不限)
+          7. ⑦ comp_floor — base_min / total_min + currency select
+          8. ⑧ jd_text_blocklist — TagInput + help
+             "需先 JD Enrich 完成才评估（最贵，最后跑）"
+        - Section 末尾 **Preview bar**:
+          - 按钮 "Run Preview on recent 100 jobs" (secondary style,
+            `.af-btn-secondary`)
+          - 点击 → POST /api/career/preferences/preview → 等结果（loading
+            spinner）
+          - 结果展示: "Of 100 recent jobs: 37 would be dropped (23 new),
+            63 would pass"
+          - 再下 collapsible "Show breakdown by rule":
+            - 列 9 条: "source_filter: 3 drops", "company_blocklist: 8 drops",
+              ... (点开 hover 每个 drop 理论上带 matched_value，但 stub 只 mock)
+          - help text "⚠️ Preview uses mock data until 05-finder/03-dedupe
+            ships. True drops will come from real pipeline scan."
+
+      **server.mjs** stub API (~60 行):
+        - POST /api/career/preferences/preview:
+          - body = 完整 preferences (client 发当前表单状态 — 支持 unsaved
+            preview)
+          - 返回 mock breakdown:
+            ```json
+            {
+              "total_jobs": 100,
+              "would_drop": 37,
+              "would_pass": 63,
+              "new_drops": 23,  // 相对当前持久化的 preferences
+              "breakdown": [
+                {"rule": "source_filter", "drops": 3, "example_values": [...]},
+                {"rule": "company_blocklist", "drops": 8, ...},
+                ...  // 9 条
+              ],
+              "stub": true,
+              "note": "Mock data. Real pipeline dry-run ships with 05-finder/03-dedupe-hard-filter."
+            }
+            ```
+          - stub 逻辑: 根据 preferences.hard_filters 里非空字段数估算
+            drops（e.g., 每条非空 blocklist 给 +2~5 drops），让 UI 动起来
+          - **MUST 在 response 里标 stub: true** — 前端 UI 上显示 ⚠️ 提示
+
+      **追加到 ats-form.css** (~20 行):
+        - .af-filter-ordinal (① ②... 圆形 badge 蓝底白字)
+        - .af-preview-bar (sticky 某处 + 按钮 + 结果)
+        - .af-preview-result (grid / 数字 highlight)
+        - .af-btn-secondary (次要按钮样式)
+
+      验收:
+      - /career/settings/preferences 拉到最下 → 看到 Section 7 + 9 子项
+      - 填 company_blocklist = ["Foo","Bar"]，点 Run Preview → 2s 后出
+        "Of 100 ... 23 new drops" + breakdown 显示 company_blocklist: N drops
+      - response.stub = true → UI 显示 ⚠️ Mock 提示
+      - 保存 preferences → 再 Preview → "new_drops" 应该 reset 成 0（相对
+        当前持久化的规则）
+      - curl POST /api/career/preferences/preview 返回 mock breakdown
+
+commits:
+  - hash: "0b5b617"
+    date: "2026-04-23"
+    message: "[04-career-system/02-profile/02-preferences] m1: Backend GET/PUT /api/career/preferences + Zod PreferencesSchema + yaml IO"
+    files_changed: 4
+    specs_affected:
+      - "change-2026-04-23-m1-preferences-backend (created)"
+    milestones_affected:
+      - "m1-preferences-backend (→ completed)"
+  - hash: "e17f096"
+    date: "2026-04-23"
+    message: "[04-career-system/02-profile/02-preferences] m2: Settings → Preferences 前 6 Section + TagInput 共享组件"
+    files_changed: 4
+    specs_affected:
+      - "change-2026-04-23-m2-preferences-form-static (created)"
+    milestones_affected:
+      - "m2-preferences-form-static (→ completed)"
+  - hash: "b4ec665"
+    date: "2026-04-23"
+    message: "[04-career-system/02-profile/02-preferences] m3: Section 7 Hard Filters (8 sub-sections 短路顺序) + Preview stub (ROOM COMPLETE)"
+    files_changed: 6
+    specs_affected:
+      - "change-2026-04-23-m3-hard-filters-editor (created)"
+      - "room.yaml (lifecycle: in_progress → active)"
+      - "_tree.yaml (lifecycle: in_progress → active)"
+    milestones_affected:
+      - "m3-hard-filters-editor (→ completed, ROOM COMPLETE)"
+
+current_sprint: "Sprint 2 — Profile"
+blockers: []
+completion: 100
+status_note: "🎉 ROOM 完成 (3 milestones done, lifecycle active)。Section 7 hard_filters + Preview stub 就位，等 05-finder/03-dedupe 替换 stub。下一个 Room: 02-profile/03-narrative-proof"
+last_updated: "2026-04-23"

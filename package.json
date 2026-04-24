@@ -4,10 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"node server.mjs\" \"vite\"",
+    "dev": "concurrently \"PORT=4568 node server.mjs\" \"vite --port 5173\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "init:career": "bash scripts/init-career.sh"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",
@@ -20,12 +21,13 @@
     "@nivo/pie": "^0.99.0",
     "@nivo/radar": "^0.99.0",
     "@nivo/tooltip": "^0.99.0",
-    "@supabase/supabase-js": "^2.101.1",
     "@uiw/react-codemirror": "^4.25.7",
+    "ccusage": "^18.0.0",
     "cors": "^2.8.6",
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.6",
     "express": "^5.2.1",
+    "js-yaml": "^4.1.1",
     "lucide-react": "^0.576.0",
     "mermaid": "^11.12.3",
     "react": "^19.2.0",
@@ -35,14 +37,14 @@
     "react-zoom-pan-pinch": "^3.7.0",
     "recharts": "^3.7.0",
     "rehype-highlight": "^7.0.2",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@vercel/node": "^5.6.23",
     "@vitejs/plugin-react": "^5.1.1",
     "concurrently": "^9.2.1",
     "eslint": "^9.39.1",

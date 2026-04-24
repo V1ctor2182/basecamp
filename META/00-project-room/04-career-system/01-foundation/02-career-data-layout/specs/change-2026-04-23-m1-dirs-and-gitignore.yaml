@@ -1,0 +1,44 @@
+spec_id: "change-2026-04-23-m1-dirs-and-gitignore"
+type: change
+state: active
+intent:
+  summary: "m1: data/career/ 11 subdirs + .gitignore 白名单例外 + 顶层 README"
+  detail: |
+    Files created (10):
+      - data/career/README.md (75 行): 完整目录结构图 + ✅/🔒 committed vs
+        gitignored 标注 + Git 策略说明 + init:career 脚本指引
+      - data/career/{resumes, qa-bank, site-adapters, reports, output,
+        drafts, feedback, apply-sessions}/.gitkeep (8 files): 让 git 追踪
+        空目录；.playwright/ 不加 .gitkeep（运行时创建）
+    Files modified:
+      - .gitignore (+45 行): 关键修复 — `data/` 整目录忽略 → `data/*.json`
+        + `data/*.jsonl`（保持 data/ 目录可见）。新增 "Career System" 段：
+        显式黑名单 10 类 sensitive 文件（identity / oauth / applications /
+        legal / history / base.md / reports / output / drafts / feedback /
+        apply-sessions / .playwright），白名单留给其他所有文件
+    Dirs created (11): data/career/ + 10 subdirs（含 .playwright/ 的 3 个
+      子目录但随后 rm 了因为运行时 Playwright 会重建）
+
+    Verification: git check-ignore 21/21 通过（10 敏感 ignored + 11 白名单
+      tracked，现有 data/*.json 仍 ignored 不变）
+
+    Learning: gitignore 父目录被 excluded 后 `!` 无法 re-include 子文件。
+      原方案 "data/ 整目录 gitignore + ! 反转" 会被 line 27 的 data/ 规则
+      shadow。改用 "data/*.json 精确忽略" 保持目录可见。
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, gitignore, infra, filesystem]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit fe23daf (pinned by f15c5dc)"
+relations:
+  - "implements intent-career-data-layout-001 (m1/2)"
+  - "enforces constraint-career-data-layout-001"
+anchors: []
+created_at: "2026-04-23"
+updated_at: "2026-04-23"

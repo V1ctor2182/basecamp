@@ -1,0 +1,22 @@
+spec_id: "intent-human-gate-tracker-001"
+type: intent
+state: active
+intent:
+  summary: "Human Gate + 申请追踪：状态机 + Dashboard 视图 + 面试准备 + Follow-up"
+  detail: |
+    4 个 feature 的申请全生命周期管理：(1) 01-application-state — applications.json schema + 状态机 + timeline append-only（所有 career-system 申请的 source of truth）；(2) 02-career-dashboard-views — Overview / Shortlist / Applied / Reports 四个核心页面；(3) 03-interview-prep — Interview 状态的公司自动聚合 story-bank + deep research + 模拟行为题答案；(4) 04-followup-cadence — 按状态 + timeline 自动计算下次跟进时间 + 邮件模板（不自动发）。Human Gate 在整个系统体现为：每次状态流转都需要用户动作（"Mark submitted" 按钮 / 面试邀请收到后手动改状态等）。消费 applications.json 由 Evaluator / Applier 共同写入；产出 UI 视图 + 跟进提醒。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: epic
+  domain: "04-career-system"
+  tags: [sub-epic, tracker, human-gate, ui]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/07-gate-tracker.md"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

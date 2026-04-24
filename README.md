@@ -18,7 +18,7 @@ GitHub activity monitoring — commits and PRs across tracked repos with workloa
 
 ### Claude Code Usage
 
-Stats overview, contribution heatmap, token usage by model, activity timeline (day/week/month/projects), and model cost breakdown — all powered by `~/.claude/stats-cache.json` and real-time Stop hooks.
+Stats overview, contribution heatmap, token usage by model, activity timeline (day/week/month/projects), and model cost breakdown — powered by [ccusage](https://github.com/ryoppippi/ccusage) (auto-installed with `npm install`) and Claude Code session logs (`~/.claude/projects/`).
 
 ![Claude Usage](pictureforreadme/claude-usage.png)
 
@@ -30,6 +30,8 @@ npm run dev
 ```
 
 Runs on `localhost:5173` (frontend) + `localhost:8000` (API).
+
+> **Note:** Token and cost data requires [ccusage](https://github.com/ryoppippi/ccusage), which is included as a dependency and installed automatically via `npm install`. Activity data (messages, sessions, tool calls) is read directly from `~/.claude/projects/` session logs.
 
 ### Claude Code Activity Tracking (optional)
 
@@ -66,7 +68,7 @@ All data is local JSON files in `data/`:
 | `config.json` | GitHub username + token |
 | `learn-dirs.json` | Knowledge base directory paths |
 
-Claude stats are read directly from `~/.claude/stats-cache.json` (managed by Claude Code).
+Claude activity is read from `~/.claude/projects/` session logs. Token/cost data comes from `ccusage`.
 
 ## Tech Stack
 

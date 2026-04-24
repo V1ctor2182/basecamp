@@ -1,0 +1,22 @@
+spec_id: "intent-in-ui-editor-001"
+type: intent
+state: active
+intent:
+  summary: "source: manual 简历的 CodeMirror 编辑器 + 实时 PDF 预览 + versions 快照"
+  detail: |
+    让用户在 dashboard 里直接编辑 source: manual 类型的 base resume（不关联 Google Doc 的那些），配合右侧实时 PDF 预览验证视觉效果。左侧复用 LearnApp 现有的 markdown + CodeMirror 编辑组件（已支持语法高亮 + 保存），右侧用 Renderer 模块（04-renderer/01-html-template）产出 PDF 嵌入 iframe/object 实时渲染。每次保存前把当前 base.md 快照到 resumes/{id}/versions/{timestamp}.md；UI 提供回滚 dropdown（选择某个 timestamp → 预览 → 确认覆盖）。通过 editor 改出的 resume 不触发 Google Docs 同步（避免冲突）。验收：在 UI 编辑一份 manual resume，保存后 base.md 更新；右侧 PDF 预览反映最新；versions/ 里有旧版；能回滚到旧版。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [frontend, codemirror, markdown, pdf-preview]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/02-cv-engine.md#2.6-in-ui-编辑"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

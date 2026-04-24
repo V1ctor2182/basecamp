@@ -1,0 +1,22 @@
+spec_id: "intent-jd-enrich-001"
+type: intent
+state: active
+intent:
+  summary: "JD 补全阶段：API refetch / Playwright scrape / manual fallback"
+  detail: |
+    大部分 source（尤其 github-md）只给 URL + 岗位名 + 公司，没有 JD 正文。Evaluator 需要 description 才能打分，所以在 pipeline → evaluator 之间插入 enrich 阶段。优先级：(1) 如果 Job.description 长度 > 500 字符 → 跳过；(2) 源是 Greenhouse / Ashby / Lever → 重新调 API 的 content endpoint 拉完整 JD 正文（快、稳、免费）；(3) 其他源 → Playwright headless 打开 Job.url，等 DOM 渲染，读 main content 区域文本（过滤 nav / footer）；(4) 都失败 → 标 Job.needs_manual_enrich = true，UI 上显示红色提示让用户手动贴 JD。注意：本阶段必须在 hard_filter 之后跑（不要给已经被过滤掉的岗位花 2-5 秒）。Playwright 每个 JD ~2-5s，100 个 enrich 约 5 分钟批处理跑完。验收：对一批去重 + hard filter 后的 ~30 个 job，enrich 后 description 非空率 ≥ 90%；needs_manual_enrich 标记的条目 UI 有提示可手动补。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [backend, playwright, scraping, enrichment]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/03-finder.md#jd-补全"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

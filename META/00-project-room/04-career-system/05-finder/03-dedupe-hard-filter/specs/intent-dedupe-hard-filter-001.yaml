@@ -1,0 +1,22 @@
+spec_id: "intent-dedupe-hard-filter-001"
+type: intent
+state: active
+intent:
+  summary: "scan-history.jsonl 跨源去重 + 9 种 hard filter 规则（零 LLM 成本）"
+  detail: |
+    scan 流程中 step 3 + 4。(1) 去重：所有 adapter 产出 Job 后按 Job.id 查 data/career/scan-history.jsonl（记录已见过的 id + seen_at），只保留新见到的 + append 新 id 到 history；(2) Hard filter：按 preferences.yml 的 hard_filters 配置，按短路顺序 source_filter → company_blocklist → title_blocklist → title_allowlist → location → seniority → posted_within_days → comp_floor → jd_text_blocklist（最后因为要 enrich）过滤。任一规则判定 drop → 立即写 archive.jsonl（含 job 基本信息 + 命中的规则）+ 归档，不进入下游。每种规则支持 match_mode: contains / whole_word / regex；case_sensitive: false 默认。验收：给一批 100 条 raw jobs，跑完去重后剩 ~60（假设重复率 40%），再过 hard filter 后剩 ~30（假设硬性规则滤掉 50%），archive.jsonl 里 30 条 drop 记录能解释每条被哪个规则拒绝。
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [backend, filter, dedupe, rules-engine]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/03-finder.md#hard-filter-规则清单"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

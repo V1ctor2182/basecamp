@@ -1,0 +1,695 @@
+/* ATS-style form — 模仿真实 application form (Greenhouse / Workday) 样式
+ * 共享给 settings 子页: Identity / Preferences / QA Bank / Narrative
+ */
+
+.af-form {
+  max-width: 720px;
+  padding-bottom: 80px; /* space for sticky submit bar */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #1a1a1a;
+}
+
+/* Section */
+.af-section {
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #eaeaea;
+}
+
+.af-section:last-of-type {
+  border-bottom: none;
+}
+
+.af-section-title {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0a0a0a;
+}
+
+.af-section-desc {
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.5;
+}
+
+/* Field */
+.af-field {
+  margin-bottom: 16px;
+}
+
+.af-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.af-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.af-required-star {
+  color: #cf222e;
+  margin-left: 2px;
+}
+
+.af-input,
+.af-select {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #1a1a1a;
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.af-input::placeholder {
+  color: #a0a0a0;
+}
+
+.af-input:hover:not(:focus):not(.af-input-error),
+.af-select:hover:not(:focus) {
+  border-color: #8c959f;
+}
+
+.af-input:focus,
+.af-select:focus {
+  outline: none;
+  border-color: #0969da;
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15);
+}
+
+.af-input-error,
+.af-input-error:focus {
+  border-color: #cf222e;
+  box-shadow: 0 0 0 3px rgba(207, 34, 46, 0.12);
+}
+
+.af-error {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #cf222e;
+  line-height: 1.4;
+}
+
+.af-help-text {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #888;
+  line-height: 1.4;
+}
+
+/* Radio group (y/n / enum) */
+.af-radio-group {
+  display: flex;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.af-radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.af-radio-label input[type='radio'] {
+  margin: 0;
+  cursor: pointer;
+}
+
+/* Array rows (education / languages) */
+.af-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.af-row {
+  padding: 16px;
+  background: #f9f9f9;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  position: relative;
+}
+
+.af-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.af-row-index {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.af-btn-remove {
+  background: none;
+  border: none;
+  color: #cf222e;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.af-btn-remove:hover {
+  background: rgba(207, 34, 46, 0.08);
+}
+
+.af-btn-remove:disabled {
+  color: #bbb;
+  cursor: not-allowed;
+}
+
+.af-btn-remove:disabled:hover {
+  background: none;
+}
+
+.af-btn-add {
+  margin-top: 12px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #0969da;
+  background: #fff;
+  border: 1px dashed #0969da;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s;
+}
+
+.af-btn-add:hover {
+  background: rgba(9, 105, 218, 0.06);
+}
+
+/* Sticky submit bar */
+.af-submit-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  margin: 24px -16px -16px;
+  background: #fff;
+  border-top: 1px solid #e5e5e5;
+  backdrop-filter: blur(8px);
+}
+
+.af-submit-status {
+  font-size: 13px;
+  color: #666;
+}
+
+.af-submit-status.af-submit-dirty {
+  color: #9a6700;
+}
+
+.af-submit-status.af-submit-saved {
+  color: #1a7f37;
+}
+
+.af-btn-primary {
+  padding: 9px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  background: #0a0a0a;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.af-btn-primary:hover:not(:disabled) {
+  background: #1a1a1a;
+}
+
+.af-btn-primary:disabled {
+  background: #d0d7de;
+  color: #888;
+  cursor: not-allowed;
+}
+
+/* Form header */
+.af-form-header {
+  margin-bottom: 24px;
+}
+
+.af-form-title {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 600;
+  color: #0a0a0a;
+}
+
+.af-form-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.af-loading {
+  padding: 40px;
+  text-align: center;
+  color: #888;
+}
+
+/* ─── TagInput (shared across Preferences / QA Bank / site-adapters) ─── */
+.af-tag-input {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px;
+  min-height: 38px;
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  align-items: center;
+}
+
+.af-tag-input:focus-within {
+  border-color: #0969da;
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15);
+}
+
+.af-tag-input-disabled {
+  background: #f5f5f5;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.af-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  font-size: 13px;
+  color: #0969da;
+  background: rgba(9, 105, 218, 0.08);
+  border: 1px solid rgba(9, 105, 218, 0.2);
+  border-radius: 20px;
+  line-height: 1.4;
+}
+
+.af-tag-text {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  color: #0969da;
+  cursor: pointer;
+}
+
+.af-tag-remove:hover {
+  background: rgba(9, 105, 218, 0.18);
+}
+
+.af-tag-input-field {
+  flex: 1;
+  min-width: 120px;
+  border: none;
+  outline: none;
+  padding: 4px 2px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #1a1a1a;
+  background: transparent;
+}
+
+.af-tag-input-field::placeholder {
+  color: #a0a0a0;
+}
+
+/* ─── Sliders (scoring_weights) ─── */
+.af-slider-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 44px;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.af-slider-label {
+  font-size: 13px;
+  color: #333;
+}
+
+.af-slider {
+  width: 100%;
+  cursor: pointer;
+}
+
+.af-slider-value {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #1a1a1a;
+  text-align: right;
+}
+
+.af-slider-sum {
+  margin-top: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  border-radius: 6px;
+  background: #f5f5f5;
+}
+
+.af-slider-sum-ok {
+  color: #1a7f37;
+  background: rgba(26, 127, 55, 0.08);
+}
+
+.af-slider-sum-bad {
+  color: #9a6700;
+  background: rgba(154, 103, 0, 0.08);
+}
+
+/* ─── Block cards (stage_b_blocks) ─── */
+.af-block-card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.af-block-card {
+  position: relative;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.af-block-card-on {
+  border-color: #0969da;
+  background: rgba(9, 105, 218, 0.04);
+}
+
+.af-block-card-disabled {
+  background: #f7f7f7;
+  opacity: 0.9;
+}
+
+.af-block-card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0a0a0a;
+}
+
+.af-block-card-desc {
+  margin: 0;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.5;
+}
+
+.af-block-card-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #9a6700;
+  background: rgba(154, 103, 0, 0.12);
+  border-radius: 10px;
+  margin-top: 8px;
+}
+
+/* Toggle switch (block cards) */
+.af-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: #d0d7de;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.af-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.15s;
+}
+
+.af-toggle-on {
+  background: #0969da;
+}
+
+.af-toggle-on::after {
+  transform: translateX(16px);
+}
+
+.af-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ─── Stage A/B enabled row ─── */
+.af-strategy-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 140px;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/* ─── Number inputs (compact) ─── */
+.af-input-number {
+  max-width: 180px;
+}
+
+/* ─── Hard Filters — ordinal labels + sub-section structure ─── */
+.af-subsection {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  background: #fafbfc;
+  border: 1px solid #eaeaea;
+  border-radius: 8px;
+}
+
+.af-subsection-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0a0a0a;
+}
+
+.af-filter-ordinal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: #0969da;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.af-subsection-desc {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.5;
+}
+
+/* ─── Preview dry-run bar ─── */
+.af-preview-bar {
+  margin-top: 20px;
+  padding: 16px;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+}
+
+.af-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.af-preview-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0a0a0a;
+}
+
+.af-btn-secondary {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1a1a1a;
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.af-btn-secondary:hover:not(:disabled) {
+  background: #f2f4f7;
+}
+
+.af-btn-secondary:disabled {
+  color: #a0a0a0;
+  cursor: not-allowed;
+}
+
+.af-preview-stub-warning {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #9a6700;
+  background: rgba(154, 103, 0, 0.1);
+  border-radius: 6px;
+}
+
+.af-preview-result {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.af-preview-stat {
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #eaeaea;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.af-preview-stat-value {
+  display: block;
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #0a0a0a;
+}
+
+.af-preview-stat-label {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #666;
+}
+
+.af-preview-breakdown {
+  margin-top: 12px;
+}
+
+.af-preview-breakdown summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: #0969da;
+  padding: 4px 0;
+}
+
+.af-preview-breakdown-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-preview-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 13px;
+  background: #fff;
+  border: 1px solid #eaeaea;
+  border-radius: 6px;
+}
+
+.af-preview-breakdown-rule {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #333;
+}
+
+.af-preview-breakdown-drops {
+  font-variant-numeric: tabular-nums;
+  color: #cf222e;
+  font-weight: 500;
+}
+
+.af-preview-breakdown-drops-zero {
+  color: #888;
+  font-weight: 400;
+}
+
+.af-preview-loading {
+  font-size: 13px;
+  color: #666;
+  margin-top: 8px;
+}
+
+.af-preview-error {
+  font-size: 13px;
+  color: #cf222e;
+  margin-top: 8px;
+}

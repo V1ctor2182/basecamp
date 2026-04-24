@@ -1,0 +1,22 @@
+spec_id: "constraint-llm-cost-observability-001"
+type: constraint
+state: active
+intent:
+  summary: "本 feature 只写 infra，不含任何 LLM 调用或 budget 策略"
+  detail: |
+    MUST NOT 在本 feature 里调 Anthropic SDK / 决定阈值 / 渲染 UI banner —— 那些归 06-evaluator/04-budget-gate。本 feature 的边界是：append/read 一条 jsonl record。避免职责渗透（否则 data layer 和 policy layer 耦合，未来换 provider 或加新业务方时很痛）。调用方自己计算 cost 后传进来，本 feature 不根据 model 名推算价格（价格表归调用方的 model 配置）。
+constraints: []
+indexing:
+  type: constraint
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [boundary, separation-of-concerns]
+provenance:
+  source_type: architecture_doc
+  confidence: 0.9
+  source_ref: "career-architecture/llm-strategy.md + plan Review"
+relations: []
+anchors: []
+created_at: "2026-04-22"
+updated_at: "2026-04-22"

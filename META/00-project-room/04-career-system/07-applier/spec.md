@@ -1,0 +1,31 @@
+# Applier
+
+**Room ID**: `00-project-room/04-career-system/07-applier`  
+**Type**: sub-epic  
+**Lifecycle**: backlog  
+**Owner**: fullstack  
+**Parent**: `00-project-room/04-career-system`  
+
+## Intent
+
+ATS 填表：Mode 1 Simplify Hybrid + Mode 2 Full Agent + 飞轮学习
+
+7 个 feature 组成的填表 agent 系统（但 Mode 2 可能 kill，进入前跑 plan-ceo-review 评估 ROI）：(1) 01-mode1-simplify-hybrid — 开放题 draft + 用户 Simplify + 手动 Submit + Mark submitted（推荐日常用）；(2) 02-playwright-runtime — 独立 Chromium + 持久化 profile + 反检测底座；(3) 03-field-classifier — 4 class 字段分类器（Hard/Legal/Open/File）路由到不同填充策略；(4) 04-multi-step-state-machine — Workday / iCIMS 多步表单状态机 + 中断恢复；(5) 05-non-standard-controls — 21 种控件策略 + 置信度分级 + Manual fallback；(6) 06-site-adapters — 按 ATS domain 配特化策略的 yaml；(7) 07-feedback-flywheel — 4 条回流数据驱动 Applier 越用越准。核心铁律：永远不自动点 Submit（Human Gate）。消费 identity.yml / qa-bank / Tailor PDF / reports；产出 drafts/{jobId}.json + qa-bank/history.jsonl 回流。
+
+## Specs in this Room
+
+- [intent-applier-001](specs/intent-applier-001.yaml) — ATS 填表：Mode 1 Simplify Hybrid + Mode 2 Full Agent + 飞轮学习
+
+## Child Rooms
+
+- [Mode 1 - Simplify Hybrid](01-mode1-simplify-hybrid/spec.md) — feature, planning
+- [Playwright Runtime](02-playwright-runtime/spec.md) — feature, backlog
+- [Field Classifier](03-field-classifier/spec.md) — feature, backlog
+- [Multi-Step State Machine](04-multi-step-state-machine/spec.md) — feature, backlog
+- [Non-Standard Controls](05-non-standard-controls/spec.md) — feature, backlog
+- [Site Adapters](06-site-adapters/spec.md) — feature, backlog
+- [Feedback Flywheel](07-feedback-flywheel/spec.md) — feature, backlog
+
+---
+
+_Generated 2026-04-22 by room-init._

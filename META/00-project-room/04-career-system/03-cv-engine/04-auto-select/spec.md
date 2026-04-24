@@ -1,0 +1,21 @@
+# Auto-Select
+
+**Room ID**: `00-project-room/04-career-system/03-cv-engine/04-auto-select`  
+**Type**: feature  
+**Lifecycle**: planning  
+**Owner**: backend  
+**Parent**: `00-project-room/04-career-system/03-cv-engine`  
+
+## Intent
+
+基于 metadata.match_rules 的自动选 base resume 逻辑 + UI override
+
+投某个 Job 时自动选最匹配的 base resume。打分规则：遍历所有 resume 的 metadata.match_rules，role_keywords 命中 Job.role → +10 分；jd_keywords 命中 Job.description（每条）→ +2 分；negative_keywords 命中 → -20 分。选分数最高的那份（tie-break 按 index.yml 顺序）。如果最高分 < 10，用 is_default=true 的那份。后端 GET /api/career/cv/auto-select?jobId=xxx 返回 {resumeId, score, hits: [命中的 keyword 列表]}。UI 在 Pipeline / Apply 页显示 "当前选用 resume: backend（匹配分 18：命中 backend / distributed / microservices / kafka）"，下拉可一键 override 到其他 resume。验收：对 3 个不同方向的 Job 分别跑 auto-select，得到对应 backend / applied-ai / fullstack 的推荐 + 合理的分数解释；手动 override 成功写入。
+
+## Specs in this Room
+
+- [intent-auto-select-001](specs/intent-auto-select-001.yaml) — 基于 metadata.match_rules 的自动选 base resume 逻辑 + UI override
+
+---
+
+_Generated 2026-04-22 by room-init._

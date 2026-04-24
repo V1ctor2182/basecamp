@@ -1,0 +1,10 @@
+milestones: []
+current_sprint: "Sprint 1 — Foundation"
+blockers: []
+completion: 100  # 3/3 features all 100%
+children_completion:
+  "01-career-tab-shell": 100
+  "02-career-data-layout": 100
+  "03-llm-cost-observability": 100
+status_note: "🎉 Sprint 1 Foundation 100% 完成 (3/3 features all active)。Sub-epic lifecycle → active。下一个 sub-epic: 02-profile (01-identity / 02-preferences / 03-narrative-proof)。"
+last_updated: "2026-04-23"

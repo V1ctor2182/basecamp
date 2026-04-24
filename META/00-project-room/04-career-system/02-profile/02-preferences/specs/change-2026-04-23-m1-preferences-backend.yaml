@@ -1,0 +1,80 @@
+spec_id: "change-2026-04-23-m1-preferences-backend"
+type: change
+state: active
+intent:
+  summary: "m1: Backend GET/PUT /api/career/preferences + Zod PreferencesSchema (permissive) + YAML IO + defaultPreferences()"
+  detail: |
+    data/career/preferences.yml CRUD API. 遵循 m3-identity 的 partial-save
+    精神：permissive schema（结构校验但内容允许空 / 缺字段），format 错才
+    阻塞（前端额外把关 email/URL 等）。Finder / Evaluator 在 use-time
+    re-check completeness 才能消费。
+
+    Files modified:
+      - server.mjs (+~220 lines)
+        - PREFERENCES_FILE = path.join(CAREER_DIR, 'preferences.yml')
+        - 9 Zod schemas:
+          - TargetRoleSchema { title, seniority, function? }
+          - CompTargetSchema { base_min?, base_max?, total_min?, total_max?, currency }
+          - LocationPrefSchema { accept_any, remote_only, hybrid_max_days_onsite?,
+              preferred_cities[], acceptable_countries[] }
+          - HardFiltersSchema (9 字段, 短路顺序: source_filter / company_blocklist
+              / title_blocklist / title_allowlist / location / seniority /
+              posted_within_days / comp_floor / jd_text_blocklist)
+          - SoftPreferencesSchema (6 字段 company_types / remote_culture /
+              tech_stack_preferred / tech_stack_avoid / industries_preferred /
+              industries_avoid)
+          - ScoringWeightsSchema { tech_match, comp_match, location_match,
+              company_match, growth_signal }
+          - ThresholdsSchema { strong, worth, consider, skip_below }
+          - EvaluatorStrategySchema { stage_a {enabled, model, threshold},
+              stage_b {enabled, model, blocks {b..g}} }
+          - PreferencesSchema — root
+        - defaultPreferences() — 兜底 (scoring 5×0.2, thresholds 4.5/4/3.5/3,
+            stage_a + stage_b enabled, blocks b/e=true, USD currency)
+        - readPreferences() — yaml load + defaults 合并
+        - writePreferences(obj) — zod.parse + yaml.dump
+        - GET /api/career/preferences — 文件不存在返 defaults
+        - PUT /api/career/preferences — 400 on zod error
+
+    Verification (smoke test, all passed):
+      1. GET before any PUT → returns defaultPreferences() ✓
+      2. PUT full valid → 200 + yaml written ✓
+      3. GET after PUT → reads back targets[0].title="SDE",
+         company_blocklist=["Foo"], 其他保持默认 ✓
+      4. PUT malformed (comp_target.base_min="abc") → 400 + zod issues
+         `{"path":["comp_target","base_min"],"message":"expected number, received string"}` ✓
+
+    Design rationale:
+      - partial-save 精神和 m3-identity 一致 —— 18+ 字段一次填完不现实
+      - HardFiltersSchema 字段顺序故意按短路顺序排列（source→…→jd_text），
+        和 constraint-preferences-001 以及未来 05-finder/03-dedupe-hard-filter
+        的评估顺序对齐
+      - Block B / Block E 默认 true（Tailor 依赖 Block E；前端 m2 将
+        disable 这两个 toggle + 显示 Required badge）
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, backend, zod, preferences, partial-save]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit 0b5b617"
+relations:
+  - "implements intent-preferences-001 (m1/3)"
+  - "clones pattern from change-2026-04-23-m1-identity-backend + change-2026-04-23-m3-partial-save"
+  - "enforces constraint-preferences-001 (hard_filters 字段按短路顺序排列)"
+anchors:
+  - file: "server.mjs"
+    symbols:
+      - "PreferencesSchema"
+      - "HardFiltersSchema"
+      - "ScoringWeightsSchema"
+      - "EvaluatorStrategySchema"
+      - "defaultPreferences"
+      - "readPreferences"
+      - "writePreferences"
+created_at: "2026-04-23"
+updated_at: "2026-04-23"

@@ -1,0 +1,33 @@
+spec_id: "change-2026-04-23-m1-careerapp-shell"
+type: change
+state: active
+intent:
+  summary: "m1: 新建 CareerApp /career/* 顶层 app 壳 + 路由注册 + header"
+  detail: |
+    Files created:
+      - src/CareerApp.tsx (40 行): BrowserRouter 下的 /career 根组件，header
+        复用 TrackerApp 风格 (Link to="/" ArrowLeft + Briefcase + "Career" 标题),
+        body 占位 "Career System — Coming Soon"
+      - src/career.css (87 行): .career layout + .c-header 粘顶 + .c-back 按钮
+        + .c-placeholder + .c-coming-soon，prefix .c- 隔离 LearnApp/TrackerApp
+    Files modified:
+      - src/App.tsx (+3 行): import CareerApp + <Route path="/career/*"
+        element={<CareerApp />}> 注册，路径带通配 /* 为 m2 nested routes 留接口
+    Verification: npx tsc --noEmit 通过。
+    Dependencies introduced: 无（react-router-dom / lucide-react 已装）。
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, frontend, router]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit 6f8de29 (pinned by 64c81cf)"
+relations:
+  - "implements intent-career-tab-shell-001 (m1/4)"
+anchors: []
+created_at: "2026-04-23"
+updated_at: "2026-04-23"
