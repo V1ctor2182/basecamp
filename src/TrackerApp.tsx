@@ -1251,15 +1251,15 @@ export default function TrackerApp() {
   // Week view: 7 days of activity tracks
   const activityWeek = useMemo(() => {
     if (!claudePings.length) return null
+    // Rolling last-7-days window ending on activityDate (more useful than calendar week)
     const baseDate = parseCalendarDate(activityDate)
-    const dayOfWeek = baseDate.getDay()
-    const monday = new Date(baseDate)
-    monday.setDate(monday.getDate() - ((dayOfWeek + 6) % 7))
+    const start = new Date(baseDate)
+    start.setDate(start.getDate() - 6)
 
     const days: { date: string; label: string; blocks: { start: Date; end: Date; project: string; turns: number }[]; totalMinutes: number; turns: number }[] = []
 
     for (let i = 0; i < 7; i++) {
-      const d = new Date(monday)
+      const d = new Date(start)
       d.setDate(d.getDate() + i)
       const key = toDateKey(d)
       const dayPings = filterPingsByDate(claudePings, key)
