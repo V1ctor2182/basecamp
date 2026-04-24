@@ -90,3 +90,6 @@ data/career/.playwright/
 .claude/
 skills/
 skills-lock.json
+
+# Embedded repos / local workspaces
+career-ops/
