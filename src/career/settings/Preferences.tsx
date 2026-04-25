@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import TagInput from '../TagInput'
+import { deepMerge } from '../utils'
 import './ats-form.css'
 
 type TargetRole = { title: string; seniority: string; function?: string }
@@ -176,7 +177,7 @@ export default function Preferences() {
   useEffect(() => {
     fetch('/api/career/preferences')
       .then(r => r.json())
-      .then(data => { if (data) setPrefs({ ...BLANK(), ...data }); setLoaded(true) })
+      .then(data => { if (data) setPrefs(deepMerge(BLANK(), data)); setLoaded(true) })
       .catch(() => setLoaded(true))
   }, [])
 

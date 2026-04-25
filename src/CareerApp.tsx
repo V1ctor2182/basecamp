@@ -20,9 +20,15 @@ import './career.css'
 const LAST_TAB_KEY = 'career-last-tab'
 const VALID_TABS = ['overview', 'pipeline', 'shortlist', 'applied', 'prep', 'reports', 'settings']
 
+// localStorage can throw in Safari private mode, when over quota, or when
+// disabled by extension. Don't crash the app boot for a UX nicety.
 function readLastTab(): string {
-  const raw = localStorage.getItem(LAST_TAB_KEY)
-  return raw && VALID_TABS.includes(raw) ? raw : 'overview'
+  try {
+    const raw = localStorage.getItem(LAST_TAB_KEY)
+    return raw && VALID_TABS.includes(raw) ? raw : 'overview'
+  } catch {
+    return 'overview'
+  }
 }
 
 function RootRedirect() {
@@ -37,7 +43,7 @@ export default function CareerApp() {
     const match = location.pathname.match(/^\/career\/([^/]+)/)
     const tab = match?.[1]
     if (tab && VALID_TABS.includes(tab)) {
-      localStorage.setItem(LAST_TAB_KEY, tab)
+      try { localStorage.setItem(LAST_TAB_KEY, tab) } catch { /* private mode / quota */ }
     }
   }, [location.pathname])
 

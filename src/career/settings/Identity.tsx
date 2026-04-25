@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, X } from 'lucide-react'
+import { deepMerge } from '../utils'
 import './ats-form.css'
 
 type EducationEntry = { school: string; degree: string; graduation: string; gpa?: string }
@@ -98,7 +99,7 @@ export default function Identity() {
   useEffect(() => {
     fetch('/api/career/identity')
       .then(r => r.json())
-      .then(data => { if (data) setIdentity({ ...BLANK_IDENTITY, ...data }); setLoaded(true) })
+      .then(data => { if (data) setIdentity(deepMerge(BLANK_IDENTITY, data)); setLoaded(true) })
       .catch(() => setLoaded(true))
   }, [])
 

@@ -12,7 +12,14 @@ import yaml from 'js-yaml';
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+// Default 10MB for tracker/learn endpoints; career endpoints get a stricter cap
+// applied per-route below (256KB — config-shaped data, not bulk payloads).
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/career/')) {
+    return express.json({ limit: '256kb' })(req, res, next);
+  }
+  return express.json({ limit: '10mb' })(req, res, next);
+});
 
 // Data files
 const DATA_DIR = path.join(__dirname, 'data');
@@ -37,7 +44,39 @@ if (!existsSync(LLM_COSTS_FILE)) writeFileSync(LLM_COSTS_FILE, '');
 
 // Helpers
 async function readJSON(file) { return JSON.parse(await fs.readFile(file, 'utf-8')); }
-async function writeJSON(file, data) { await fs.writeFile(file, JSON.stringify(data, null, 2)); }
+
+// Atomic write: tempfile + rename. POSIX-atomic on same filesystem so a crash
+// mid-write leaves the original file intact rather than half-written garbage
+// that fails to parse on next boot.
+async function atomicWriteFile(file, content) {
+  const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
+  try {
+    await fs.writeFile(tmp, content);
+    await fs.rename(tmp, file);
+  } catch (e) {
+    fs.unlink(tmp).catch(() => {}); // tmp may not exist if writeFile failed early
+    throw e;
+  }
+}
+async function writeJSON(file, data) { await atomicWriteFile(file, JSON.stringify(data, null, 2)); }
+
+// Deep-merge: defaults provide structure for any keys missing in `loaded`.
+// Plain-object values are merged recursively; arrays and primitives in `loaded`
+// replace defaults wholesale (so an explicit empty array from yaml stays empty).
+function isPlainObject(v) {
+  return v !== null && typeof v === 'object' && !Array.isArray(v) && Object.getPrototypeOf(v) === Object.prototype;
+}
+function deepMerge(defaults, loaded) {
+  if (!isPlainObject(loaded)) return loaded === undefined ? defaults : loaded;
+  if (!isPlainObject(defaults)) return loaded;
+  const out = { ...defaults };
+  for (const k of Object.keys(loaded)) {
+    out[k] = isPlainObject(defaults[k]) && isPlainObject(loaded[k])
+      ? deepMerge(defaults[k], loaded[k])
+      : loaded[k];
+  }
+  return out;
+}
 
 // In-memory write-through caches for stats (persist across requests without re-reading file)
 let _commitStats = null;
@@ -332,7 +371,7 @@ app.get('/api/activity', async (req, res) => {
         if (data?.stats) commitStats[sha] = { additions: data.stats.additions, deletions: data.stats.deletions };
       }, 5);
       _commitStats = trimStatsCache(commitStats);
-      writeJSON(COMMIT_STATS_FILE, _commitStats).catch(() => {});
+      writeJSON(COMMIT_STATS_FILE, _commitStats).catch(e => console.warn('stats cache write failed:', e.message));
     }
     for (const ra of activity) {
       for (const c of ra.commits) {
@@ -420,7 +459,7 @@ app.get('/api/prs', async (req, res) => {
         if (data?.additions != null) prStats[key] = { additions: data.additions, deletions: data.deletions };
       }, 5);
       _prStats = trimStatsCache(prStats);
-      writeJSON(PR_STATS_FILE, _prStats).catch(() => {});
+      writeJSON(PR_STATS_FILE, _prStats).catch(e => console.warn('stats cache write failed:', e.message));
     }
     for (const rp of prs) {
       for (const pr of rp.prs) {
@@ -1164,41 +1203,48 @@ app.get('/api/career/llm-costs', async (req, res) => {
 // on frontend (malformed blocks save). Backend is permissive — shape is
 // validated, content is not. Applier/Evaluator re-check completeness at
 // use-time before consuming identity.
+// Bounds (DoS protection): same conventions as PreferencesSchema below —
+// strings ≤ 200 chars, arrays ≤ 50 entries.
+const ID_STR = z.string().max(200);
+
 const EducationEntrySchema = z.object({
-  school: z.string(),
-  degree: z.string(),
-  graduation: z.string(),
-  gpa: z.string().optional(),
+  school: ID_STR.optional(),
+  degree: ID_STR.optional(),
+  graduation: ID_STR.optional(),
+  gpa: ID_STR.optional(),
 });
 
 const LanguageEntrySchema = z.object({
-  lang: z.string(),
-  level: z.enum(['Native', 'Fluent', 'Conversational', 'Basic']),
+  lang: ID_STR.optional(),
+  level: z.enum(['Native', 'Fluent', 'Conversational', 'Basic']).optional(),
 });
 
+// Permissive: every field optional so a curl PUT with `{}` succeeds (matches
+// the m3 partial-save spec). Frontend's BLANK_IDENTITY supplies defaults for
+// boolean/object fields. Applier MUST re-check completeness at use-time.
 const IdentitySchema = z.object({
-  name: z.string(),
-  email: z.string(),                      // format-check done on frontend
-  phone: z.string(),
+  name: ID_STR.optional(),
+  email: ID_STR.optional(),               // format-check done on frontend
+  phone: ID_STR.optional(),
   links: z.object({
-    linkedin: z.string(),                 // URL format-check done on frontend
-    github: z.string(),
-    portfolio: z.string(),
-  }),
+    linkedin: ID_STR.optional(),          // URL format-check done on frontend
+    github: ID_STR.optional(),
+    portfolio: ID_STR.optional(),
+  }).optional(),
   location: z.object({
-    current_city: z.string(),
-    current_country: z.string(),
-  }),
+    current_city: ID_STR.optional(),
+    current_country: ID_STR.optional(),
+  }).optional(),
   legal: z.object({
-    visa_status: z.string(),
-    visa_expiration: z.string(),
-    needs_sponsorship_now: z.boolean(),
-    needs_sponsorship_future: z.boolean(),
-    authorized_us_yes_no: z.boolean(),
-    citizenship: z.string(),
-  }),
-  education: z.array(EducationEntrySchema),
-  languages: z.array(LanguageEntrySchema),
+    visa_status: ID_STR.optional(),
+    visa_expiration: ID_STR.optional(),
+    needs_sponsorship_now: z.boolean().optional(),
+    needs_sponsorship_future: z.boolean().optional(),
+    authorized_us_yes_no: z.boolean().optional(),
+    citizenship: ID_STR.optional(),
+  }).optional(),
+  education: z.array(EducationEntrySchema).max(50).optional(),
+  languages: z.array(LanguageEntrySchema).max(50).optional(),
 });
 
 async function readIdentity() {
@@ -1215,7 +1261,7 @@ async function readIdentity() {
 async function writeIdentity(obj) {
   const parsed = IdentitySchema.parse(obj);
   const yamlText = yaml.dump(parsed, { lineWidth: 120, noRefs: true });
-  await fs.writeFile(IDENTITY_FILE, yamlText, 'utf-8');
+  await atomicWriteFile(IDENTITY_FILE, yamlText);
   return parsed;
 }
 
@@ -1250,10 +1296,17 @@ app.put('/api/career/identity', async (req, res) => {
 // Partial-save design (same as identity m3): permissive schema — structure
 // validated but content not. Missing fields don't block save; format errors
 // caught on frontend. Finder/Evaluator re-check completeness at use-time.
+//
+// Bounds (DoS protection): strings capped 200 chars, arrays 200 entries —
+// way over any realistic personal-use ceiling. Caps stop a malformed PUT or
+// abusive /preview body from blocking the event loop.
+const STR = z.string().max(200);
+const STRS = z.array(STR).max(200);
+
 const TargetRoleSchema = z.object({
-  title: z.string(),
-  seniority: z.string(),
-  function: z.string().optional(),
+  title: STR,
+  seniority: STR,
+  function: STR.optional(),
 });
 
 const CompTargetSchema = z.object({
@@ -1261,48 +1314,48 @@ const CompTargetSchema = z.object({
   base_max: z.number().optional(),
   total_min: z.number().optional(),
   total_max: z.number().optional(),
-  currency: z.string(),
+  currency: STR,
 });
 
 const LocationPrefSchema = z.object({
   accept_any: z.boolean(),
   remote_only: z.boolean(),
   hybrid_max_days_onsite: z.number().optional(),
-  preferred_cities: z.array(z.string()),
-  acceptable_countries: z.array(z.string()),
+  preferred_cities: STRS,
+  acceptable_countries: STRS,
 });
 
 const HardFiltersSchema = z.object({
   source_filter: z.object({
-    blocked_sources: z.array(z.string()),
+    blocked_sources: STRS,
   }),
-  company_blocklist: z.array(z.string()),
-  title_blocklist: z.array(z.string()),
-  title_allowlist: z.array(z.string()),
+  company_blocklist: STRS,
+  title_blocklist: STRS,
+  title_allowlist: STRS,
   location: z.object({
-    allowed_countries: z.array(z.string()),
-    allowed_cities: z.array(z.string()),
-    disallowed_countries: z.array(z.string()),
+    allowed_countries: STRS,
+    allowed_cities: STRS,
+    disallowed_countries: STRS,
   }),
   seniority: z.object({
-    allowed: z.array(z.string()),
+    allowed: STRS,
   }),
   posted_within_days: z.number(),
   comp_floor: z.object({
     base_min: z.number().optional(),
     total_min: z.number().optional(),
-    currency: z.string(),
+    currency: STR,
   }),
-  jd_text_blocklist: z.array(z.string()),
+  jd_text_blocklist: STRS,
 });
 
 const SoftPreferencesSchema = z.object({
-  company_types: z.array(z.string()),
-  remote_culture: z.array(z.string()),
-  tech_stack_preferred: z.array(z.string()),
-  tech_stack_avoid: z.array(z.string()),
-  industries_preferred: z.array(z.string()),
-  industries_avoid: z.array(z.string()),
+  company_types: STRS,
+  remote_culture: STRS,
+  tech_stack_preferred: STRS,
+  tech_stack_avoid: STRS,
+  industries_preferred: STRS,
+  industries_avoid: STRS,
 });
 
 const ScoringWeightsSchema = z.object({
@@ -1323,12 +1376,12 @@ const ThresholdsSchema = z.object({
 const EvaluatorStrategySchema = z.object({
   stage_a: z.object({
     enabled: z.boolean(),
-    model: z.string(),
+    model: STR,
     threshold: z.number(),
   }),
   stage_b: z.object({
     enabled: z.boolean(),
-    model: z.string(),
+    model: STR,
     blocks: z.object({
       block_b: z.boolean(),
       block_c: z.boolean(),
@@ -1341,7 +1394,7 @@ const EvaluatorStrategySchema = z.object({
 });
 
 const PreferencesSchema = z.object({
-  targets: z.array(TargetRoleSchema),
+  targets: z.array(TargetRoleSchema).max(50),
   comp_target: CompTargetSchema,
   location: LocationPrefSchema,
   hard_filters: HardFiltersSchema,
@@ -1426,7 +1479,7 @@ async function readPreferences() {
     const raw = await fs.readFile(PREFERENCES_FILE, 'utf-8');
     if (!raw.trim()) return defaultPreferences();
     const loaded = yaml.load(raw);
-    return { ...defaultPreferences(), ...loaded };
+    return deepMerge(defaultPreferences(), loaded);
   } catch (e) {
     if (e.code === 'ENOENT') return defaultPreferences();
     throw e;
@@ -1436,7 +1489,7 @@ async function readPreferences() {
 async function writePreferences(obj) {
   const parsed = PreferencesSchema.parse(obj);
   const yamlText = yaml.dump(parsed, { lineWidth: 120, noRefs: true });
-  await fs.writeFile(PREFERENCES_FILE, yamlText, 'utf-8');
+  await atomicWriteFile(PREFERENCES_FILE, yamlText);
   return parsed;
 }
 
