@@ -4,7 +4,17 @@
       "Bash(git rev-list *)",
       "Bash(git merge *)",
       "Bash(grep -n *)",
-      "Bash(node --check server.mjs)"
+      "Bash(node --check server.mjs)",
+      "Bash(git check-ignore *)",
+      "Skill(ship)",
+      "Skill(ship:*)",
+      "Skill(review)",
+      "Skill(review:*)",
+      "Read(//opt/homebrew/etc/**)",
+      "Bash(lsof -nP -iTCP:80 -sTCP:LISTEN)",
+      "Bash(lsof -nP -iTCP:443 -sTCP:LISTEN)",
+      "Bash(lsof -nP -iTCP:5173 -sTCP:LISTEN)",
+      "Bash(lsof -nP -iTCP:4568 -sTCP:LISTEN)"
     ]
   }
 }
