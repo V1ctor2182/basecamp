@@ -16,6 +16,16 @@ narrative.md + proof-points.md 的 CodeMirror 编辑器 + Settings 页
 
 - [intent-narrative-proof-001](specs/intent-narrative-proof-001.yaml) — narrative.md + proof-points.md 的 CodeMirror 编辑器 + Settings 页
 
+## 当前进度
+
+1/3 完成。Pattern: "先一份能跑 (m2) 后抽象 (m3)"。
+
+- **m1** ✅ Backend GET/PUT for narrative.md + proof-points.md + 骨架模板（110 行 / 1 file）
+- **m2** — Narrative.tsx CodeMirror + 实时 markdown preview split pane（pending）
+- **m3** — 抽 MarkdownDocEditor 共享组件 + 接入 ProofPoints 路由（pending → ROOM COMPLETE）
+
+**下游契约**：骨架 H2 section 名（`## North Star` / `## Shipped Projects` 等）是 Evaluator Stage B 和 CV Tailor 抽取段落的锚点 — 改 section 名前要看下游消费者。
+
 ---
 
-_Generated 2026-04-22 by room-init._
+_Generated 2026-04-22 by room-init. Milestones planned 2026-04-27 by plan-milestones._
