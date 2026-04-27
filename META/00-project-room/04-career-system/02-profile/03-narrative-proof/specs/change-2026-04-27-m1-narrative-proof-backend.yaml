@@ -48,7 +48,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit 5cd8a1e"
+  source_ref: "commit 76503d4"
 relations:
   - "implements intent-narrative-proof-001 (m1/3)"
 anchors:

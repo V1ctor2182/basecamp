@@ -11,7 +11,7 @@ milestones:
     depends_on: []
     complexity_flags: []
     open_questions: []
-    commit_hash: "5cd8a1e"
+    commit_hash: "76503d4"
     description: |
       data/career/narrative.md + data/career/proof-points.md 的 markdown 文本
       CRUD API。两文件都 commit 进 git（偏好 / 知识，不在 gitignore）。
@@ -148,7 +148,7 @@ milestones:
       - ROOM COMPLETE — 更新 room.yaml lifecycle: planning → active
 
 commits:
-  - hash: "5cd8a1e"
+  - hash: "76503d4"
     date: "2026-04-27"
     message: "[04-career-system/02-profile/03-narrative-proof] m1: Backend GET/PUT /api/career/narrative + /api/career/proof-points + 骨架模板"
     files_changed: 4
