@@ -1,0 +1,112 @@
+spec_id: "change-2026-04-25-m3-shared-doc-editor"
+type: change
+state: active
+intent:
+  summary: "m3: 抽 MarkdownDocEditor 共享组件 + 接入 ProofPoints 路由 (ROOM COMPLETE)"
+  detail: |
+    m2 已经验证 split-pane 编辑器模式可用。本 m3 把全部逻辑抽成共享
+    `MarkdownDocEditor` 组件，使 narrative.md 和 proof-points.md 共享一份
+    实现 — 符合 "rule of three" 抽象时机 (此时有 2 个真消费者)。
+
+    Files created:
+      - src/career/MarkdownDocEditor.tsx (112 lines):
+        - props: { apiPath, title, subtitle, saveLabel }
+        - 内部 = m2 写过的全部 load/save/dirty/state + split-pane UI
+        - useEffect 监听 apiPath 变化 → reset state + 重新 fetch
+          (route 切换 narrative ↔ proof-points 各自独立 dirty 状态)
+        - 复用 ats-form.css 的 .narrative-form / .narrative-split /
+          .narrative-{editor,preview}-pane 样式 (m2 已建)
+      - src/career/settings/ProofPoints.tsx (12 lines):
+        - <MarkdownDocEditor apiPath="/api/career/proof-points"
+            title="Proof Points"
+            subtitle="项目指标 / 文章 / 开源贡献明细 — Evaluator 反查防幻觉,
+              CV Tailor 引用做简历..."
+            saveLabel="Save Proof Points" />
+
+    Files modified:
+      - src/career/settings/Narrative.tsx (102 → 12 lines):
+        - 全部内部逻辑替换为 <MarkdownDocEditor apiPath="/api/career/narrative"
+            title="Narrative" subtitle="..." saveLabel="Save Narrative" />
+        - 行为完全一致 (UI / load / save / dirty / beforeunload / preview)
+      - src/career/settings/SettingsLayout.tsx (+1 import + 1 row):
+        - + BadgeCheck icon (lucide-react)
+        - + { to: 'proof-points', label: 'Proof Points', Icon: BadgeCheck } 在
+          narrative 后, resumes 前
+      - src/CareerApp.tsx (+2 lines):
+        - + import ProofPoints
+        - + <Route path="proof-points" element={<ProofPoints />} /> 在
+          settings 嵌套路由内
+
+    Verification (smoke test, all passed):
+      1. tsc --noEmit ✓ (0 in-project errors)
+      2. vite build ✓ (6.61s)
+      3. GET /api/career/narrative → 返回 H2 骨架 ✓
+      4. GET /api/career/proof-points → 返回 H2 骨架 ✓
+      5. PUT /api/career/proof-points + GET roundtrip ✓
+      6. 待手工 UI smoke (留给用户验证):
+         - /career/settings 侧边栏多一条 "Proof Points" 链接
+         - 点 Proof Points → 进编辑器 → 看到 ## Shipped Projects /
+           ## Writing / ## Open Source / ## Quantified Wins 骨架
+         - narrative ↔ proof-points 来回切换 → 两份各自独立 dirty 状态
+         - 编辑 narrative 不保存 → 切到 proof-points → beforeunload 拦截
+
+    ROOM COMPLETE work:
+      - room.yaml lifecycle: in_progress → active
+      - _tree.yaml 同步
+      - spec.md rewrite 为汇总版 (3 milestone overview + UI/Backend section
+        + 下游契约 + 复用组件说明)
+      - 向上传播: 03-narrative-proof 100, 02-profile 75, 04-career-system 22
+
+    Design rationale:
+      - 抽组件时机 = 第二消费者出现时 (m3), 不是 m1/m2 写第一份时
+      - 在 src/career/ 不在 settings/ 子目录: 后续 Resumes / future doc
+        editors 都可能用，settings/ 范围窄
+      - props 接口故意小 (4 个 string + apiPath) — 不带 onChange 等
+        callback (load/save 都是组件内 owns), 不带 schema validation
+        (markdown 文本无结构)
+      - apiPath useEffect 重置 state — 路由切换时必须，否则 切回原来的
+        路由会显示对方文件的内容
+      - 不抽出 props.markdownPlugins / theme 等可配置项: 当前 2 个消费者
+        没有差异需求，过度抽象会降低 readability
+
+    下游影响:
+      - 未来 settings 子页（QA Bank templates.md / Resumes 编辑等）如有
+        markdown 全文编辑需求可复用 MarkdownDocEditor — 接口稳定
+      - 软契约 H2 段名继续是 Evaluator/Tailor 的抽取锚点 (m1 已确立)
+
+    ROOM 03-narrative-proof COMPLETE:
+      - m1: Backend 4 endpoints + atomic write + skeleton templates (110 lines)
+      - m2: Narrative.tsx CodeMirror split-pane (204 lines, m1 deps)
+      - m3: MarkdownDocEditor 抽出 + ProofPoints 接入 (~140 lines net,
+        Narrative.tsx 102 → 12 重构)
+      - 总计 ~454 lines net + 2 markdown files (narrative.md / proof-points.md
+        with skeleton)
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m3, frontend, react, shared-component, refactor, room-complete]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit TBD"
+relations:
+  - "implements intent-narrative-proof-001 (m3/3, ROOM COMPLETE)"
+  - "depends_on change-2026-04-25-m2-narrative-editor-split-pane"
+  - "extracts shared MarkdownDocEditor from m2 single-file implementation"
+  - "applies rule-of-three abstraction (2 consumers: Narrative + ProofPoints)"
+anchors:
+  - file: "src/career/MarkdownDocEditor.tsx"
+    symbols: ["default", "MarkdownDocEditor", "Props"]
+  - file: "src/career/settings/Narrative.tsx"
+    symbols: ["default"]
+  - file: "src/career/settings/ProofPoints.tsx"
+    symbols: ["default"]
+  - file: "src/career/settings/SettingsLayout.tsx"
+    symbols: ["SUB_TABS"]
+  - file: "src/CareerApp.tsx"
+    symbols: ["ProofPoints"]
+created_at: "2026-04-25"
+updated_at: "2026-04-25"

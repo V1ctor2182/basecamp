@@ -14,6 +14,7 @@ import Preferences from './career/settings/Preferences'
 import Portals from './career/settings/Portals'
 import QABank from './career/settings/QABank'
 import Narrative from './career/settings/Narrative'
+import ProofPoints from './career/settings/ProofPoints'
 import Resumes from './career/settings/Resumes'
 import './career.css'
 
@@ -79,6 +80,7 @@ export default function CareerApp() {
             <Route path="portals" element={<Portals />} />
             <Route path="qa-bank" element={<QABank />} />
             <Route path="narrative" element={<Narrative />} />
+            <Route path="proof-points" element={<ProofPoints />} />
             <Route path="resumes" element={<Resumes />} />
             <Route path="*" element={<Navigate to="identity" replace />} />
           </Route>
