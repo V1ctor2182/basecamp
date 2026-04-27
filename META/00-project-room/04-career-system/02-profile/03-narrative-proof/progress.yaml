@@ -47,13 +47,18 @@ milestones:
 
   - id: "m2-narrative-editor-split-pane"
     name: "Narrative.tsx — CodeMirror + 实时 markdown preview split pane"
-    status: pending
+    status: completed
+    actual_lines: 204
+    actual_files:
+      - "src/career/settings/Narrative.tsx"
+      - "src/career/settings/ats-form.css"
     estimated_files:
       - "src/career/settings/Narrative.tsx"
     estimated_lines: 150
     depends_on: ["m1-narrative-proof-backend"]
     complexity_flags: []
     open_questions: []
+    commit_hash: null
     description: |
       替换 Narrative.tsx 占位为真实编辑器（先只接 narrative.md 这一份；
       proof-points 在 m3 通过组件抽取后接入）。学 LearnApp.tsx:793-816 的
@@ -156,9 +161,17 @@ commits:
       - "change-2026-04-27-m1-narrative-proof-backend (created)"
     milestones_affected:
       - "m1-narrative-proof-backend (→ completed)"
+  - hash: "TBD"
+    date: "2026-04-25"
+    message: "[04-career-system/02-profile/03-narrative-proof] m2: Narrative.tsx CodeMirror + ReactMarkdown split-pane"
+    files_changed: 3
+    specs_affected:
+      - "change-2026-04-25-m2-narrative-editor-split-pane (created)"
+    milestones_affected:
+      - "m2-narrative-editor-split-pane (→ completed)"
 
 current_sprint: "Sprint 2 — Profile"
 blockers: []
-completion: 33
-status_note: "m1 ✅ backend ready (4 endpoints + atomic write + 骨架模板, 110 行). 下一个: m2 Narrative.tsx split-pane editor."
-last_updated: "2026-04-27"
+completion: 66
+status_note: "m1 + m2 ✅. 下一个: m3 抽 MarkdownDocEditor 共享组件 + 接入 ProofPoints 路由 (ROOM 收尾)."
+last_updated: "2026-04-25"

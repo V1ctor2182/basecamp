@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/02-profile/03-narrative-proof`  
 **Type**: feature  
-**Lifecycle**: planning  
+**Lifecycle**: in_progress  
 **Owner**: fullstack  
 **Parent**: `00-project-room/04-career-system/02-profile`  
 
@@ -15,13 +15,15 @@ narrative.md + proof-points.md 的 CodeMirror 编辑器 + Settings 页
 ## Specs in this Room
 
 - [intent-narrative-proof-001](specs/intent-narrative-proof-001.yaml) — narrative.md + proof-points.md 的 CodeMirror 编辑器 + Settings 页
+- [change-2026-04-27-m1-narrative-proof-backend](specs/change-2026-04-27-m1-narrative-proof-backend.yaml) — m1 backend 4 endpoints + atomic write + skeleton templates
+- [change-2026-04-25-m2-narrative-editor-split-pane](specs/change-2026-04-25-m2-narrative-editor-split-pane.yaml) — m2 Narrative.tsx CodeMirror + ReactMarkdown split-pane
 
 ## 当前进度
 
-1/3 完成。Pattern: "先一份能跑 (m2) 后抽象 (m3)"。
+2/3 完成。Pattern: "先一份能跑 (m2) 后抽象 (m3)"。
 
 - **m1** ✅ Backend GET/PUT for narrative.md + proof-points.md + 骨架模板（110 行 / 1 file）
-- **m2** — Narrative.tsx CodeMirror + 实时 markdown preview split pane（pending）
+- **m2** ✅ Narrative.tsx CodeMirror + ReactMarkdown split-pane（204 行 / 2 files: Narrative.tsx + ats-form.css 追加 split-pane styles）
 - **m3** — 抽 MarkdownDocEditor 共享组件 + 接入 ProofPoints 路由（pending → ROOM COMPLETE）
 
 **下游契约**：骨架 H2 section 名（`## North Star` / `## Shipped Projects` 等）是 Evaluator Stage B 和 CV Tailor 抽取段落的锚点 — 改 section 名前要看下游消费者。
