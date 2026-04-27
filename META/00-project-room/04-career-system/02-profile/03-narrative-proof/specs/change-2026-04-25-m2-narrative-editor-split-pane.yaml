@@ -80,7 +80,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit 2ca61fb"
 relations:
   - "implements intent-narrative-proof-001 (m2/3)"
   - "depends_on change-2026-04-27-m1-narrative-proof-backend"

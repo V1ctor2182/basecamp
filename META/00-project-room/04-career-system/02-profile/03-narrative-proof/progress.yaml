@@ -58,7 +58,7 @@ milestones:
     depends_on: ["m1-narrative-proof-backend"]
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "2ca61fb"
     description: |
       替换 Narrative.tsx 占位为真实编辑器（先只接 narrative.md 这一份；
       proof-points 在 m3 通过组件抽取后接入）。学 LearnApp.tsx:793-816 的
@@ -161,7 +161,7 @@ commits:
       - "change-2026-04-27-m1-narrative-proof-backend (created)"
     milestones_affected:
       - "m1-narrative-proof-backend (→ completed)"
-  - hash: "TBD"
+  - hash: "2ca61fb"
     date: "2026-04-25"
     message: "[04-career-system/02-profile/03-narrative-proof] m2: Narrative.tsx CodeMirror + ReactMarkdown split-pane"
     files_changed: 3
