@@ -117,7 +117,7 @@ milestones:
     depends_on: ["m2-narrative-editor-split-pane"]
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "a7c0142"
     description: |
       m2 已经验证 split-pane 编辑器模式可用，现在抽成共享组件 +
       接入第二份文件 (proof-points.md) 走独立路由。
@@ -177,7 +177,7 @@ commits:
       - "change-2026-04-25-m2-narrative-editor-split-pane (created)"
     milestones_affected:
       - "m2-narrative-editor-split-pane (→ completed)"
-  - hash: "TBD"
+  - hash: "a7c0142"
     date: "2026-04-25"
     message: "[04-career-system/02-profile/03-narrative-proof] m3: 抽 MarkdownDocEditor 共享组件 + 接入 ProofPoints 路由 (ROOM COMPLETE)"
     files_changed: 7
