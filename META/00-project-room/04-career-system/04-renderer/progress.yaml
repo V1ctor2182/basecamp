@@ -1,5 +1,9 @@
 milestones: []
-current_sprint: null
+current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 50   # avg(0, 100) = 50 across 2 features (02-markdown-to-template ✅)
+children_completion:
+  "01-html-template": 0
+  "02-markdown-to-template": 100  # ✅ active — single milestone, ROOM COMPLETE
+status_note: "🔄 Sprint 3 起手。02-markdown-to-template ✅ (transformer 就位). 下一个: 01-html-template (Playwright PDF 渲染)。"
+last_updated: "2026-04-28"

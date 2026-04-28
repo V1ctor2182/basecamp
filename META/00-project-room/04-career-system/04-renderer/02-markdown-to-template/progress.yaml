@@ -1,5 +1,93 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-markdown-to-template-html"
+    name: "marked-based markdown → CV-subset HTML transformer (shared mjs lib)"
+    status: completed
+    actual_lines: 73
+    actual_files:
+      - "package.json"
+      - "package-lock.json"
+      - "src/career/lib/markdownToTemplateHtml.mjs"
+      - "server.mjs"
+    estimated_files:
+      - "package.json"
+      - "src/career/lib/markdownToTemplateHtml.mjs"
+      - "server.mjs"
+    estimated_lines: 130
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    commit_hash: null
+    description: |
+      把 resume markdown 转成 CV 模板正文 HTML 片段。纯函数 +
+      pure-ESM module — 后端 Playwright 渲染管线 (04-renderer/01) 和未来
+      前端 PDF 预览都从同一个 entry 调，避免 print/preview 分叉。
+
+      实现:
+        package.json:
+          + "marked": "^16.x" (检查 npm 最新)
+          (无 transitive deps; ~20KB; 同时支持 server + browser)
+
+        src/career/lib/markdownToTemplateHtml.mjs (~80 行):
+          - import { marked } from 'marked'
+          - 创建 instance: new marked.Marked()
+            - 配置: { gfm: false, breaks: false, pedantic: false }
+            - tokenizer.html / tokenizer.htmlInline → return undefined (跳过 raw HTML
+              tokens — XSS-safe by construction; resume md 不该有 raw HTML)
+            - tokenizer.table / footnote / etc 默认就不在 non-gfm 里
+          - export function markdownToTemplateHtml(md: string): string
+            - 入参 typeof check, 返空字符串如果 falsy
+            - return instance.parse(md, { async: false }) (确保同步返回)
+          - 输出语义 HTML（h1/h2/h3/h4/p/ul/ol/li/strong/em/a/code/hr/br）—
+            **没有任何 class / id / style** (那是 04-renderer/01 CSS 模板的职责)
+          - export const ALLOWED_TAGS = [...] for downstream sanitization audit
+
+        server.mjs (+~30 行):
+          import { markdownToTemplateHtml } from './src/career/lib/markdownToTemplateHtml.mjs'
+          (path 用 import.meta.url 的 file:// 解析或者 relative path — Node ESM 支持)
+
+          POST /api/career/render/markdown
+            body: { content: string }
+            校验: typeof === 'string' + length < 500KB
+            返回: { html: string, allowed_tags: string[] }
+            ⚠️ 注意: 此 endpoint 在 256KB body cap 之上 (career endpoints 全局 cap)
+            — 500KB 校验 redundant 但保留便于将来调大 cap 时的 second-line defense
+          (此 endpoint 主要是 smoke / dev tool；04-renderer/01 后续直接函数调用，
+          不必走 HTTP)
+
+      验收 (smoke test 6 cases):
+        1. POST { content: "# Hello\n\nworld" } → html "<h1>Hello</h1><p>world</p>" ✓
+        2. 空 md → ""
+        3. 复杂 sample (h1+h2+h3+ul+a+strong) → 正确嵌套 + 无 class/id ✓
+        4. 含 raw HTML <script>alert(1)</script> → 输出转义为文本 ✓ (XSS guard)
+        5. 含 GFM table syntax (|x|y|) → 输出当作普通段落（非 table）✓
+        6. typeof body.content === 'number' → 400 ✓
+
+      Locked design (long-term-best):
+        - marked vs markdown-it: marked (smaller, server+browser native, mature)
+        - HTML disabled at tokenizer level (不靠 dompurify 引入 jsdom 体积)
+        - 文件 .mjs 放在 src/career/lib/ — Vite 和 Node 都能 import
+        - debug endpoint 留着，后续 04-renderer/01 函数式直接调用，无需 HTTP
+
+      下游影响:
+        - 04-renderer/01-html-template 直接 import markdownToTemplateHtml() —
+          组装 <body> = <header from identity.yml> + markdownToTemplateHtml(resume.md) + CSS
+        - 03-cv-engine/03-in-ui-editor 现在用 react-markdown 做实时预览；将来可
+          改用本 transformer 让 preview 和 print 输出 100% 一致 (defer until print 真的有偏差)
+
+commits:
+  - hash: "TBD"
+    date: "2026-04-28"
+    message: "[04-career-system/04-renderer/02-markdown-to-template] m1: marked-based transformer + debug endpoint (ROOM COMPLETE)"
+    files_changed: 5
+    specs_affected:
+      - "change-2026-04-28-m1-markdown-to-template-html (created)"
+      - "room.yaml (lifecycle: planning → active)"
+      - "_tree.yaml (lifecycle: planning → active)"
+    milestones_affected:
+      - "m1-markdown-to-template-html (→ completed, ROOM COMPLETE)"
+
+current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 100
+status_note: "🎉 ROOM 完成 (single-milestone, 73 行实际). markdownToTemplateHtml() 就位 + debug endpoint。下一个 ROOM: 04-renderer/01-html-template (Playwright PDF)."
+last_updated: "2026-04-28"

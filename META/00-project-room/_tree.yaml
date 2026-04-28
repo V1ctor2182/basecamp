@@ -260,7 +260,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/04-renderer"
       type: sub-epic
-      lifecycle: planning
+      lifecycle: in_progress
       owner: fullstack
       parent: "00-project-room/04-career-system"
       children:
@@ -274,7 +274,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/04-renderer/02-markdown-to-template"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: fullstack
       parent: "00-project-room/04-career-system/04-renderer"
       children: []

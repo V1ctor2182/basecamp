@@ -8,6 +8,7 @@ import path from 'path';
 import os from 'os';
 import { z } from 'zod';
 import yaml from 'js-yaml';
+import { markdownToTemplateHtml, ALLOWED_TAGS } from './src/career/lib/markdownToTemplateHtml.mjs';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const app = express();
@@ -1848,6 +1849,29 @@ app.post('/api/career/qa-bank/history', async (req, res) => {
 app.get('/api/career/qa-bank/history', async (req, res) => {
   try { res.json(await readHistoryRecords({ limit: req.query.limit, q: req.query.q })); }
   catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Career System: Renderer — markdown → CV-template HTML transformer
+// 04-renderer/02-markdown-to-template — debug endpoint. Real PDF pipeline
+// (04-renderer/01) imports markdownToTemplateHtml directly via function call.
+// ─────────────────────────────────────────────────────────────
+app.post('/api/career/render/markdown', (req, res) => {
+  const content = req.body?.content;
+  if (typeof content !== 'string') {
+    return res.status(400).json({ error: 'content must be a string' });
+  }
+  // 256KB cap already enforced globally on /api/career/* — defensive bound here
+  // for the day someone bumps the global cap and forgets resume markdown can grow.
+  if (content.length > 500_000) {
+    return res.status(413).json({ error: 'content too large (>500KB)' });
+  }
+  try {
+    const html = markdownToTemplateHtml(content);
+    res.json({ html, allowed_tags: ALLOWED_TAGS });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // --- Compute dailyCost from JSONL session files and write to DAILY_COST_FILE ---
