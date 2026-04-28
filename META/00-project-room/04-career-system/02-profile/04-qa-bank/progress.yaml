@@ -1,5 +1,258 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-qa-bank-backend"
+    name: "Backend: legal.yml + templates.md + history.jsonl 4+1 endpoints"
+    status: completed
+    actual_lines: 160
+    actual_files:
+      - "server.mjs"
+    estimated_files:
+      - "server.mjs"
+    estimated_lines: 180
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "6e1140f"
+    description: |
+      三层 QA Bank 后端: legal (结构化 yml) + templates (markdown) + history
+      (jsonl append-only)。复用现有 helpers (atomicWriteFile / deepMerge /
+      STR/STRS Zod bounds 已在 server.mjs 顶部存在)。
+
+      实现 (server.mjs 加 ~180 行):
+        - QA_BANK_DIR = path.join(CAREER_DIR, 'qa-bank')
+        - LEGAL_FILE / TEMPLATES_FILE / HISTORY_FILE
+        - if (!existsSync(QA_BANK_DIR)) mkdirSync(...)
+
+        - LegalSchema (Zod permissive, 同 IdentitySchema 风格 — partial-save
+          所有字段 .optional() so curl PUT {} 不 400):
+          - work_authorization { status, expiration, requires_sponsorship_now,
+              requires_sponsorship_future, authorized_us_yes_no, citizenship }
+          - eeo { gender, ethnicity, veteran, disability, pronouns }
+          - personal { age_18_plus, criminal_record, can_pass_background_check,
+              can_pass_drug_test, relocate_willing, travel_willing_percent }
+          - how_did_you_hear_default
+          - 字段类型: ID_STR.optional() / boolean.optional() / number.optional()
+        - defaultLegal() 兜底 (空字符串 / undefined; 前端 BLANK_LEGAL 提供具体默认)
+        - readLegal() — yaml + deepMerge defaultLegal
+        - writeLegal(obj) — Zod parse + atomicWriteFile + yaml.dump
+        - GET /api/career/qa-bank/legal → 文件不存在返 defaults
+        - PUT /api/career/qa-bank/legal → 400 on Zod / 200 on success
+
+        - readTemplates() / writeTemplates(text) — 同 narrative pattern
+          (atomicWriteFile + 长度 < 500KB 校验)
+        - GET /api/career/qa-bank/templates → { content }
+          (文件不存在返 { content: "" }; templates.md committed 进 git，
+          实际首次 GET 会读到 templates.example.yml 或 templates.md 已有内容)
+        - PUT /api/career/qa-bank/templates body { content }
+
+        - HistoryRecordSchema (Zod):
+          - ts: string (ISO 8601)
+          - job_id?: string
+          - company?: string
+          - role?: string
+          - field_type: enum ['legal', 'open', 'eeo', 'other']
+          - q: string (max 2000)
+          - a_draft?: string (max 5000)
+          - a_final?: string (max 5000)
+          - edit_distance?: number
+          - template_used?: string
+          - model_used?: string  (e.g. 'claude-sonnet-4-6' / 'manual')
+        - appendHistoryRecord(rec) — Zod parse + 追加 jsonl line
+        - readHistoryRecords({limit, q}) — 读最后 N 行 + 可选 filter on q+a_final
+        - POST /api/career/qa-bank/history body = HistoryRecord
+        - GET /api/career/qa-bank/history?limit=100&q=foo
+
+      验收 smoke test:
+        - GET /api/career/qa-bank/legal (不存在文件) → 返回 defaults ✓
+        - PUT /api/career/qa-bank/legal '{}' → 200 (partial-save 工作) ✓
+        - PUT 'eeo.gender': "Decline" → 200 + GET roundtrip ✓
+        - GET /api/career/qa-bank/templates (不存在) → { content: "" }
+        - PUT templates '{"content":"# templates"}' → 200, GET roundtrip ✓
+        - POST history {q:'foo',a_final:'bar',field_type:'open'} → 200 ✓
+        - POST history 重复 3 次 + GET ?limit=10 → 返回 3 条 ✓
+        - GET history?q=foo → filter 工作 ✓
+        - PUT history 太大 body (5MB) → 413 (256KB 全局 cap) ✓
+        - POST history field_type='garbage' → 400 (Zod enum reject) ✓
+
+  - id: "m2-qa-bank-ui-legal-and-templates"
+    name: "Settings → QA Bank: nested routes + Legal ATS form + Templates editor"
+    status: completed
+    actual_lines: 444
+    actual_files:
+      - "src/career/settings/qa-bank/QABankLayout.tsx"
+      - "src/career/settings/qa-bank/Legal.tsx"
+      - "src/career/settings/qa-bank/Templates.tsx"
+      - "src/career/settings/qa-bank/History.tsx"
+      - "src/career/settings/QABank.tsx"
+      - "src/CareerApp.tsx"
+      - "src/career/settings/ats-form.css"
+    estimated_files:
+      - "src/career/settings/QABank.tsx"
+      - "src/career/settings/qa-bank/QABankLayout.tsx"
+      - "src/career/settings/qa-bank/Legal.tsx"
+      - "src/career/settings/qa-bank/Templates.tsx"
+      - "src/career/settings/qa-bank/History.tsx"
+      - "src/CareerApp.tsx"
+    estimated_lines: 320
+    depends_on: ["m1-qa-bank-backend"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "e406b8d"
+    description: |
+      用 nested routes 而不是 in-page tab state — 长期 UX (URL 可分享 / refresh
+      stable / browser back 工作) 优于内部 state。每个 tab 独立文件 — 长期
+      可读性 + 后续单独改某 tab 不影响其他。
+
+      文件结构:
+        src/career/settings/
+          QABank.tsx                 (覆盖现有占位，re-export QABankLayout
+                                      或本身做 layout)
+          qa-bank/
+            QABankLayout.tsx         (~50 行 — top tab bar with NavLink + Outlet)
+            Legal.tsx                (~210 行 — ATS form 4 section)
+            Templates.tsx            (~12 行 — wraps MarkdownDocEditor)
+            History.tsx              (~10 行占位 — m3 实现真实 table)
+
+      路由变化 (CareerApp.tsx):
+        - 现有 <Route path="qa-bank" element={<QABank />} /> 改成嵌套:
+          <Route path="qa-bank" element={<QABankLayout />}>
+            <Route index element={<Navigate to="legal" replace />} />
+            <Route path="legal" element={<Legal />} />
+            <Route path="templates" element={<Templates />} />
+            <Route path="history" element={<History />} />
+            <Route path="*" element={<Navigate to="legal" replace />} />
+          </Route>
+
+      QABankLayout (~50 行):
+        - 顶部水平 tab bar .c-qa-tabs (横向 NavLink with active underline)
+        - 子 tab: Legal / Templates / History
+        - <Outlet /> 渲染当前子路由
+
+      Legal.tsx (~210 行 — 复用 Identity.tsx pattern):
+        - state: legal (LegalShape) / loaded / dirty / saving / savedAt /
+          serverError
+        - useEffect load GET → deepMerge(BLANK_LEGAL, data) → setLegal
+        - validate(legal) → {missing, malformed} (轻量: percent 0-100)
+        - beforeunload 拦截
+        - 4 sections (.af-section):
+          1. Work Authorization (status / expiration / 3 booleans (radio Yes/No)
+             / citizenship)
+          2. EEO — 5 dropdown with "Decline to answer" option
+             (gender / ethnicity / veteran / disability / pronouns)
+          3. Personal — 4 booleans (radio) + travel_willing_percent (number 0-100)
+             + relocate_willing (radio)
+          4. "How did you hear?" — text input default
+        - .af-submit-bar sticky (复用 ats-form.css)
+        - PUT /api/career/qa-bank/legal on save
+
+      Templates.tsx (~12 行):
+        <MarkdownDocEditor apiPath="/api/career/qa-bank/templates"
+          title="Templates" subtitle="开放题模板库 — Why us / Why role / ..."
+          saveLabel="Save Templates" />
+
+      History.tsx (~10 行占位):
+        <div className="af-loading">History coming in m3</div>
+
+      新增 CSS (追加 ats-form.css):
+        .c-qa-tabs (flex row, gap, padding, border-bottom)
+        .c-qa-tab-link (inline-flex, padding, color, transition)
+        .c-qa-tab-link-active (蓝边 underline + 蓝字)
+
+      验收 smoke (build + 手工 UI):
+        - npm run build ✓
+        - /career/settings/qa-bank → 重定向到 /legal ✓
+        - 三 tab 切换 URL 跟随 ✓
+        - Legal tab: 填值 + Save → roundtrip ✓
+        - Templates tab: 编辑 + Save → file 写入 ✓
+        - 切到 History → "coming in m3"
+        - dirty 状态各 tab 独立 (切走有 beforeunload 拦截)
+
+  - id: "m3-qa-bank-history-table"
+    name: "History tab: 只读 table + 搜索 (ROOM COMPLETE)"
+    status: completed
+    actual_lines: 218
+    actual_files:
+      - "src/career/settings/qa-bank/History.tsx"
+      - "src/career/settings/ats-form.css"
+    estimated_files:
+      - "src/career/settings/qa-bank/History.tsx"
+      - "src/career/settings/ats-form.css"
+    estimated_lines: 160
+    depends_on: ["m2-qa-bank-ui-legal-and-templates"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "c3e0d2e"
+    description: |
+      History.tsx 实现真实 read-only table。Append-only 文件，无编辑 UI。
+
+      实现 (src/career/settings/qa-bank/History.tsx 升级到 ~140 行):
+        - state: rows (HistoryRecord[]) / loaded / search (string)
+        - useEffect load GET /api/career/qa-bank/history?limit=200
+        - filtered = rows.filter(r => r.q.includes(search) ||
+            r.a_final?.includes(search) || r.a_draft?.includes(search))
+        - 顶部 toolbar: 搜索框 (.af-input) + 计数条 "Showing M of N records"
+        - <table.c-qa-history-table>:
+          columns: Time / Company / Role / Type / Question / Answer (final fallback draft)
+            / Template / Model / Edit Dist
+        - 每行: timestamp 用 toLocaleString, q+a 截断 80 char + title 全文 hover,
+          field_type 用 badge 颜色区分:
+          legal=#999 (灰) / open=#0969da (蓝) / eeo=#9a6700 (黄) / other=#888
+        - Empty state: "No history yet — apply to a job to start the QA log"
+        - 客户端搜索 (一次拉 200 条够用; 性能瓶颈到了再加 server-side ?q=)
+
+      新增 CSS (追加 ats-form.css ~25 行):
+        - .c-qa-history-toolbar (search + count flex row)
+        - .c-qa-history-table (table layout, fixed)
+        - .c-qa-history-table th / td (padding 8px 10px, border-bottom)
+        - .c-qa-history-row:hover (背景 #fafafa)
+        - .c-qa-history-badge (固定宽 + 颜色 by type)
+        - .c-qa-history-empty (居中 gray)
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml 同步
+        - spec.md 重写为 ROOM 完成总结 (3 milestone overview + Backend API +
+          UI structure + 下游 contracts)
+        - 向上传播: 04-qa-bank=100 → 02-profile=100 (4/4 features ✅) →
+          04-career-system 提升约 4%
+
+      验收:
+        - 0 history → empty state 显示 ✓
+        - POST 5 条历史 (脚本) → 表格显示 5 行 ✓
+        - 搜索框输入 → filter 立即生效 ✓
+        - 长 Q (300 char) 截断显示 + hover 全文 ✓
+        - field_type badge 颜色正确 ✓
+        - npm run build ✓
+
+commits:
+  - hash: "6e1140f"
+    date: "2026-04-28"
+    message: "[04-career-system/02-profile/04-qa-bank] m1: Backend 6 endpoints — legal.yml + templates.md + history.jsonl"
+    files_changed: 4
+    specs_affected:
+      - "change-2026-04-28-m1-qa-bank-backend (created)"
+    milestones_affected:
+      - "m1-qa-bank-backend (→ completed)"
+  - hash: "e406b8d"
+    date: "2026-04-28"
+    message: "[04-career-system/02-profile/04-qa-bank] m2: QA Bank UI — nested routes + Legal ATS form + Templates wrapper + History 占位"
+    files_changed: 7
+    specs_affected:
+      - "change-2026-04-28-m2-qa-bank-ui-legal-templates (created)"
+    milestones_affected:
+      - "m2-qa-bank-ui-legal-and-templates (→ completed)"
+  - hash: "c3e0d2e"
+    date: "2026-04-28"
+    message: "[04-career-system/02-profile/04-qa-bank] m3: History tab read-only table + search + badges (ROOM COMPLETE = Sprint 2 done)"
+    files_changed: 6
+    specs_affected:
+      - "change-2026-04-28-m3-qa-bank-history-table (created)"
+      - "room.yaml (lifecycle: in_progress → active)"
+      - "_tree.yaml (lifecycle: in_progress → active)"
+    milestones_affected:
+      - "m3-qa-bank-history-table (→ completed, ROOM COMPLETE, Sprint 2 done)"
+
+current_sprint: "Sprint 2 — Profile (DONE)"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 100
+status_note: "🎉 ROOM 完成 + 🎉 Sprint 2 DONE (4/4 features ✅)。下一个: Sprint 3 (03-cv-engine + 04-renderer)。"
+last_updated: "2026-04-28"

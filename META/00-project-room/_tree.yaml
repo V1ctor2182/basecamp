@@ -185,7 +185,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/02-profile"
       type: sub-epic
-      lifecycle: in_progress
+      lifecycle: active
       owner: fullstack
       parent: "00-project-room/04-career-system"
       children:
@@ -213,7 +213,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/02-profile/04-qa-bank"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: fullstack
       parent: "00-project-room/04-career-system/02-profile"
       children: []

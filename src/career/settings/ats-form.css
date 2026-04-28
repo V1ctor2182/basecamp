@@ -794,3 +794,142 @@
     min-height: 320px;
   }
 }
+
+/* ─── QA Bank top tab bar (nested routes) ─── */
+.c-qa-bank {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.c-qa-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 0 0 0;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #eaeaea;
+}
+
+.c-qa-tab-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;          /* overlap parent border */
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.c-qa-tab-link:hover {
+  color: #1a1a1a;
+}
+
+.c-qa-tab-link-active {
+  color: #0969da;
+  border-bottom-color: #0969da;
+}
+
+.c-qa-tab-content {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ─── QA Bank — History tab table ─── */
+.c-qa-history {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.c-qa-history-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.c-qa-history-count {
+  font-size: 12px;
+  color: #888;
+  font-variant-numeric: tabular-nums;
+}
+
+.c-qa-history-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #eaeaea;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.c-qa-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.c-qa-history-table th,
+.c-qa-history-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid #eaeaea;
+  white-space: nowrap;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.c-qa-history-table th {
+  font-weight: 600;
+  color: #555;
+  background: #fafafa;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+}
+
+.c-qa-history-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.c-qa-history-row:hover {
+  background: #fafbfc;
+}
+
+.c-qa-history-num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.c-qa-history-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.c-qa-history-badge-legal { color: #555; background: rgba(85, 85, 85, 0.12); }
+.c-qa-history-badge-open  { color: #0969da; background: rgba(9, 105, 218, 0.12); }
+.c-qa-history-badge-eeo   { color: #9a6700; background: rgba(154, 103, 0, 0.12); }
+.c-qa-history-badge-other { color: #888; background: rgba(136, 136, 136, 0.12); }
+
+.c-qa-history-empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: #888;
+  background: #fafafa;
+  border: 1px dashed #d0d7de;
+  border-radius: 8px;
+  line-height: 1.6;
+}
+
+.c-qa-history-empty-row {
+  text-align: center;
+  padding: 24px;
+  color: #888;
+}
