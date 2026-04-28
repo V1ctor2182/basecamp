@@ -11,7 +11,7 @@ milestones:
     depends_on: []
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "6e1140f"
     description: |
       三层 QA Bank 后端: legal (结构化 yml) + templates (markdown) + history
       (jsonl append-only)。复用现有 helpers (atomicWriteFile / deepMerge /
@@ -211,7 +211,7 @@ milestones:
         - npm run build ✓
 
 commits:
-  - hash: "TBD"
+  - hash: "6e1140f"
     date: "2026-04-28"
     message: "[04-career-system/02-profile/04-qa-bank] m1: Backend 6 endpoints — legal.yml + templates.md + history.jsonl"
     files_changed: 4

@@ -16,7 +16,7 @@
 
 **3 milestones 规划完成**（~660 lines 估算，1/3 完成，all defaults 长期最优锁定）:
 
-- ✅ **m1-qa-bank-backend** (TBD, 160 lines 实际) — `server.mjs` 4+1 endpoints:
+- ✅ **m1-qa-bank-backend** (`6e1140f`, 160 lines 实际) — `server.mjs` 4+1 endpoints:
   - GET/PUT `/api/career/qa-bank/legal` (Zod permissive partial-save 同 Identity)
   - GET/PUT `/api/career/qa-bank/templates` (markdown 文本，复用 narrative pattern)
   - POST `/api/career/qa-bank/history` (append jsonl，HistoryRecordSchema)
