@@ -89,7 +89,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit c3e0d2e"
 relations:
   - "implements intent-qa-bank-001 (m3/3, ROOM COMPLETE)"
   - "depends_on change-2026-04-28-m2-qa-bank-ui-legal-templates"

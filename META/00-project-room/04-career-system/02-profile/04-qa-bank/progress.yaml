@@ -180,7 +180,7 @@ milestones:
     depends_on: ["m2-qa-bank-ui-legal-and-templates"]
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "c3e0d2e"
     description: |
       History.tsx 实现真实 read-only table。Append-only 文件，无编辑 UI。
 
@@ -240,7 +240,7 @@ commits:
       - "change-2026-04-28-m2-qa-bank-ui-legal-templates (created)"
     milestones_affected:
       - "m2-qa-bank-ui-legal-and-templates (→ completed)"
-  - hash: "TBD"
+  - hash: "c3e0d2e"
     date: "2026-04-28"
     message: "[04-career-system/02-profile/04-qa-bank] m3: History tab read-only table + search + badges (ROOM COMPLETE = Sprint 2 done)"
     files_changed: 6
