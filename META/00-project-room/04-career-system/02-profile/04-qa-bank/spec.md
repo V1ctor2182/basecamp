@@ -14,14 +14,14 @@
 
 ## Milestones (planned 2026-04-28)
 
-**3 milestones 规划完成**（~660 lines 估算，1/3 完成，all defaults 长期最优锁定）:
+**3 milestones 规划完成**（~660 lines 估算，2/3 完成，all defaults 长期最优锁定）:
 
 - ✅ **m1-qa-bank-backend** (`6e1140f`, 160 lines 实际) — `server.mjs` 4+1 endpoints:
   - GET/PUT `/api/career/qa-bank/legal` (Zod permissive partial-save 同 Identity)
   - GET/PUT `/api/career/qa-bank/templates` (markdown 文本，复用 narrative pattern)
   - POST `/api/career/qa-bank/history` (append jsonl，HistoryRecordSchema)
   - GET `/api/career/qa-bank/history?limit=&q=` (recent N + 文本 filter)
-- **m2-qa-bank-ui-legal-and-templates** (~320 lines) — Settings → QA Bank 用 **nested routes**:
+- ✅ **m2-qa-bank-ui-legal-and-templates** (TBD, 444 lines 实际, +CSS) — Settings → QA Bank 用 **nested routes**:
   - `QABankLayout.tsx` (top tab bar with NavLink)
   - `qa-bank/Legal.tsx` (~210 行 ATS form 4 section: Work Auth / EEO / Personal / How did you hear)
   - `qa-bank/Templates.tsx` (~12 行 wraps `MarkdownDocEditor`)
@@ -43,6 +43,7 @@
 
 - [intent-qa-bank-001](specs/intent-qa-bank-001.yaml) — 三层 QA Bank：legal.yml + templates.md + history.jsonl
 - [change-2026-04-28-m1-qa-bank-backend](specs/change-2026-04-28-m1-qa-bank-backend.yaml) — m1 backend 6 endpoints (legal Zod permissive + templates + history jsonl)
+- [change-2026-04-28-m2-qa-bank-ui-legal-templates](specs/change-2026-04-28-m2-qa-bank-ui-legal-templates.yaml) — m2 nested routes + Legal ATS form + Templates wrapper + History 占位
 
 ---
 

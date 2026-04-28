@@ -1,0 +1,121 @@
+spec_id: "change-2026-04-28-m2-qa-bank-ui-legal-templates"
+type: change
+state: active
+intent:
+  summary: "m2: QA Bank UI — nested routes (legal/templates/history) + Legal ATS form + Templates wrapper + History 占位"
+  detail: |
+    用 nested routes 而不是 in-page tab state — 长期 UX (URL 可分享 / refresh
+    stable / browser back works) 优于内部 state。每个 tab 独立文件 — 长期
+    可读性 + 后续单独改某 tab 不影响其他。
+
+    Files created:
+      - src/career/settings/qa-bank/QABankLayout.tsx (33 lines):
+        - 顶部水平 tab bar (3 NavLink: Legal / Templates / History) + <Outlet />
+        - 复用 react-router NavLink isActive 自动 underline
+        - 配套 css class .c-qa-tabs / .c-qa-tab-link / .c-qa-tab-link-active
+      - src/career/settings/qa-bank/Legal.tsx (332 lines):
+        - state: legal / loaded / dirty / saving / savedAt / serverError
+        - useEffect load GET /api/career/qa-bank/legal → deepMerge(BLANK_LEGAL, data)
+        - validate(legal) → {missing, malformed} (轻量: travel_willing_percent
+          0-100 范围 check 后端 Zod 已 enforce, 前端 UX 提示)
+        - beforeunload 拦截 (复用 Identity 模式)
+        - PUT /api/career/qa-bank/legal on submit; 400/500 错误展示
+        - 4 sections (.af-section):
+          1. Work Authorization (status / expiration / citizenship + 3 BoolRadio:
+             authorized_us / requires_sponsorship_now / future)
+          2. EEO — 5 dropdown with "Decline to answer" 等 hardcoded options
+             (gender / ethnicity / veteran / disability / pronouns)
+          3. Personal — 5 BoolRadio (age_18_plus / criminal_record /
+             can_pass_background_check / can_pass_drug_test / relocate_willing)
+             + travel_willing_percent number 0-100 (.af-input-error 红边 on
+             malformed)
+          4. "How did you hear?" — text input default
+        - .af-submit-bar sticky (复用 ats-form.css)
+        - 复用 helpers: Field / BoolRadio (本地小组件 — 同 Identity.tsx 风格)
+      - src/career/settings/qa-bank/Templates.tsx (12 lines):
+        thin wrapper:
+          <MarkdownDocEditor apiPath="/api/career/qa-bank/templates"
+            title="Templates" subtitle="开放题模板库..." saveLabel="Save Templates" />
+      - src/career/settings/qa-bank/History.tsx (7 lines):
+        m3 占位 "History table coming in m3 — append-only Q&A log"
+
+    Files modified:
+      - src/career/settings/QABank.tsx (10 → 3 lines):
+        backwards-compat shim — `export { default } from './qa-bank/QABankLayout'`
+        (旧 import path 不破)
+      - src/CareerApp.tsx:
+        - + import QABankLayout / Legal / Templates / History
+        - − import QABank (旧)
+        - 现有 <Route path="qa-bank" element={<QABank />} /> 改成嵌套:
+          <Route path="qa-bank" element={<QABankLayout />}>
+            <Route index element={<Navigate to="legal" replace />} />
+            <Route path="legal" element={<Legal />} />
+            <Route path="templates" element={<Templates />} />
+            <Route path="history" element={<History />} />
+            <Route path="*" element={<Navigate to="legal" replace />} />
+          </Route>
+      - src/career/settings/ats-form.css (+43 lines):
+        - .c-qa-bank (flex column, height 100%)
+        - .c-qa-tabs (flex row, gap 4, border-bottom #eaeaea, margin-bottom 24)
+        - .c-qa-tab-link (inline-flex, padding 10x14, color #666, transition,
+          border-bottom 2px transparent, margin-bottom -1px to overlap parent)
+        - .c-qa-tab-link:hover (color #1a1a1a)
+        - .c-qa-tab-link-active (color #0969da, border-bottom-color #0969da)
+        - .c-qa-tab-content (flex 1, min-height 0)
+
+    Verification:
+      - tsc --noEmit ✓ (0 in-project errors)
+      - vite build ✓ (12.43s)
+      - backend smoke: PUT legal full + GET roundtrip ✓ (4 sections data
+        deep-merge preserved)
+      - 待手工 UI smoke (留给用户验证):
+        - /career/settings/qa-bank → 重定向到 /legal
+        - 三 tab 切换 URL 跟随
+        - Legal tab: 4 section 全部填完 + Save → toast "Saved" + reload 恢复
+        - travel_willing_percent = 200 → 红边 + Save 灰
+        - Templates tab: 编辑 + Save → file 写入
+        - History tab: "coming in m3" 占位
+        - dirty 状态各 tab 独立 (切走有 beforeunload 拦截)
+
+    Locked design decisions (long-term-best, plan-milestones Phase 3):
+      - Q1 Tabs = nested routes (URL 可分享, refresh-stable, browser back)
+      - Q4 Branch = qa-bank off narrative-proof (1 PR/Room 节奏)
+
+    Validation pattern (复用 m3-identity 模式):
+      - missing 不阻塞 save (Legal 全字段 .optional() 后端 Zod allow)
+      - malformed (travel_willing_percent out of range) 阻塞 save
+
+    下游影响:
+      - m3 实现 History.tsx 真实 read-only table (替换 7 行占位)
+      - 07-applier/03-field-classifier (Class 2 Legal) 读 GET /legal 返回固定值
+      - 07-applier/03-field-classifier (Class 3 Open) 读 templates.md 做模板匹配
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m2, frontend, react, nested-routes, react-router, ats-form]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit TBD"
+relations:
+  - "implements intent-qa-bank-001 (m2/3)"
+  - "depends_on change-2026-04-28-m1-qa-bank-backend"
+  - "clones ATS-form pattern from change-2026-04-23-m2-identity-form-ui"
+  - "clones nested-routes pattern from CareerApp.tsx settings (SettingsLayout)"
+  - "consumes shared MarkdownDocEditor (created in 03-narrative-proof m3)"
+anchors:
+  - file: "src/career/settings/qa-bank/QABankLayout.tsx"
+    symbols: ["default", "TABS"]
+  - file: "src/career/settings/qa-bank/Legal.tsx"
+    symbols: ["default", "BLANK_LEGAL", "EEO_OPTIONS", "validate", "Field", "BoolRadio"]
+  - file: "src/career/settings/qa-bank/Templates.tsx"
+    symbols: ["default"]
+  - file: "src/career/settings/qa-bank/History.tsx"
+    symbols: ["default"]
+  - file: "src/career/settings/ats-form.css"
+    symbols: [".c-qa-bank", ".c-qa-tabs", ".c-qa-tab-link", ".c-qa-tab-link-active"]
+created_at: "2026-04-28"
+updated_at: "2026-04-28"

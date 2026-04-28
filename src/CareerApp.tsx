@@ -12,9 +12,12 @@ import SettingsLayout from './career/settings/SettingsLayout'
 import Identity from './career/settings/Identity'
 import Preferences from './career/settings/Preferences'
 import Portals from './career/settings/Portals'
-import QABank from './career/settings/QABank'
 import Narrative from './career/settings/Narrative'
 import ProofPoints from './career/settings/ProofPoints'
+import QABankLayout from './career/settings/qa-bank/QABankLayout'
+import Legal from './career/settings/qa-bank/Legal'
+import Templates from './career/settings/qa-bank/Templates'
+import History from './career/settings/qa-bank/History'
 import Resumes from './career/settings/Resumes'
 import './career.css'
 
@@ -78,7 +81,13 @@ export default function CareerApp() {
             <Route path="identity" element={<Identity />} />
             <Route path="preferences" element={<Preferences />} />
             <Route path="portals" element={<Portals />} />
-            <Route path="qa-bank" element={<QABank />} />
+            <Route path="qa-bank" element={<QABankLayout />}>
+              <Route index element={<Navigate to="legal" replace />} />
+              <Route path="legal" element={<Legal />} />
+              <Route path="templates" element={<Templates />} />
+              <Route path="history" element={<History />} />
+              <Route path="*" element={<Navigate to="legal" replace />} />
+            </Route>
             <Route path="narrative" element={<Narrative />} />
             <Route path="proof-points" element={<ProofPoints />} />
             <Route path="resumes" element={<Resumes />} />

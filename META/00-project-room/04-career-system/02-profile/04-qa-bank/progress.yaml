@@ -75,7 +75,16 @@ milestones:
 
   - id: "m2-qa-bank-ui-legal-and-templates"
     name: "Settings → QA Bank: nested routes + Legal ATS form + Templates editor"
-    status: pending
+    status: completed
+    actual_lines: 444
+    actual_files:
+      - "src/career/settings/qa-bank/QABankLayout.tsx"
+      - "src/career/settings/qa-bank/Legal.tsx"
+      - "src/career/settings/qa-bank/Templates.tsx"
+      - "src/career/settings/qa-bank/History.tsx"
+      - "src/career/settings/QABank.tsx"
+      - "src/CareerApp.tsx"
+      - "src/career/settings/ats-form.css"
     estimated_files:
       - "src/career/settings/QABank.tsx"
       - "src/career/settings/qa-bank/QABankLayout.tsx"
@@ -219,9 +228,17 @@ commits:
       - "change-2026-04-28-m1-qa-bank-backend (created)"
     milestones_affected:
       - "m1-qa-bank-backend (→ completed)"
+  - hash: "TBD"
+    date: "2026-04-28"
+    message: "[04-career-system/02-profile/04-qa-bank] m2: QA Bank UI — nested routes + Legal ATS form + Templates wrapper + History 占位"
+    files_changed: 7
+    specs_affected:
+      - "change-2026-04-28-m2-qa-bank-ui-legal-templates (created)"
+    milestones_affected:
+      - "m2-qa-bank-ui-legal-and-templates (→ completed)"
 
 current_sprint: "Sprint 2 — Profile (final feature)"
 blockers: []
-completion: 33
-status_note: "m1 ✅ backend 6 endpoints (160 行, 13/13 smoke ✓). 下一步 m2 nested routes + Legal/Templates UI."
+completion: 66
+status_note: "m1 + m2 ✅ (backend 160 行 + UI 444 行). 下一步 m3 History table (ROOM COMPLETE → Sprint 2 done)."
 last_updated: "2026-04-28"

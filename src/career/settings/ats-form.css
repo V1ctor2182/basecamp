@@ -794,3 +794,46 @@
     min-height: 320px;
   }
 }
+
+/* ─── QA Bank top tab bar (nested routes) ─── */
+.c-qa-bank {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.c-qa-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 0 0 0;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #eaeaea;
+}
+
+.c-qa-tab-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;          /* overlap parent border */
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.c-qa-tab-link:hover {
+  color: #1a1a1a;
+}
+
+.c-qa-tab-link-active {
+  color: #0969da;
+  border-bottom-color: #0969da;
+}
+
+.c-qa-tab-content {
+  flex: 1;
+  min-height: 0;
+}
