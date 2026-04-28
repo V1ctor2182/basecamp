@@ -96,7 +96,7 @@ milestones:
     depends_on: ["m1-qa-bank-backend"]
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "e406b8d"
     description: |
       用 nested routes 而不是 in-page tab state — 长期 UX (URL 可分享 / refresh
       stable / browser back 工作) 优于内部 state。每个 tab 独立文件 — 长期
@@ -228,7 +228,7 @@ commits:
       - "change-2026-04-28-m1-qa-bank-backend (created)"
     milestones_affected:
       - "m1-qa-bank-backend (→ completed)"
-  - hash: "TBD"
+  - hash: "e406b8d"
     date: "2026-04-28"
     message: "[04-career-system/02-profile/04-qa-bank] m2: QA Bank UI — nested routes + Legal ATS form + Templates wrapper + History 占位"
     files_changed: 7

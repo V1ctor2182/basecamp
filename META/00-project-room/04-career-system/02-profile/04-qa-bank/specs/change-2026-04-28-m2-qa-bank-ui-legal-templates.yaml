@@ -99,7 +99,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit e406b8d"
 relations:
   - "implements intent-qa-bank-001 (m2/3)"
   - "depends_on change-2026-04-28-m1-qa-bank-backend"

@@ -21,7 +21,7 @@
   - GET/PUT `/api/career/qa-bank/templates` (markdown 文本，复用 narrative pattern)
   - POST `/api/career/qa-bank/history` (append jsonl，HistoryRecordSchema)
   - GET `/api/career/qa-bank/history?limit=&q=` (recent N + 文本 filter)
-- ✅ **m2-qa-bank-ui-legal-and-templates** (TBD, 444 lines 实际, +CSS) — Settings → QA Bank 用 **nested routes**:
+- ✅ **m2-qa-bank-ui-legal-and-templates** (`e406b8d`, 444 lines 实际, +CSS) — Settings → QA Bank 用 **nested routes**:
   - `QABankLayout.tsx` (top tab bar with NavLink)
   - `qa-bank/Legal.tsx` (~210 行 ATS form 4 section: Work Auth / EEO / Personal / How did you hear)
   - `qa-bank/Templates.tsx` (~12 行 wraps `MarkdownDocEditor`)
