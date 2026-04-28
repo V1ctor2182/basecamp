@@ -1,0 +1,111 @@
+spec_id: "change-2026-04-28-m3-qa-bank-history-table"
+type: change
+state: active
+intent:
+  summary: "m3: History tab read-only table + client-side search + field_type badges (ROOM COMPLETE)"
+  detail: |
+    Replace History.tsx 7-line placeholder with real read-only table showing
+    Q&A history records from /api/career/qa-bank/history. Append-only data
+    (Applier flywheel)，无编辑 UI。
+
+    Files modified:
+      - src/career/settings/qa-bank/History.tsx (7 → 129 lines):
+        - HistoryRecord type 镜像 server QAHistoryRecordSchema (field_type 4-enum
+          + ts / job_id / company / role / q / a_draft / a_final / edit_distance
+          / template_used / model_used)
+        - state: rows / loaded / search / error
+        - useEffect load GET /api/career/qa-bank/history?limit=200
+        - filtered = useMemo(rows, search) — client-side filter on
+          q + a_final + a_draft + company + role (case-insensitive)
+        - 顶部 toolbar: search input (max-width 360) + count
+          "Showing M of N records"
+        - <table.c-qa-history-table>:
+          columns: Time / Company / Role / Type / Question / Answer (final fallback
+            draft) / Template / Model / Edit Δ
+        - timestamp 用 toLocaleString month/day/hour/min, q+a 截断 80 char + title
+          全文 hover, field_type → .c-qa-history-badge-{type} 颜色:
+          legal=灰 / open=蓝 / eeo=黄 / other=灰
+        - Empty state: 占位说明 "No history yet — apply to a job to start the QA
+          log" + 提示 Applier 完成填表后会 POST 数据
+        - Filter no-match state: <tr colSpan=9>"No matches."</tr>
+      - src/career/settings/ats-form.css (+96 lines):
+        - .c-qa-history (flex column, gap 12)
+        - .c-qa-history-toolbar (flex row, search + count)
+        - .c-qa-history-table-wrap (overflow-x scroll, border, radius)
+        - .c-qa-history-table (border-collapse, font-size 13)
+        - th/td (padding 8x10, ellipsis on max-width 280, white-space nowrap)
+        - th 大写小字母间距 + #fafafa 背景
+        - .c-qa-history-row:hover (#fafbfc)
+        - .c-qa-history-num (tabular-nums right-align)
+        - .c-qa-history-badge-{legal,open,eeo,other} 4 颜色 (灰/蓝/黄/灰)
+        - .c-qa-history-empty (dashed border + 居中)
+        - .c-qa-history-empty-row (filter no-match 样式)
+
+    Verification:
+      - tsc --noEmit ✓ (0 in-project errors)
+      - vite build ✓ (8.43s)
+      - backend smoke: POST 4 records (mix types) → GET ?limit=200 返回 4 条
+        newest-first ✓
+      - GET ?q=memory → filter 到包含 "memory leak" 的那条 ✓
+      - 待手工 UI smoke (留给用户验证):
+        - /career/settings/qa-bank/history 看到 4 行 (newest first)
+        - badge 颜色: open=蓝 / legal=灰 / eeo=黄
+        - 搜索框输入 "memory" → 立即 filter 到 1 行
+        - 长 Q (>80 char) 截断显示 + hover 全文
+        - 0 history → empty state 显示
+
+    ROOM COMPLETE work:
+      - room.yaml lifecycle: in_progress → active
+      - _tree.yaml 同步
+      - spec.md 重写为 ROOM 完成总结 (3 milestone overview + Backend API +
+        UI structure + 下游 contracts + Sprint 2 done note)
+      - 向上传播: 04-qa-bank=100 → 02-profile=100 (4/4 features ✅, Sprint 2
+        DONE) → 04-career-system 25%
+
+    Locked decisions (long-term-best, plan-milestones):
+      - Q3 client-side search ✓ — useMemo filter，<1000 rows 性能足够
+      - 截断 80 char + title hover — 桌面浏览器原生 tooltip，不引入 portal/popover
+
+    下游影响:
+      - 07-applier/* 完成 apply 后 POST 一条记录 → 立即出现在 History tab (无
+        WebSocket，需要 user reload page；将来可加 polling/SSE)
+      - 06-evaluator 不直接读 history (只读 narrative + proof-points)
+      - Applier 飞轮 future work:
+        - few-shot prompt: 起草新答案前读最近 5 条同类型 (q matches) history
+        - edit_distance 分析: identify 哪些 template 经常被重写
+        - model performance: model_used + edit_distance 散点
+
+    Sprint 2 — Profile DONE (4/4 features ✅):
+      - 01-identity ✅ / 02-preferences ✅ / 03-narrative-proof ✅ / 04-qa-bank ✅
+      - 共 ~3500 lines, 12 milestones, 4 ROOMs
+      - 下一步 Sprint 3: 03-cv-engine + 04-renderer (多简历 + PDF 生成)
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m3, frontend, react, table, room-complete, sprint-complete]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit TBD"
+relations:
+  - "implements intent-qa-bank-001 (m3/3, ROOM COMPLETE)"
+  - "depends_on change-2026-04-28-m2-qa-bank-ui-legal-templates"
+  - "consumes GET /api/career/qa-bank/history (built in m1)"
+  - "completes Sprint 2 — Profile (4 ROOMs done)"
+anchors:
+  - file: "src/career/settings/qa-bank/History.tsx"
+    symbols: ["default", "HistoryRecord", "trunc", "fmtTs"]
+  - file: "src/career/settings/ats-form.css"
+    symbols:
+      - ".c-qa-history"
+      - ".c-qa-history-table"
+      - ".c-qa-history-badge-legal"
+      - ".c-qa-history-badge-open"
+      - ".c-qa-history-badge-eeo"
+      - ".c-qa-history-badge-other"
+      - ".c-qa-history-empty"
+created_at: "2026-04-28"
+updated_at: "2026-04-28"

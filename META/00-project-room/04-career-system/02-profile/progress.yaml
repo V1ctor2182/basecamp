@@ -1,11 +1,11 @@
 milestones: []
 current_sprint: "Sprint 2 — Profile"
 blockers: []
-completion: 92   # avg(100, 100, 100, 66) = 91.5 across 4 features
+completion: 100  # ✅ avg(100, 100, 100, 100) = 100 across 4 features (Sprint 2 DONE)
 children_completion:
   "01-identity": 100  # ✅ active
   "02-preferences": 100  # ✅ active
   "03-narrative-proof": 100  # ✅ active
-  "04-qa-bank": 66  # 🔄 m1+m2 ✅ (backend + UI), m3 history-table pending
-status_note: "Sprint 2 进行中。3/4 features ✅ + 04-qa-bank m1+m2 ✅ (66%)。下一步 m3 history table = ROOM COMPLETE = Sprint 2 done。"
+  "04-qa-bank": 100  # ✅ active — ROOM COMPLETE
+status_note: "🎉 Sprint 2 — Profile DONE (4/4 features ✅, 12 milestones, ~3500 lines). 下一个 Sprint: 03-cv-engine + 04-renderer。"
 last_updated: "2026-04-28"

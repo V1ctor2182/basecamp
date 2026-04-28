@@ -168,7 +168,11 @@ milestones:
 
   - id: "m3-qa-bank-history-table"
     name: "History tab: 只读 table + 搜索 (ROOM COMPLETE)"
-    status: pending
+    status: completed
+    actual_lines: 218
+    actual_files:
+      - "src/career/settings/qa-bank/History.tsx"
+      - "src/career/settings/ats-form.css"
     estimated_files:
       - "src/career/settings/qa-bank/History.tsx"
       - "src/career/settings/ats-form.css"
@@ -236,9 +240,19 @@ commits:
       - "change-2026-04-28-m2-qa-bank-ui-legal-templates (created)"
     milestones_affected:
       - "m2-qa-bank-ui-legal-and-templates (→ completed)"
+  - hash: "TBD"
+    date: "2026-04-28"
+    message: "[04-career-system/02-profile/04-qa-bank] m3: History tab read-only table + search + badges (ROOM COMPLETE = Sprint 2 done)"
+    files_changed: 6
+    specs_affected:
+      - "change-2026-04-28-m3-qa-bank-history-table (created)"
+      - "room.yaml (lifecycle: in_progress → active)"
+      - "_tree.yaml (lifecycle: in_progress → active)"
+    milestones_affected:
+      - "m3-qa-bank-history-table (→ completed, ROOM COMPLETE, Sprint 2 done)"
 
-current_sprint: "Sprint 2 — Profile (final feature)"
+current_sprint: "Sprint 2 — Profile (DONE)"
 blockers: []
-completion: 66
-status_note: "m1 + m2 ✅ (backend 160 行 + UI 444 行). 下一步 m3 History table (ROOM COMPLETE → Sprint 2 done)."
+completion: 100
+status_note: "🎉 ROOM 完成 + 🎉 Sprint 2 DONE (4/4 features ✅)。下一个: Sprint 3 (03-cv-engine + 04-renderer)。"
 last_updated: "2026-04-28"
