@@ -35,6 +35,10 @@ const IDENTITY_FILE = path.join(CAREER_DIR, 'identity.yml');
 const PREFERENCES_FILE = path.join(CAREER_DIR, 'preferences.yml');
 const NARRATIVE_FILE = path.join(CAREER_DIR, 'narrative.md');
 const PROOF_POINTS_FILE = path.join(CAREER_DIR, 'proof-points.md');
+const QA_BANK_DIR = path.join(CAREER_DIR, 'qa-bank');
+const QA_LEGAL_FILE = path.join(QA_BANK_DIR, 'legal.yml');
+const QA_TEMPLATES_FILE = path.join(QA_BANK_DIR, 'templates.md');
+const QA_HISTORY_FILE = path.join(QA_BANK_DIR, 'history.jsonl');
 
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(REPOS_FILE)) writeFileSync(REPOS_FILE, '[]');
@@ -43,6 +47,8 @@ if (!existsSync(COMMIT_STATS_FILE)) writeFileSync(COMMIT_STATS_FILE, '{}');
 if (!existsSync(PR_STATS_FILE)) writeFileSync(PR_STATS_FILE, '{}');
 if (!existsSync(CAREER_DIR)) mkdirSync(CAREER_DIR, { recursive: true });
 if (!existsSync(LLM_COSTS_FILE)) writeFileSync(LLM_COSTS_FILE, '');
+if (!existsSync(QA_BANK_DIR)) mkdirSync(QA_BANK_DIR, { recursive: true });
+if (!existsSync(QA_HISTORY_FILE)) writeFileSync(QA_HISTORY_FILE, '');
 
 // Helpers
 async function readJSON(file) { return JSON.parse(await fs.readFile(file, 'utf-8')); }
@@ -1688,6 +1694,160 @@ app.put('/api/career/proof-points', async (req, res) => {
     if (e instanceof TypeError) return res.status(400).json({ error: e.message });
     res.status(500).json({ error: e.message });
   }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Career System: QA Bank — three-layer storage
+//   data/career/qa-bank/legal.yml      — 法律/EEO/visa 固定答案 (gitignored)
+//   data/career/qa-bank/templates.md   — 开放题模板库 (committed)
+//   data/career/qa-bank/history.jsonl  — 每次 apply Q&A append-only (gitignored)
+// See META/.../02-profile/04-qa-bank
+// ─────────────────────────────────────────────────────────────
+
+// Permissive partial-save (same convention as IdentitySchema). All fields
+// optional so curl PUT {} succeeds. Frontend BLANK_LEGAL provides defaults.
+const QALegalSchema = z.object({
+  work_authorization: z.object({
+    status: ID_STR.optional(),
+    expiration: ID_STR.optional(),
+    requires_sponsorship_now: z.boolean().optional(),
+    requires_sponsorship_future: z.boolean().optional(),
+    authorized_us_yes_no: z.boolean().optional(),
+    citizenship: ID_STR.optional(),
+  }).optional(),
+  eeo: z.object({
+    gender: ID_STR.optional(),
+    ethnicity: ID_STR.optional(),
+    veteran: ID_STR.optional(),
+    disability: ID_STR.optional(),
+    pronouns: ID_STR.optional(),
+  }).optional(),
+  personal: z.object({
+    age_18_plus: z.boolean().optional(),
+    criminal_record: z.boolean().optional(),
+    can_pass_background_check: z.boolean().optional(),
+    can_pass_drug_test: z.boolean().optional(),
+    relocate_willing: z.boolean().optional(),
+    travel_willing_percent: z.number().min(0).max(100).optional(),
+  }).optional(),
+  how_did_you_hear_default: ID_STR.optional(),
+});
+
+function defaultLegal() {
+  return {
+    work_authorization: {},
+    eeo: {},
+    personal: {},
+    how_did_you_hear_default: '',
+  };
+}
+
+async function readLegal() {
+  try {
+    const raw = await fs.readFile(QA_LEGAL_FILE, 'utf-8');
+    if (!raw.trim()) return defaultLegal();
+    return deepMerge(defaultLegal(), yaml.load(raw));
+  } catch (e) {
+    if (e.code === 'ENOENT') return defaultLegal();
+    throw e;
+  }
+}
+
+async function writeLegal(obj) {
+  const parsed = QALegalSchema.parse(obj);
+  const yamlText = yaml.dump(parsed, { lineWidth: 120, noRefs: true });
+  await atomicWriteFile(QA_LEGAL_FILE, yamlText);
+  return parsed;
+}
+
+app.get('/api/career/qa-bank/legal', async (_req, res) => {
+  try { res.json(await readLegal()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/career/qa-bank/legal', async (req, res) => {
+  try { res.json(await writeLegal(req.body)); }
+  catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Invalid legal', details: e.issues });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Templates — markdown text, same shape as narrative/proof-points endpoints.
+// File is committed (templates.md tracked in git as the example seed).
+app.get('/api/career/qa-bank/templates', async (_req, res) => {
+  try { res.json({ content: await readMarkdownDoc(QA_TEMPLATES_FILE, '') }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/career/qa-bank/templates', async (req, res) => {
+  try {
+    await writeMarkdownDoc(QA_TEMPLATES_FILE, req.body?.content);
+    res.json({ content: req.body.content });
+  } catch (e) {
+    if (e instanceof TypeError) return res.status(400).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// History — append-only jsonl. Each line = one Q&A interaction during apply.
+// field_type powers per-class flywheel analysis; model_used powers cost-vs-quality.
+const QAHistoryFieldType = z.enum(['legal', 'open', 'eeo', 'other']);
+
+const QAHistoryRecordSchema = z.object({
+  ts: z.string().max(40).optional(),     // ISO 8601; server fills if omitted
+  job_id: z.string().max(200).optional(),
+  company: z.string().max(200).optional(),
+  role: z.string().max(200).optional(),
+  field_type: QAHistoryFieldType,
+  q: z.string().max(2000),
+  a_draft: z.string().max(5000).optional(),
+  a_final: z.string().max(5000).optional(),
+  edit_distance: z.number().optional(),
+  template_used: z.string().max(200).optional(),
+  model_used: z.string().max(80).optional(),
+});
+
+async function appendHistoryRecord(rec) {
+  const parsed = QAHistoryRecordSchema.parse(rec);
+  if (!parsed.ts) parsed.ts = new Date().toISOString();
+  await fs.appendFile(QA_HISTORY_FILE, JSON.stringify(parsed) + '\n', 'utf-8');
+  return parsed;
+}
+
+async function readHistoryRecords({ limit = 100, q } = {}) {
+  let raw;
+  try { raw = await fs.readFile(QA_HISTORY_FILE, 'utf-8'); }
+  catch (e) { if (e.code === 'ENOENT') return []; throw e; }
+  if (!raw.trim()) return [];
+  const lines = raw.split('\n').filter(l => l.trim());
+  const records = [];
+  for (const line of lines) {
+    try { records.push(JSON.parse(line)); } catch { /* skip malformed */ }
+  }
+  let filtered = records;
+  if (q) {
+    const needle = String(q).toLowerCase();
+    filtered = records.filter(r => {
+      const hay = `${r.q || ''} ${r.a_final || ''} ${r.a_draft || ''}`.toLowerCase();
+      return hay.includes(needle);
+    });
+  }
+  // Most recent first, capped at limit
+  return filtered.slice(-Math.max(1, Math.min(1000, Number(limit) || 100))).reverse();
+}
+
+app.post('/api/career/qa-bank/history', async (req, res) => {
+  try { res.json(await appendHistoryRecord(req.body)); }
+  catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Invalid history record', details: e.issues });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/career/qa-bank/history', async (req, res) => {
+  try { res.json(await readHistoryRecords({ limit: req.query.limit, q: req.query.q })); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // --- Compute dailyCost from JSONL session files and write to DAILY_COST_FILE ---

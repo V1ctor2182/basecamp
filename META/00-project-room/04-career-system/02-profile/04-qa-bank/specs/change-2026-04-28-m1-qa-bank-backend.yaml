@@ -1,0 +1,98 @@
+spec_id: "change-2026-04-28-m1-qa-bank-backend"
+type: change
+state: active
+intent:
+  summary: "m1: Backend 6 endpoints — legal.yml + templates.md + history.jsonl"
+  detail: |
+    三层 QA Bank 后端：legal (Zod permissive 同 IdentitySchema 风格)、templates
+    (markdown 同 narrative)、history (append-only jsonl with field_type 分类 +
+    model_used cost-vs-quality 字段)。复用现有 helpers (atomicWriteFile / deepMerge
+    / ID_STR Zod bound).
+
+    Files modified:
+      - server.mjs (+160 lines):
+        - Constants: QA_BANK_DIR / QA_LEGAL_FILE / QA_TEMPLATES_FILE /
+          QA_HISTORY_FILE
+        - mkdirSync(QA_BANK_DIR) + writeFileSync(QA_HISTORY_FILE, '') 启动时 ensure
+        - QALegalSchema (Zod, 全字段 .optional() — 同 m3-identity partial-save
+          spec): work_authorization / eeo / personal / how_did_you_hear_default
+          - personal.travel_willing_percent: number(0-100) 区间校验
+        - defaultLegal() — 4 个空 object/string 兜底
+        - readLegal() / writeLegal() — yaml + atomicWriteFile + deepMerge defaults
+        - GET/PUT /api/career/qa-bank/legal — 400 on Zod / 200 on partial save
+        - GET/PUT /api/career/qa-bank/templates — markdown text, 复用
+          readMarkdownDoc/writeMarkdownDoc helpers (narrative 引入)
+        - QAHistoryFieldType = z.enum(['legal','open','eeo','other'])
+        - QAHistoryRecordSchema (Zod):
+          ts? (server fills if omitted) / job_id? / company? / role? /
+          field_type (required enum) / q (required, max 2000) /
+          a_draft? (max 5000) / a_final? (max 5000) / edit_distance? /
+          template_used? / model_used?
+        - appendHistoryRecord() — Zod parse + auto-fill ts + fs.appendFile jsonl
+        - readHistoryRecords({limit, q}) — 读全文 + parse 每行 (skip malformed) +
+          可选文本 filter on q+a_final+a_draft + .slice(-min(limit,1000)) + reverse
+          (最新在前)
+        - POST /api/career/qa-bank/history — 400 on Zod / 200 on success
+        - GET /api/career/qa-bank/history?limit=&q=
+
+    Verification (smoke test, 13/13 passed):
+      1. GET legal (no file) → returns defaults `{wa:{}, eeo:{}, personal:{}, how_*:""}` ✓
+      2. PUT legal `{}` → 200 (partial-save spec 满足) ✓
+      3. PUT legal `{eeo:{gender:"Decline"}}` → 200 ✓
+      4. GET roundtrip → deepMerge 保留 eeo.gender + 其他 default 不丢 ✓
+      5. PUT `{personal:{travel_willing_percent:200}}` → 400 too_big (Zod range) ✓
+      6. GET templates → 读 committed templates.md 真实内容 ✓
+      7. PUT templates → 200 + roundtrip ✓
+      8. POST history minimal `{field_type:"open",q:"Why us?",a_final:"x"}` → 200
+         + ts auto-filled ISO 8601 ✓
+      9-10. POST 3 条 + GET ?limit=10 → 3 行 newest-first ✓
+      11. GET ?q=visa → 1 行 filtered ✓
+      12. POST `field_type:"garbage"` → 400 invalid_value (enum reject) ✓
+      13. PUT 300KB body → 413 PayloadTooLargeError (256KB cap on /api/career/*) ✓
+
+    Locked design decisions (long-term-best, all defaults locked plan-milestones):
+      - history schema includes field_type (enum 4) + model_used —
+        飞轮按 Class 聚合 + cost-vs-quality 分析；不重复 cost (已在 llm-costs.jsonl)
+      - Permissive Legal Zod (全 .optional()) — 同 m3-identity 一致风格
+      - Server fills ts if client omits — 减少时间漂移和客户端 bug
+      - readHistoryRecords 上限 1000 行硬 cap — 防止超大 jsonl 拖慢响应
+
+    下游影响:
+      - m2 frontend QA Bank UI 用 nested routes + 3 sub-tabs (Legal ATS form +
+        Templates MarkdownDocEditor wrapper + History 占位)
+      - m3 History tab 升级为 read-only table + client-side 搜索 (复用 GET ?q=)
+      - 07-applier/03-field-classifier (Class 2 Legal) 将直接读 GET /legal 返回
+        固定值不走 LLM
+      - 07-applier/03-field-classifier (Class 3 Open) 读 templates.md 做模板匹配
+      - 07-applier/* 完成 apply 后 POST 一条 history 记录 (飞轮数据源)
+      - 06-evaluator 不直接读 qa-bank（evaluator 只用 narrative + proof-points）
+
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, backend, zod, qa-bank, partial-save, jsonl, append-only]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit TBD"
+relations:
+  - "implements intent-qa-bank-001 (m1/3)"
+  - "clones permissive-Zod pattern from change-2026-04-23-m3-partial-save (Identity)"
+  - "clones markdown-doc pattern from change-2026-04-27-m1-narrative-proof-backend"
+  - "clones jsonl-append pattern from change-2026-04-23-m1-llm-cost-observability"
+anchors:
+  - file: "server.mjs"
+    symbols:
+      - "QALegalSchema"
+      - "QAHistoryRecordSchema"
+      - "QAHistoryFieldType"
+      - "defaultLegal"
+      - "readLegal"
+      - "writeLegal"
+      - "appendHistoryRecord"
+      - "readHistoryRecords"
+created_at: "2026-04-28"
+updated_at: "2026-04-28"
