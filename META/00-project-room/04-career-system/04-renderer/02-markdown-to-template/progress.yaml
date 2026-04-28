@@ -16,7 +16,7 @@ milestones:
     depends_on: []
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "7366c72"
     description: |
       把 resume markdown 转成 CV 模板正文 HTML 片段。纯函数 +
       pure-ESM module — 后端 Playwright 渲染管线 (04-renderer/01) 和未来
@@ -75,7 +75,7 @@ milestones:
           改用本 transformer 让 preview 和 print 输出 100% 一致 (defer until print 真的有偏差)
 
 commits:
-  - hash: "TBD"
+  - hash: "7366c72"
     date: "2026-04-28"
     message: "[04-career-system/04-renderer/02-markdown-to-template] m1: marked-based transformer + debug endpoint (ROOM COMPLETE)"
     files_changed: 5

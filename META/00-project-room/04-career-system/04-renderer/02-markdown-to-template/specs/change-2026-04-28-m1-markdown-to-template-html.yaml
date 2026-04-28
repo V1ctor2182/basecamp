@@ -90,7 +90,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit 7366c72"
 relations:
   - "implements intent-markdown-to-template-001 (m1/1, ROOM COMPLETE)"
   - "provides-import-target for future 04-renderer/01-html-template"

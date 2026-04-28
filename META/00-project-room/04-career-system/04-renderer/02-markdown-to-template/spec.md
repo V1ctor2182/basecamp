@@ -16,7 +16,7 @@
 
 **1 milestone 完成**（~130 lines 估算 / 73 lines 实际 — overestimated since marked 干掉很多手写代码）:
 
-- ✅ **m1-markdown-to-template-html** (`TBD`, 73 lines, ROOM COMPLETE) —
+- ✅ **m1-markdown-to-template-html** (`7366c72`, 73 lines, ROOM COMPLETE) —
   - `package.json` 加 `marked@^16.x`
   - `src/career/lib/markdownToTemplateHtml.mjs` (纯 ESM)
     - `markdownToTemplateHtml(md: string): string` 纯函数
