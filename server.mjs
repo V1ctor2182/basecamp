@@ -33,6 +33,8 @@ const CAREER_DIR = path.join(DATA_DIR, 'career');
 const LLM_COSTS_FILE = path.join(CAREER_DIR, 'llm-costs.jsonl');
 const IDENTITY_FILE = path.join(CAREER_DIR, 'identity.yml');
 const PREFERENCES_FILE = path.join(CAREER_DIR, 'preferences.yml');
+const NARRATIVE_FILE = path.join(CAREER_DIR, 'narrative.md');
+const PROOF_POINTS_FILE = path.join(CAREER_DIR, 'proof-points.md');
 
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(REPOS_FILE)) writeFileSync(REPOS_FILE, '[]');
@@ -1582,6 +1584,108 @@ app.post('/api/career/preferences/preview', async (req, res) => {
       note: 'Mock data. Real pipeline dry-run ships with 05-finder/03-dedupe-hard-filter.',
     });
   } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Career System: Narrative & Proof Points — knowledge markdown docs
+// narrative.md (你的 north star / 写作风格) + proof-points.md (项目 / 文章 / OSS)
+// 两份都 commit 进 git。骨架 H2 是下游 Evaluator/CV-Tailor 抽取段落的软契约 —
+// 改 H2 名前要看 META/.../02-profile/03-narrative-proof
+// ─────────────────────────────────────────────────────────────
+
+const DEFAULT_NARRATIVE = `# Narrative
+
+## Origin
+_例如：本科学统计，工作两年发现自己更喜欢 ship product 而不是写论文，
+后来转去做 infra，发现把模糊系统问题想清楚比调一个模型更让我满足。1-2 段。_
+
+## Superpowers
+_例如：把模糊业务问题拆成可执行系统 — 在 X 项目里把 30 个边界条件
+梳理成 5 条短路规则，让 oncall 时间从每周 8h 降到 1h。每条 1-2 段 + 一个具体例子。_
+
+## North Star
+_例如：5 年内做能影响 100k+ 开发者日常工作流的 infra 工具；
+长期想 build 一家把工程师从重复性工作里解放出来的公司。_
+
+## Voice & Style
+_例如：偏好短句直给结论 + bullet list 列证据；不用 emoji；
+技术细节默认折叠；写 cover letter 倾向 1 段定位 + 1 段为什么这家公司，避免套话。_
+`;
+
+const DEFAULT_PROOF_POINTS = `# Proof Points
+
+## Shipped Projects
+_例如：_
+_- **Foo Pipeline** — 把 ETL 延迟从 2h 降到 5min，日处理 80M 行（[github](https://github.com/...)）_
+_- **Bar Dashboard** — 给 200+ 内部用户用，省下每周 12h 手工对账时间_
+
+## Writing
+_例如：_
+_- [How we cut Postgres tail latency by 80%](https://...) — Hacker News top 5_
+_- 内部 tech talk：实时数据架构演进（150 人参加）_
+
+## Open Source
+_例如：_
+_- **owner/repo** maintainer — 18k stars, 230 contributors, 40 releases_
+_- **other/lib** core contributor — 实现 streaming 模式，被 X 公司生产采用_
+
+## Quantified Wins
+_例如：_
+_- 把 P99 latency 从 800ms 降到 120ms（在 30 天内，无新增机器）_
+_- 把新员工 onboarding 时长从 3 天压到 4 小时_
+_- 主导 migration 把 5 个 monolith 拆成 12 个 service，无 downtime_
+`;
+
+async function readMarkdownDoc(file, fallback) {
+  try {
+    return await fs.readFile(file, 'utf-8');
+  } catch (e) {
+    if (e.code === 'ENOENT') return fallback;
+    throw e;
+  }
+}
+
+async function writeMarkdownDoc(file, content) {
+  if (typeof content !== 'string') {
+    throw new TypeError('content must be a string');
+  }
+  await atomicWriteFile(file, content);
+}
+
+app.get('/api/career/narrative', async (_req, res) => {
+  try {
+    res.json({ content: await readMarkdownDoc(NARRATIVE_FILE, DEFAULT_NARRATIVE) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/career/narrative', async (req, res) => {
+  try {
+    await writeMarkdownDoc(NARRATIVE_FILE, req.body?.content);
+    res.json({ content: req.body.content });
+  } catch (e) {
+    if (e instanceof TypeError) return res.status(400).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/career/proof-points', async (_req, res) => {
+  try {
+    res.json({ content: await readMarkdownDoc(PROOF_POINTS_FILE, DEFAULT_PROOF_POINTS) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/career/proof-points', async (req, res) => {
+  try {
+    await writeMarkdownDoc(PROOF_POINTS_FILE, req.body?.content);
+    res.json({ content: req.body.content });
+  } catch (e) {
+    if (e instanceof TypeError) return res.status(400).json({ error: e.message });
     res.status(500).json({ error: e.message });
   }
 });

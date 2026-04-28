@@ -3,9 +3,9 @@ room:
   name: "Narrative & Proof"
   parent: "00-project-room/04-career-system/02-profile"
   type: feature
-  lifecycle: planning
+  lifecycle: active
   created_at: "2026-04-22"
-  updated_at: "2026-04-22"
+  updated_at: "2026-04-25"
   owner: fullstack
   contributors: []
   prompt_test:

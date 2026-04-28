@@ -1,0 +1,64 @@
+spec_id: "change-2026-04-27-m1-narrative-proof-backend"
+type: change
+state: active
+intent:
+  summary: "m1: Backend GET/PUT /api/career/narrative + /api/career/proof-points + 骨架模板"
+  detail: |
+    实现 narrative.md + proof-points.md 两份知识 markdown 文档的后端 CRUD。
+    沿用 Identity / Preferences 的 readX/writeX/GET/PUT 模式 + atomicWriteFile
+    （tmp + rename，crash 安全）。无 Zod（markdown 文本任意，下游 use-time 解析）。
+
+    Files modified:
+      - server.mjs (+110 lines)
+        · NARRATIVE_FILE / PROOF_POINTS_FILE 文件路径常量
+        · DEFAULT_NARRATIVE / DEFAULT_PROOF_POINTS 骨架字符串
+          (H2: Origin / Superpowers / North Star / Voice & Style;
+                Shipped Projects / Writing / Open Source / Quantified Wins)
+          每个 H2 下带 _例如：..._ italic placeholder 句子
+        · readMarkdownDoc(file, fallback) — utf-8 读，ENOENT 返 fallback，其他 throw
+        · writeMarkdownDoc(file, content) — string 类型校验 → atomicWriteFile
+        · 4 endpoint:
+          - GET  /api/career/narrative      → { content: string }
+          - PUT  /api/career/narrative      → body { content }
+          - GET  /api/career/proof-points   → { content: string }
+          - PUT  /api/career/proof-points   → body { content }
+
+    Verification (10 curl tests, all green):
+      - GET narrative (file absent) → 200 + 默认骨架
+      - PUT narrative '{"content":"# hi\\nworld"}' → 200
+      - GET narrative → 200 + saved content
+      - PUT narrative '{"content":123}' → 400 "content must be a string"
+      - PUT narrative '{}' → 400 (content undefined → TypeError)
+      - 同样 5 条 for proof-points
+      - oversize PUT (300KB) → 413 (Express middleware 已限 256KB at line 19)
+      - 文件落盘到 data/career/{narrative,proof-points}.md，atomic 写入
+
+    Dependencies introduced: 无新 npm 依赖（用现成 fs/path/atomicWriteFile）。
+
+    下游契约:
+      H2 section 名是 Evaluator Stage B / CV Tailor / Applier 抽取段落的
+      软契约（避免整篇塞 prompt 浪费 token）。改 H2 名前要看下游消费者。
+
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, backend, markdown, narrative, proof-points]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit 76503d4"
+relations:
+  - "implements intent-narrative-proof-001 (m1/3)"
+anchors:
+  - file: "server.mjs"
+    symbols:
+      - "NARRATIVE_FILE"
+      - "PROOF_POINTS_FILE"
+      - "DEFAULT_NARRATIVE"
+      - "DEFAULT_PROOF_POINTS"
+      - "readMarkdownDoc"
+      - "writeMarkdownDoc"
+created_at: "2026-04-27"
+updated_at: "2026-04-27"

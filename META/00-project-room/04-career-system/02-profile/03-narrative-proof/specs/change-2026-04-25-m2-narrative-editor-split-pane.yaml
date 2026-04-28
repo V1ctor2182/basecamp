@@ -1,0 +1,100 @@
+spec_id: "change-2026-04-25-m2-narrative-editor-split-pane"
+type: change
+state: active
+intent:
+  summary: "m2: Narrative.tsx CodeMirror + ReactMarkdown split-pane editor"
+  detail: |
+    替换 Narrative.tsx 占位为真实编辑器，先只接 narrative.md 这一份；
+    proof-points.md 在 m3 通过抽出 MarkdownDocEditor 共享组件接入。
+    复用 Identity.tsx 的 load/save/dirty/sticky-bar 模式 + LearnApp.tsx
+    的 CodeMirror 集成模式。
+
+    Files modified:
+      - src/career/settings/Narrative.tsx (10 → 102 lines)
+        - state: content / loaded / dirty / saving / savedAt / serverError
+        - useEffect 加载 GET /api/career/narrative (后端首次返带 H2 骨架的
+          模板 — defaultNarrative 见 m1)
+        - beforeunload 拦截未保存离开 (复用 Identity 模式)
+        - save() PUT /api/career/narrative + 错误展示
+        - 布局:
+          - .af-form-header: 标题 "Narrative" + subtitle 说明 H2 骨架是
+            和下游模块的软契约
+          - .narrative-split (grid 1fr 1fr):
+            - 左 .narrative-editor-pane: CodeMirror, theme=light,
+              extensions=[markdown()], basicSetup
+              { lineNumbers, foldGutter, highlightActiveLine }
+            - 右 .narrative-preview-pane: ReactMarkdown 渲染当前 content
+          - .af-submit-bar sticky: status + Save Narrative button
+        - 移除 form 默认 max-width 720 (.narrative-form 覆盖) — split-pane
+          需要更宽空间
+      - src/career/settings/ats-form.css (+102 lines)
+        - .narrative-form (max-width: none, flex column)
+        - .narrative-split (grid 1fr 1fr, gap 16, calc height)
+        - .narrative-editor-pane (border + cm-editor 100% height + focus
+          outline reset)
+        - .narrative-preview-pane (浅灰背景 + padding + overflow-auto +
+          markdown 元素的合理 typography: h1/h2/h3 size + bottom border 在
+          h2, p / li / code / pre / blockquote / a)
+        - @media (max-width: 900px) → 单列堆叠 fallback
+
+    依赖（package.json 已有，未新增 dep）:
+      - @uiw/react-codemirror ^4.25.7
+      - @codemirror/lang-markdown ^6.5.0
+      - react-markdown ^10.1.0
+
+    Verification (smoke test, all passed):
+      1. tsc --noEmit ✓ (0 in-project errors; sibling repo TS noise pre-existing)
+      2. vite build ✓ (7.54s)
+      3. GET /api/career/narrative (file 不存在) → 返回 H2 骨架模板 ✓
+      4. PUT /api/career/narrative {"content":"..."} → 200 + 写入 ✓
+      5. GET roundtrip → 读到 PUT 写入的内容 ✓
+      6. 待手工 UI smoke (留给用户验证):
+         - /career/settings/narrative 打开 → 看到左编辑右预览
+         - 输入 → 右侧实时跟随 (ReactMarkdown 即时渲染 onChange state)
+         - 改了不保存就刷新 → beforeunload 拦截
+         - 点 Save → toast + bar "✓ Saved at HH:MM"
+
+    Design rationale:
+      - 单一文件先做（不抽 MarkdownDocEditor 共享组件） — m3 才抽，
+        因为那时有 2 个真消费者 (Narrative + ProofPoints) 才符合
+        "rule of three" 抽象时机
+      - max-width: none 而不是修改 .af-form 全局: 不影响 Identity /
+        Preferences 的 720px 表单
+      - calc(100vh - 280px) min-height 360 + @media 900px 单列: 高低分
+        辨率都能用，不要求特定 viewport
+      - ReactMarkdown 默认配置 (无 plugin) 就够本期所需 — gfm 表格 /
+        task list 等如有需求 m3 再加 remarkGfm
+
+    下游影响:
+      - m3-shared-doc-editor-and-proof-points 将从本 milestone 抽出
+        MarkdownDocEditor 共享组件，Narrative.tsx 收缩为 ~20 行壳
+      - Evaluator Stage B (06-evaluator/02) read narrative.md by H2 section
+        (## North Star) — 不要求结构化 schema，但 H2 段名是软契约
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m2, frontend, react, codemirror, markdown, split-pane]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit 2ca61fb"
+relations:
+  - "implements intent-narrative-proof-001 (m2/3)"
+  - "depends_on change-2026-04-27-m1-narrative-proof-backend"
+  - "clones load/save/dirty pattern from change-2026-04-23-m2-identity-form-ui"
+  - "clones CodeMirror integration from src/LearnApp.tsx editor"
+  - "provides single-doc baseline that m3 will refactor into MarkdownDocEditor"
+anchors:
+  - file: "src/career/settings/Narrative.tsx"
+    symbols: ["default", "Narrative"]
+  - file: "src/career/settings/ats-form.css"
+    symbols:
+      - ".narrative-form"
+      - ".narrative-split"
+      - ".narrative-editor-pane"
+      - ".narrative-preview-pane"
+created_at: "2026-04-25"
+updated_at: "2026-04-25"

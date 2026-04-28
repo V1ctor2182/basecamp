@@ -14,7 +14,8 @@
       "Bash(lsof -nP -iTCP:80 -sTCP:LISTEN)",
       "Bash(lsof -nP -iTCP:443 -sTCP:LISTEN)",
       "Bash(lsof -nP -iTCP:5173 -sTCP:LISTEN)",
-      "Bash(lsof -nP -iTCP:4568 -sTCP:LISTEN)"
+      "Bash(lsof -nP -iTCP:4568 -sTCP:LISTEN)",
+      "Bash(awk 'END{print NR}' server.mjs)"
     ]
   }
 }

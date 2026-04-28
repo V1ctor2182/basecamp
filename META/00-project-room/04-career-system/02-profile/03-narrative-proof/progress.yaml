@@ -1,5 +1,195 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-narrative-proof-backend"
+    name: "Backend GET/PUT for narrative.md + proof-points.md + 骨架模板"
+    status: completed
+    actual_lines: 110
+    actual_files:
+      - "server.mjs"
+    estimated_files:
+      - "server.mjs"
+    estimated_lines: 100
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "76503d4"
+    description: |
+      data/career/narrative.md + data/career/proof-points.md 的 markdown 文本
+      CRUD API。两文件都 commit 进 git（偏好 / 知识，不在 gitignore）。
+      首次 GET 不存在时返**带 H2 骨架的模板**，骨架 section 名是和下游模块的
+      软契约（Evaluator 按 ## North Star 段抽取，CV Tailor 按 ## Shipped Projects
+      抽取，避免整篇塞 prompt 浪费 token）。
+
+      实现:
+      - server.mjs 加:
+        - NARRATIVE_FILE = path.join(CAREER_DIR, 'narrative.md')
+        - PROOF_POINTS_FILE = path.join(CAREER_DIR, 'proof-points.md')
+        - readMarkdownFile(p) — utf-8 读，不存在返 null
+        - writeMarkdownFile(p, text) — atomicWriteFile（复用现有）
+        - defaultNarrative() — 返回带 H2 骨架的字符串常量:
+          ## Origin / ## Superpowers / ## North Star / ## Voice & Style
+          每个 section 下一行 placeholder 提示
+        - defaultProofPoints() — 同上:
+          ## Shipped Projects / ## Writing / ## Open Source / ## Quantified Wins
+        - GET /api/career/narrative      → { content: string }（不存在返默认骨架）
+        - PUT /api/career/narrative      → body { content }，写文件，返 { content }
+        - GET /api/career/proof-points   → 同上
+        - PUT /api/career/proof-points   → 同上
+        - 不需要 Zod（markdown 文本任意），但 PUT 时校验 typeof body.content === 'string'，
+          长度 < 500KB（防误传）
+
+      验收:
+      - curl GET /api/career/narrative （文件不存在）→ 返回 defaultNarrative() 骨架
+      - curl PUT /api/career/narrative -d '{"content":"# hi"}' → 200 + 文件写入
+      - curl GET → 返回刚写的 "# hi"
+      - curl PUT 超大 body (600KB) → 400 too large
+      - curl PUT body { content: 123 } → 400 invalid
+      - 同样 4 条对 /api/career/proof-points
+
+  - id: "m2-narrative-editor-split-pane"
+    name: "Narrative.tsx — CodeMirror + 实时 markdown preview split pane"
+    status: completed
+    actual_lines: 204
+    actual_files:
+      - "src/career/settings/Narrative.tsx"
+      - "src/career/settings/ats-form.css"
+    estimated_files:
+      - "src/career/settings/Narrative.tsx"
+    estimated_lines: 150
+    depends_on: ["m1-narrative-proof-backend"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "2ca61fb"
+    description: |
+      替换 Narrative.tsx 占位为真实编辑器（先只接 narrative.md 这一份；
+      proof-points 在 m3 通过组件抽取后接入）。学 LearnApp.tsx:793-816 的
+      split-pane 模式 + Identity.tsx 的 load/save/dirty/sticky-bar 模式。
+
+      实现 (src/career/settings/Narrative.tsx ~150 行):
+        - import CodeMirror from '@uiw/react-codemirror'
+        - import { markdown } from '@codemirror/lang-markdown'
+        - import ReactMarkdown from 'react-markdown' (已在 deps)
+        - state: { content: string, loaded, dirty, saving, savedAt, serverError }
+        - useEffect mount → fetch GET /api/career/narrative → setContent
+        - beforeunload 拦截（dirty 时）— 学 Identity.tsx:107-112
+        - 布局:
+          - af-form-header (复用 ats-form.css): 标题 "Narrative" +
+            副标题 "你的人设 / north star / 写作风格 — Applier 起草开放题
+            和 Evaluator Stage B 都读"
+          - 主体 split (左右各 50%, gap 16px):
+            - 左 .narrative-editor-pane: CodeMirror, theme=light,
+              extensions=[markdown()], basicSetup { lineNumbers, foldGutter,
+              highlightActiveLine }
+            - 右 .narrative-preview-pane: <ReactMarkdown>{content}</ReactMarkdown>
+              背景浅灰 + padding，scrollable
+          - 底部 sticky save bar (学 Identity.tsx:354-376):
+            状态文字左 + Save Narrative 按钮右
+        - save(): PUT → setDirty(false) + setSavedAt + 错误处理
+        - 新增极少量 css inline 或追加到 ats-form.css:
+          - .narrative-split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; height: calc(100vh - 240px); }
+          - .narrative-editor-pane { border + overflow }
+          - .narrative-preview-pane { padding 16px + 背景 + overflow auto }
+
+      验收:
+      - 打开 /career/settings/narrative → 看到左编辑右预览
+      - 首次进（文件不存在）→ 看到 ## Origin / ## Superpowers / ## North Star /
+        ## Voice & Style 骨架，右侧渲染成标题
+      - 改文字 → 右侧实时跟随
+      - 点 Save → toast "Saved" + bar 显示 ✓ Saved at HH:MM
+      - 改了不保存就刷新 → 浏览器拦截
+      - 重启 server + reload → 内容恢复
+
+  - id: "m3-shared-doc-editor-and-proof-points"
+    name: "抽 MarkdownDocEditor 共享组件 + 接入 ProofPoints 路由"
+    status: completed
+    actual_lines: 140
+    actual_files:
+      - "src/career/MarkdownDocEditor.tsx"
+      - "src/career/settings/Narrative.tsx"
+      - "src/career/settings/ProofPoints.tsx"
+      - "src/career/settings/SettingsLayout.tsx"
+      - "src/CareerApp.tsx"
+    estimated_files:
+      - "src/career/MarkdownDocEditor.tsx"
+      - "src/career/settings/Narrative.tsx"
+      - "src/career/settings/ProofPoints.tsx"
+      - "src/career/settings/SettingsLayout.tsx"
+    estimated_lines: 180
+    depends_on: ["m2-narrative-editor-split-pane"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "a7c0142"
+    description: |
+      m2 已经验证 split-pane 编辑器模式可用，现在抽成共享组件 +
+      接入第二份文件 (proof-points.md) 走独立路由。
+      "先一份能跑，后抽象" — 这次抽是因为有了 2 个真消费者。
+
+      新文件 src/career/MarkdownDocEditor.tsx (~120 行):
+        - props: {
+            apiPath: string,         // '/api/career/narrative' or '.../proof-points'
+            title: string,
+            subtitle: string,
+            saveLabel: string,       // "Save Narrative" / "Save Proof Points"
+          }
+        - 内部 = m2 写过的全部 load/save/dirty/state + split-pane UI
+
+      改 src/career/settings/Narrative.tsx (~20 行壳):
+        - 删掉 m2 写的内部逻辑
+        - 改成 <MarkdownDocEditor apiPath="/api/career/narrative"
+            title="Narrative" subtitle="..." saveLabel="Save Narrative" />
+
+      新建 src/career/settings/ProofPoints.tsx (~20 行壳):
+        - <MarkdownDocEditor apiPath="/api/career/proof-points"
+            title="Proof Points"
+            subtitle="项目指标 / 文章 / 开源贡献明细 — Evaluator 反查防幻觉,
+              CV Tailor 引用做简历"
+            saveLabel="Save Proof Points" />
+
+      改 src/career/settings/SettingsLayout.tsx:
+        - 在 Narrative 菜单项后加 "Proof Points" 菜单项
+        - 加路由: /career/settings/proof-points → ProofPoints
+        - Narrative 菜单显示名建议改成 "Narrative"（去掉 "& Proof"，
+          因为 Proof Points 现在是独立菜单项）
+
+      验收:
+      - /career/settings/narrative 仍然正常工作（外观无变化）
+      - 侧边栏多一条 "Proof Points" 链接
+      - 点 Proof Points → 进编辑器 → 看到 Shipped Projects / Writing /
+        Open Source / Quantified Wins 骨架
+      - 编辑 + 保存 → data/career/proof-points.md 写入
+      - 来回切 narrative ↔ proof-points 两份各自独立 dirty 状态
+      - SettingsLayout.tsx 菜单文字 narrative 改为 "Narrative"
+      - ROOM COMPLETE — 更新 room.yaml lifecycle: planning → active
+
+commits:
+  - hash: "76503d4"
+    date: "2026-04-27"
+    message: "[04-career-system/02-profile/03-narrative-proof] m1: Backend GET/PUT /api/career/narrative + /api/career/proof-points + 骨架模板"
+    files_changed: 4
+    specs_affected:
+      - "change-2026-04-27-m1-narrative-proof-backend (created)"
+    milestones_affected:
+      - "m1-narrative-proof-backend (→ completed)"
+  - hash: "2ca61fb"
+    date: "2026-04-25"
+    message: "[04-career-system/02-profile/03-narrative-proof] m2: Narrative.tsx CodeMirror + ReactMarkdown split-pane"
+    files_changed: 3
+    specs_affected:
+      - "change-2026-04-25-m2-narrative-editor-split-pane (created)"
+    milestones_affected:
+      - "m2-narrative-editor-split-pane (→ completed)"
+  - hash: "a7c0142"
+    date: "2026-04-25"
+    message: "[04-career-system/02-profile/03-narrative-proof] m3: 抽 MarkdownDocEditor 共享组件 + 接入 ProofPoints 路由 (ROOM COMPLETE)"
+    files_changed: 7
+    specs_affected:
+      - "change-2026-04-25-m3-shared-doc-editor (created)"
+      - "room.yaml (lifecycle: in_progress → active)"
+      - "_tree.yaml (lifecycle: in_progress → active)"
+    milestones_affected:
+      - "m3-shared-doc-editor-and-proof-points (→ completed, ROOM COMPLETE)"
+
+current_sprint: "Sprint 2 — Profile"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 100
+status_note: "🎉 ROOM 完成 (3 milestones done, lifecycle active)。Narrative + ProofPoints 共享 MarkdownDocEditor。下一个 Room: 02-profile/04-qa-bank"
+last_updated: "2026-04-25"
