@@ -11,7 +11,7 @@ milestones:
     depends_on: []
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "7022263"
     description: |
       Resume base.md content endpoints + versions snapshot management +
       由 server 直接 render PDF (作 iframe src 的 GET 端点)。
@@ -258,7 +258,7 @@ milestones:
         - dropdown 不是 modal: 不打断编辑节奏
 
 commits:
-  - hash: "TBD"
+  - hash: "7022263"
     date: "2026-04-29"
     message: "[04-career-system/03-cv-engine/03-in-ui-editor] m1: Resume editor backend — content GET/PUT + versions snapshots (FIFO 50) + render PDF endpoint"
     files_changed: 3

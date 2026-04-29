@@ -109,7 +109,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit 7022263"
 relations:
   - "implements intent-in-ui-editor-001 (m1/3)"
   - "depends_on change-2026-04-29-m3-resume-metadata-editor (m1-resume-index ROOM COMPLETE)"

@@ -16,7 +16,7 @@ source: manual 简历的 CodeMirror 编辑器 + 实时 PDF 预览 + versions 快
 
 **3 milestones 规划完成**（~610 lines 估算，1/3 完成，all defaults 长期最优锁定）:
 
-- ✅ **m1-content-versions-render-backend** (TBD, 185 lines 实际, server.mjs) — 4 endpoints:
+- ✅ **m1-content-versions-render-backend** (`7022263`, 185 lines 实际, server.mjs) — 4 endpoints:
   - `GET /api/career/resumes/:id/content` → `{ content, versions: [...] }`
   - `PUT /api/career/resumes/:id/content` (pre-write snapshot to `versions/${ISO}.md` + atomic write + FIFO cap 50)
   - `GET /api/career/resumes/:id/versions/:filename` → `{ content, ts, size }`
