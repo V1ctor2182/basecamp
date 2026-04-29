@@ -16,7 +16,7 @@
 
 **2 milestones 规划完成**（~360 lines 估算，1/2 完成，all defaults 长期最优锁定）:
 
-- ✅ **m1-auto-select-backend** (TBD, 110 lines 实际, server.mjs) — pure keyword scoring + endpoint:
+- ✅ **m1-auto-select-backend** (`765ed8a`, 110 lines 实际, server.mjs) — pure keyword scoring + endpoint:
   - `AutoSelectRequestSchema` body `{ jd_text, role? }`
   - `scoreResume` per resume: `+1 × role_kw matched in role` + `+1 × jd_kw matched in jd_text` − `2 × negative_kw matched in jd_text`
   - Sort by score desc → is_default first → created_at asc

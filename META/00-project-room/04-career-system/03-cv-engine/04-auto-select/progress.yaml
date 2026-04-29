@@ -11,7 +11,7 @@ milestones:
     depends_on: []
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "765ed8a"
     description: |
       Pure keyword-based scoring algorithm + endpoint. No LLM. Reads metadata.yml
       of every resume in index, scores against incoming { jd_text, role? } body,
@@ -166,7 +166,7 @@ milestones:
         - 排名展开默认折叠 — picked 是首要信息
 
 commits:
-  - hash: "TBD"
+  - hash: "765ed8a"
     date: "2026-04-29"
     message: "[04-career-system/03-cv-engine/04-auto-select] m1: keyword scoring + POST /api/career/resumes/auto-select endpoint"
     files_changed: 3

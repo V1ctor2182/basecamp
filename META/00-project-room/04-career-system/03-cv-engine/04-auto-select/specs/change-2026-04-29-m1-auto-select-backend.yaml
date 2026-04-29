@@ -96,7 +96,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit 765ed8a"
 relations:
   - "implements intent-auto-select-001 (m1/2)"
   - "consumes metadata.match_rules from change-2026-04-29-m3-resume-metadata-editor (resume-index ROOM COMPLETE)"
