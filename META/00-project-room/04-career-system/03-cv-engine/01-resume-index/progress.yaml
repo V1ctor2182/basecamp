@@ -1,5 +1,366 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-resume-index-backend"
+    name: "Backend: index.yml + metadata.yml CRUD + create/delete/set-default endpoints"
+    status: completed
+    actual_lines: 275
+    actual_files:
+      - "server.mjs"
+    estimated_files:
+      - "server.mjs"
+    estimated_lines: 280
+    depends_on: []
+    complexity_flags:
+      - "design_decisions"
+    open_questions: []
+    commit_hash: null
+    description: |
+      多 base resume 数据层。Zod schemas + atomic CRUD + path-traversal 防御。
+      Frontend 在 m2/m3 接入。
+
+      实现 (server.mjs +~280 lines):
+        - constants:
+          RESUMES_DIR = path.join(CAREER_DIR, 'resumes')
+          RESUMES_INDEX_FILE = path.join(RESUMES_DIR, 'index.yml')
+          if (!existsSync(RESUMES_DIR)) mkdirSync(RESUMES_DIR, { recursive: true })
+
+        - validateResumeId(id): boolean
+          /^[a-z0-9-]{1,40}$/.test(id)  ← slug only, max 40 char
+          + reserved guard: id ≠ 'index' (avoid collision with index.yml)
+        - resolveResumeDir(id): string
+          const dir = path.resolve(RESUMES_DIR, id)
+          if (!dir.startsWith(RESUMES_DIR + path.sep)) throw 'invalid path'
+          return dir
+
+        - Zod schemas:
+          ResumeIndexEntrySchema = z.object({
+            id: z.string().regex(/^[a-z0-9-]+$/),
+            title: z.string().max(200),
+            description: z.string().max(500).optional(),
+            source: z.enum(['manual', 'google_doc']),
+            gdoc_id: z.string().max(200).optional(),
+            last_synced_at: z.string().max(40).optional(),
+            is_default: z.boolean(),
+            created_at: z.string().max(40),
+          })
+          ResumeIndexSchema = z.object({
+            resumes: z.array(ResumeIndexEntrySchema).max(50),
+          })
+
+          MatchRulesSchema = z.object({
+            role_keywords: z.array(z.string().max(100)).max(50).default([]),
+            jd_keywords: z.array(z.string().max(100)).max(50).default([]),
+            negative_keywords: z.array(z.string().max(100)).max(50).default([]),
+          })
+          EmphasizeSchema = z.object({
+            projects: z.array(z.string().max(100)).max(50).default([]),
+            skills: z.array(z.string().max(100)).max(50).default([]),
+            narrative: z.string().max(2000).optional(),
+          })
+          RendererConfigSchema = z.object({
+            template: z.string().max(50).default('default'),
+            font: z.string().max(50).optional(),
+            accent_color: z.string().max(20).default('#0969da'),
+          })
+          ResumeMetadataSchema = z.object({
+            archetype: z.string().max(100).optional(),
+            match_rules: MatchRulesSchema.default({}),
+            emphasize: EmphasizeSchema.default({}),
+            renderer: RendererConfigSchema.default({}),
+          })
+
+        - Helpers:
+          async function readResumeIndex(): Promise<ResumeIndex>
+            try yaml.load(readFile RESUMES_INDEX_FILE)
+            ENOENT → return { resumes: [] }
+            otherwise yaml.load + ResumeIndexSchema.parse
+          async function writeResumeIndex(idx)
+            ResumeIndexSchema.parse + atomicWriteFile + yaml.dump
+          async function readResumeMetadata(id)
+            validateResumeId | resolveResumeDir | read metadata.yml |
+            yaml.load + ResumeMetadataSchema.parse (with defaults)
+            ENOENT → return ResumeMetadataSchema.parse({}) (defaults)
+          async function writeResumeMetadata(id, obj)
+            same path resolution + atomic write
+
+          DEFAULT_BASE_MD = `# Resume\n\n## Experience\n\n_例如：..._\n\n## Education\n\n_例如：..._\n\n## Skills\n\n_例如：..._\n\n## Projects\n\n_例如：..._\n`
+          (H2 sections 与 narrative/proof-points 软契约一致)
+
+        - Endpoints:
+          GET /api/career/resumes
+            → { resumes: [...] }  (full index)
+
+          POST /api/career/resumes
+            body: { id, title, description?, source: 'manual'|'google_doc',
+                    gdoc_id?, set_default?: boolean }
+            steps:
+              1. validate id slug
+              2. read index, ensure id not in use
+              3. mkdir resolveResumeDir(id) + versions/ subdir
+              4. write metadata.yml = ResumeMetadataSchema.parse({}) (defaults)
+              5. write base.md = DEFAULT_BASE_MD (atomic)
+              6. if set_default: flip is_default on all
+              7. push to index.resumes + atomic write index
+              8. return new entry (200)
+            error: 400 invalid id / 409 id in use / 500
+
+          DELETE /api/career/resumes/:id
+            steps:
+              1. validate id
+              2. read index, find entry, error 404 if missing
+              3. remove from index, atomic write
+              4. fs.rm(resolveResumeDir(id), { recursive, force })
+            error: 400 / 404 / 500
+
+          PATCH /api/career/resumes/:id/set-default
+            steps:
+              1. validate id, must exist in index
+              2. update index: target.is_default=true, others=false
+              3. atomic write index
+            return updated index
+
+          GET /api/career/resumes/:id/metadata → ResumeMetadata (with defaults)
+          PUT /api/career/resumes/:id/metadata
+            body = ResumeMetadata partial
+            ResumeMetadataSchema.parse + atomic write metadata.yml
+
+        - 复用现有 atomicWriteFile / deepMerge / yaml IO
+
+      验收 (smoke 8 cases):
+        1. GET /api/career/resumes (空) → { resumes: [] }
+        2. POST id='backend' title='Backend SDE' source='manual' →
+           200 + entry; data/career/resumes/backend/{base.md, metadata.yml,
+           versions/} 全建出来
+        3. POST 重复 id='backend' → 409 ✓
+        4. POST id='../etc' (path traversal) → 400 invalid id ✓
+        5. POST id='backend' set_default=true 之后 POST id='ai' set_default=true
+           → backend.is_default=false, ai.is_default=true ✓
+        6. PATCH /backend/set-default → backend=true, ai=false ✓
+        7. PUT /backend/metadata { match_rules: { role_keywords: ['SDE','SWE'] } }
+           → 200; GET roundtrip; deep-merge defaults 保留 (emphasize/renderer 不丢)
+        8. DELETE /backend → 200; index 不再有 backend; data/.../backend 目录
+           被 fs.rm 删除 ✓
+
+      Locked design (long-term-best):
+        - id slug regex 严格: 防 path traversal + URL 友好 + 不歧义
+        - reserved 'index' 名字: 防 collision with index.yml
+        - 创建时同时写 base.md skeleton (H2 系列): 与 narrative/proof-points
+          软契约一致；后续 03-in-ui-editor 和 04-renderer/01 直接消费
+        - DELETE 真删目录 (不归档): personal app, 不需要 audit log;
+          想保留就 git commit 之前 export
+        - is_default 后端 atomic flip: 不依赖前端逻辑; race-safe
+        - metadata.yml 字段 .default([]): 老文件不带新字段时 deepMerge 后
+          有合理空值, 不崩
+
+      Complexity:
+        - design_decisions: path traversal / id validation / default flipping
+          atomicity / metadata schema 的 nested defaults
+
+      下游影响:
+        - m2 GalleryUI 调 GET /resumes + POST + DELETE + PATCH set-default
+        - m3 metadata 编辑 drawer 调 PUT /resumes/:id/metadata
+        - 03-cv-engine/02-google-docs-sync 通过 source='google_doc' + gdoc_id
+          字段 + last_synced_at 接入
+        - 03-cv-engine/03-in-ui-editor 后续读 base.md (本 milestone 已创建)
+        - 03-cv-engine/04-auto-select 读 index + match_rules 选 base
+        - 03-cv-engine/05-tailor-engine 读 metadata.emphasize 做改写引导
+
+  - id: "m2-resume-gallery-ui"
+    name: "Settings → Resumes Gallery: card grid + Add/Delete/SetDefault"
+    status: pending
+    estimated_files:
+      - "src/career/settings/Resumes.tsx"
+      - "src/career/settings/resumes.css"
+      - "src/career/settings/SettingsLayout.tsx"
+    estimated_lines: 350
+    depends_on: ["m1-resume-index-backend"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: null
+    description: |
+      Settings → Resumes 页面 — Gallery 视图 + 创建/删除/置默认。
+      m3 加 metadata edit drawer 完成 ROOM。
+
+      实现:
+        src/career/settings/Resumes.tsx (替换占位 ~310 行):
+          - state: resumes / loaded / error / showAddDialog / addForm /
+            confirmDeleteId
+          - useEffect load GET /api/career/resumes
+          - Card grid (.c-resumes-grid):
+            每 resume 一张 .c-resume-card:
+              - 顶部: title (h3) + is_default ★ badge (默认 → 蓝)
+              - source badge (.c-resume-source-{manual|google_doc})
+              - description (灰小字)
+              - footer: created_at + last_synced_at (relative time)
+              - actions menu (3-dot): "Set as default" / "Delete..."
+          - Empty state (resumes.length === 0):
+            "📄 No resumes yet" + 大 Add Resume 按钮 + 简短 hint
+          - Add Resume button (顶部 sticky 或 grid 末尾 +):
+            click → showAddDialog modal:
+              fields:
+                · ID: text input + slugify on blur (lowercase, replace
+                  /[^a-z0-9-]/ → '-', max 40)
+                · Title: text input (required)
+                · Description: textarea (optional, max 500)
+                · Source: radio (manual / google_doc)
+                · gdoc_id: 仅当 source=google_doc 时显示, text input
+                · Set as default: checkbox
+              submit → POST /api/career/resumes → close modal + refresh
+              error 400/409 → inline error with msg
+          - Set as default action: PATCH /set-default → refresh
+          - Delete confirm dialog: "Delete '{title}'? base.md 和 versions/
+            会一起删除，无法撤销。"
+            type 'delete' to confirm + Delete button
+            → DELETE /api/career/resumes/:id → refresh
+
+        src/career/settings/resumes.css (新增 ~80 行):
+          - .c-resumes-page (header + grid container)
+          - .c-resumes-toolbar (h2 + Add button right)
+          - .c-resumes-grid (display: grid; grid-template-columns:
+            repeat(auto-fill, minmax(280px, 1fr)); gap: 16px)
+          - .c-resume-card (border, padding, hover shadow)
+          - .c-resume-card-header (flex with title + default badge)
+          - .c-resume-default-badge (★ blue)
+          - .c-resume-source-{manual|google_doc} (灰/绿背景小 pill)
+          - .c-resume-description (灰小字 line-clamp-2)
+          - .c-resume-footer (timestamps small gray)
+          - .c-resume-actions-menu (3-dot button + dropdown)
+          - .c-resume-empty (居中 dashed border + CTA)
+          - .c-resumes-modal (overlay + dialog)
+          - 复用 ats-form.css 的 .af-input / .af-btn-primary 等
+
+        src/career/settings/SettingsLayout.tsx (~不变):
+          Resumes 菜单项已存在，无需改动
+
+      验收 (build + 手工 UI smoke):
+        1. /career/settings/resumes 空状态 → "No resumes yet" + CTA ✓
+        2. Click Add → modal 显示 → 填 id="backend" title="Backend SDE"
+           → submit → 200 → modal 关 + 卡片出现 ✓
+        3. id="../bad" 输 → slugify 修正为 "bad" 或显示 "Invalid id" ✓
+        4. 重复 id → 后端 409 → 显示错误 inline ✓
+        5. Add 第二张 → grid 显示 2 张 ✓
+        6. 第二张 Set as default → 第二张星亮，第一张星灭 ✓
+        7. Delete 第一张 → 确认 dialog → type 'delete' → DELETE → 第一张
+           消失 ✓ + (后端) 目录删除
+
+      Locked design (long-term-best):
+        - 卡片不显示 PDF 缩略图 (defer): 文本卡足够；缩略图需要
+          rasterization 工具链，等真有视觉对比痛点再加
+        - delete 二次确认 type 'delete': 防误删 (base.md + versions 不可恢复)
+        - source badge inline (不是单独 column): 视觉密度低 + 可在 grid 上
+          一眼扫到哪些是 Google Doc
+        - 3-dot actions menu: 比 inline buttons 简洁; 标准 SaaS pattern
+        - slugify on blur: 不打扰输入节奏，提交前固定到合法 id
+
+      下游影响:
+        - m3 加 expand drawer + Duplicate + metadata 编辑
+
+  - id: "m3-resume-metadata-editor"
+    name: "Card 展开 metadata drawer + Match Rules + Emphasize + Renderer config + Duplicate (ROOM COMPLETE)"
+    status: pending
+    estimated_files:
+      - "src/career/settings/Resumes.tsx"
+      - "src/career/settings/resumes.css"
+      - "src/career/lib/slugify.ts"  # 可能抽
+    estimated_lines: 280
+    depends_on: ["m2-resume-gallery-ui"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: null
+    description: |
+      Click card → expand drawer in-place (不开 modal); 编辑 metadata.yml
+      所有字段 + Duplicate action。
+
+      实现 (Resumes.tsx +~250 行):
+        - state 加: expandedId | null + drafts: Record<id, MetadataDraft> +
+          dirtyIds: Set
+        - Click 卡片任意位置 (非 actions menu) → 展开 drawer:
+          - 顶部小 close 按钮
+          - 4 节 (.af-section 复用):
+            1. Archetype (单 input — short label like "Backend SDE / L4")
+            2. Match Rules:
+               - role_keywords (TagInput 复用)
+               - jd_keywords (TagInput)
+               - negative_keywords (TagInput)
+            3. Emphasize:
+               - projects (TagInput)
+               - skills (TagInput)
+               - narrative (textarea max 2000 — short tailor 提示)
+            4. Renderer:
+               - template (text input, default 'default')
+               - font (text input, optional)
+               - accent_color (color picker + hex text input)
+          - 底部 sticky save bar (复用 .af-submit-bar):
+            "Save Metadata" 按钮 (disabled if !dirty); status 显示
+        - Save → PUT /resumes/:id/metadata → refresh card
+
+        - Duplicate action (在 3-dot menu 加):
+          - prompt: "New ID for the copy:"
+          - validate slug + 不重名
+          - GET source metadata → POST /resumes (id=new, title="{old.title} copy",
+            source='manual', metadata=copy of source)
+          - 注意: base.md 不复制 (POST 自动写 default skeleton);
+            如要复制内容是 03-in-ui-editor 的事 (用户后续 paste-import)
+            → 实际更简单: backend 加 POST /:id/duplicate 端点 (copies metadata
+            but creates fresh base.md skeleton) — m1 没做这个端点；本 m3 也加上
+        - Backend (m1 已有的基础上, m3 补 +30 lines):
+          POST /api/career/resumes/:id/duplicate body { new_id, new_title? }
+            - validate new_id, ensure not in use
+            - read source metadata + index entry
+            - create new dir / metadata.yml (copy from source) / base.md skeleton
+            - push to index with is_default=false
+          (这其实是 m3 范围 — 把 backend 这点 +ui 一起做完，不让 m2 加多余 API)
+
+        src/career/settings/resumes.css (+~50 行):
+          - .c-resume-card-expanded { box-shadow + max-width 限制 }
+          - .c-resume-drawer (flex column, padding, gap)
+          - .c-resume-drawer-close (右上 X button)
+          - .c-resume-drawer .af-section 复用
+          - .c-resume-color-picker (color input + hex text 双向同步)
+
+      验收 (build + 手工):
+        1. Click card → expand drawer ✓
+        2. 编辑 match_rules (TagInput Enter add) → save → roundtrip ✓
+        3. Renderer accent_color color-picker → text 输入双向 ✓
+        4. dirty 不点 save 切走 → beforeunload 拦截 ✓
+        5. Duplicate → prompt new_id → 列表多一张 (fresh base.md) ✓
+        6. backend smoke: POST /backend/duplicate {new_id:'backend-v2'} → 201
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml 同步
+        - spec.md ROOM-COMPLETE rewrite (3 milestone overview + Backend API +
+          UI structure + 下游 contracts)
+        - 03-cv-engine sub-epic: 0% → ~20% (1/5 features done)
+
+      Locked design (long-term-best):
+        - In-place expand drawer (不开 modal): 保持 gallery 上下文; 切换其他
+          卡只切 expandedId
+        - Match Rules 复用 TagInput: m2-preferences 那个共享组件
+        - Color picker + hex text 双向: 让用户既能拖也能精确输入十六进制
+        - Duplicate backend 端点: 比前端拼装更原子 (避免半失败留 orphan dir)
+        - base.md skeleton 不复制 source 内容: 复制内容是 paste-import 的事;
+          duplicate 是"开始一份新方向"的语义不是 "克隆完整稿"
+
+      下游影响:
+        - 03-cv-engine/02-google-docs-sync 接入 source='google_doc' resume 的
+          Sync 按钮 (本 m3 不做，下一 ROOM)
+        - 03-cv-engine/03-in-ui-editor 用 expand drawer + 第二个 tab 编辑
+          base.md 内容 (本 m3 metadata only)
+        - 03-cv-engine/04-auto-select 读 metadata.match_rules 选 base
+        - 03-cv-engine/05-tailor-engine 读 metadata.emphasize / renderer 调风格
+
+commits:
+  - hash: "TBD"
+    date: "2026-04-28"
+    message: "[04-career-system/03-cv-engine/01-resume-index] m1: Resume Index backend — Zod schemas + 5 endpoints + slug guard + atomic default flip"
+    files_changed: 3
+    specs_affected:
+      - "change-2026-04-28-m1-resume-index-backend (created)"
+    milestones_affected:
+      - "m1-resume-index-backend (→ completed)"
+
+current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 33
+status_note: "m1 ✅ backend (275 行, 9/9 smoke ✓). 03-cv-engine 起手第一个 ROOM. 下一步 m2 Gallery UI."
+last_updated: "2026-04-28"

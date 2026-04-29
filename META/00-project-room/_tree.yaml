@@ -219,7 +219,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/03-cv-engine"
       type: sub-epic
-      lifecycle: planning
+      lifecycle: in_progress
       owner: fullstack
       parent: "00-project-room/04-career-system"
       children:
@@ -230,7 +230,7 @@ tree:
         - "00-project-room/04-career-system/03-cv-engine/05-tailor-engine"
     - id: "00-project-room/04-career-system/03-cv-engine/01-resume-index"
       type: feature
-      lifecycle: planning
+      lifecycle: in_progress
       owner: fullstack
       parent: "00-project-room/04-career-system/03-cv-engine"
       children: []
