@@ -1,7 +1,7 @@
 ---
 name: room
 description: >
-  Manage Nomi Feature Rooms through natural language — create, query, update, delete, move rooms and manage spec states. Use whenever the user wants to interact with Room structure: "给xx加一个room", "xx现在什么状态", "记录一个决策", "把xx标记为in-dev", "review draft specs", "加一条约束", or any CRUD operation on Feature Rooms and their specs. Also triggers on "room" mentions in the context of Nomi project management.
+  Manage Feature Rooms through natural language — create, query, update, delete, move rooms and manage spec states. Use whenever the user wants to interact with Room structure: "给xx加一个room", "xx现在什么状态", "记录一个决策", "把xx标记为in-dev", "review draft specs", "加一条约束", or any CRUD operation on Feature Rooms and their specs. Also triggers on "room" mentions in project management context.
 ---
 
 # Room — Feature Room 增删查改 + Spec 状态管理

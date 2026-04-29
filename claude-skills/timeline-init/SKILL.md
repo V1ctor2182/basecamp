@@ -1,7 +1,7 @@
 ---
 name: timeline-init
 description: >
-  Generate development timeline and milestones for the Nomi project after room-init. Creates timeline.yaml (project-level schedule with dependencies) and progress.yaml for each Room (milestones inferred from intent specs). Use when the user says "生成时间线", "排期", "timeline", "帮我排时间", or after room-init to set up progress tracking. Also use when new Rooms are added and timeline needs updating.
+  Generate development timeline and milestones for a Feature Room project after room-init. Creates timeline.yaml (project-level schedule with dependencies) and progress.yaml for each Room (milestones inferred from intent specs). Use when the user says "生成时间线", "排期", "timeline", "帮我排时间", or after room-init to set up progress tracking. Also use when new Rooms are added and timeline needs updating.
 ---
 
 # Timeline Init — 生成开发排期 + Milestones

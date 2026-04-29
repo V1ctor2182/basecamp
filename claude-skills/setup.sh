@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Nomi dev workflow skills — link into Claude Code
+# Feature Room skills — link into Claude Code
 # Run once after cloning:  bash claude-skills/setup.sh
 set -e
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-echo "Setting up Nomi dev skills..."
+echo "Setting up Feature Room skills..."
 
 mkdir -p .claude
 

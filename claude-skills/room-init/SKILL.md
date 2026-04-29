@@ -1,7 +1,7 @@
 ---
 name: room-init
 description: >
-  Initialize the Nomi project's Feature Room tree from a PRD document. Creates the complete meta/ directory structure with Room directories, initial intent and constraint specs, _tree.yaml, and project.yaml. Use this skill when starting a new Nomi project, when the user says "初始化项目", "init rooms", "从PRD创建Room", or when setting up the VibeHub Feature Room structure for the first time. Also use when a PRD is updated and new modules need to be added to the existing Room tree.
+  Initialize a project's Feature Room tree from a PRD document. Creates the complete meta/ directory structure with Room directories, initial intent and constraint specs, _tree.yaml, and project.yaml. Use this skill when starting a new project, when the user says "初始化项目", "init rooms", "从PRD创建Room", or when setting up the Feature Room structure for the first time. Also use when a PRD is updated and new modules need to be added to the existing Room tree.
 ---
 
 # Room Init — 从 PRD 冷启动 Feature Room 树

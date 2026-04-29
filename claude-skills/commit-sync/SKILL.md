@@ -1,7 +1,7 @@
 ---
 name: commit-sync
 description: >
-  The core development skill — replaces git commit/push entirely. Analyzes code changes, maps them to Feature Rooms, checks spec consistency (anchor tracking + quality gate), auto-updates specs, detects draft-to-active upgrades, records change specs, updates progress/milestones, propagates status upstream, generates commit messages, and executes git add/commit/push. Use whenever the user says "帮我提交", "commit", "提交代码", "push", "检查代码改动", "dry-run", or wants to commit their work. This is the ONLY way to commit in the Nomi workflow — users should never git commit manually.
+  The core development skill — replaces git commit/push entirely. Analyzes code changes, maps them to Feature Rooms, checks spec consistency (anchor tracking + quality gate), auto-updates specs, detects draft-to-active upgrades, records change specs, updates progress/milestones, propagates status upstream, generates commit messages, and executes git add/commit/push. Use whenever the user says "帮我提交", "commit", "提交代码", "push", "检查代码改动", "dry-run", or wants to commit their work. This is the ONLY way to commit in the Feature Room workflow — users should never git commit manually.
 ---
 
 # Commit Sync — 检查 + Spec 更新 + 进度追踪 + 自动 Commit/Push
