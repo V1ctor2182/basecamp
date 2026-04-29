@@ -123,7 +123,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit 638c8ab"
 relations:
   - "implements intent-resume-index-001 (m3/3, ROOM COMPLETE)"
   - "depends_on change-2026-04-29-m2-resume-gallery-ui"

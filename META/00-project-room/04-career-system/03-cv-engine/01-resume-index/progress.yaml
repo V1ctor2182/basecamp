@@ -273,7 +273,7 @@ milestones:
     depends_on: ["m2-resume-gallery-ui"]
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "638c8ab"
     description: |
       Click card → expand drawer in-place (不开 modal); 编辑 metadata.yml
       所有字段 + Duplicate action。
@@ -374,7 +374,7 @@ commits:
       - "change-2026-04-29-m2-resume-gallery-ui (created)"
     milestones_affected:
       - "m2-resume-gallery-ui (→ completed)"
-  - hash: "TBD"
+  - hash: "638c8ab"
     date: "2026-04-29"
     message: "[04-career-system/03-cv-engine/01-resume-index] m3: Card expand drawer + metadata editor + Duplicate (ROOM COMPLETE)"
     files_changed: 6
