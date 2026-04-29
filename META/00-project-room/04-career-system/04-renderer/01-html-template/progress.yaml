@@ -110,14 +110,18 @@ milestones:
 
   - id: "m2-cv-template-render"
     name: "CV HTML/CSS 模板 + identity 头部组合 + render-pdf endpoint (ROOM COMPLETE)"
-    status: pending
+    status: completed
+    actual_lines: 231
+    actual_files:
+      - "src/career/lib/cvTemplate.mjs"
+      - "server.mjs"
     estimated_files:
       - "src/career/lib/cvTemplate.mjs"
       - "server.mjs"
     estimated_lines: 280
     depends_on: ["m1-playwright-html-to-pdf"]
     complexity_flags:
-      - "design_decisions"  # CSS 排版细节多 (字号 / 间距 / page break)
+      - "design_decisions"
     open_questions: []
     commit_hash: null
     description: |
@@ -225,9 +229,19 @@ commits:
       - "change-2026-04-28-m1-playwright-html-to-pdf (created)"
     milestones_affected:
       - "m1-playwright-html-to-pdf (→ completed)"
+  - hash: "TBD"
+    date: "2026-04-28"
+    message: "[04-career-system/04-renderer/01-html-template] m2: CV template + identity header + /api/career/render/pdf endpoint (ROOM COMPLETE = 04-renderer sub-epic done)"
+    files_changed: 6
+    specs_affected:
+      - "change-2026-04-28-m2-cv-template-render (created)"
+      - "room.yaml (lifecycle: in_progress → active)"
+      - "_tree.yaml (lifecycle: in_progress → active)"
+    milestones_affected:
+      - "m2-cv-template-render (→ completed, ROOM COMPLETE, 04-renderer sub-epic done)"
 
 current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-completion: 50
-status_note: "m1 ✅ Playwright + htmlToPdf() 跑通 (122 行, 6/6 smoke ✓). 下一步 m2 CV 模板 + render-pdf endpoint = ROOM COMPLETE。"
+completion: 100
+status_note: "🎉 ROOM 完成 (2/2 milestones, 353 行 net) + 🎉 04-renderer sub-epic DONE (2 ROOMs ✅). 真实 CV PDF 生成跑通。下一个 Sprint 3 子任务: 03-cv-engine。"
 last_updated: "2026-04-28"

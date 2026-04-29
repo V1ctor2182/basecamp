@@ -3,7 +3,7 @@ room:
   name: "HTML Template Renderer"
   parent: "00-project-room/04-career-system/04-renderer"
   type: feature
-  lifecycle: in_progress
+  lifecycle: active
   created_at: "2026-04-22"
   updated_at: "2026-04-28"
   owner: fullstack

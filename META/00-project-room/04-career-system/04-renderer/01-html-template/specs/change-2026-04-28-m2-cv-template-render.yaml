@@ -1,0 +1,137 @@
+spec_id: "change-2026-04-28-m2-cv-template-render"
+type: change
+state: active
+intent:
+  summary: "m2: CV HTML/CSS template + identity-driven header + composeCvHtml() + POST /api/career/render/pdf endpoint (ROOM COMPLETE)"
+  detail: |
+    Wire the renderer pipeline end-to-end: resume markdown →
+    markdownToTemplateHtml() → composeCvHtml() (with identity.yml header) →
+    htmlToPdf() → application/pdf stream. Single-column ATS-friendly CSS
+    template, system-ui sans-serif, configurable accent color.
+
+    Files created:
+      - src/career/lib/cvTemplate.mjs (194 lines):
+        - composeCvHtml({ identity, body_html, options }) → full <!DOCTYPE html>...
+          (template literal, no JSX/template engine)
+        - buildHeader(identity, accentColor) — flex justify-between:
+          left = name (h1 22pt) + city/country (10pt gray)
+          right = contacts (email · phone · LinkedIn · GitHub · Portfolio)
+                  empty fields skipped silently
+        - escapeHtml() — &/</> /"/' (defensive XSS guard for header text;
+          identity.yml is user-authored 但 cheap to escape)
+        - buildContacts() — non-empty filter; mailto: for email; bare text for phone
+        - buildLocation() — joins city, country (handles either missing)
+        - buildCss(accentColor) — ~120 lines inline CSS:
+          - @page { size: Letter; margin: 0.5in } — Playwright margin overrides
+          - body { font: 11pt/1.5 system-ui ...; color: #1a1a1a;
+                   -webkit-print-color-adjust: exact }
+          - header { flex justify-between; border-bottom: 2pt accent }
+          - h1 (header name) { 22pt 600 weight }
+          - main h2 { 13pt accent color; border-bottom #d0d7de;
+                     page-break-after: avoid; break-after: avoid }
+          - main h3 / h4 / p / ul / li / strong / em / a / code / hr
+          - main a { color: accent; no underline }
+          - main code { ui-monospace 10pt; #f4f4f4 background }
+          - default accent = '#0969da' (project blue), configurable
+
+      - META change spec (this file)
+
+    Files modified:
+      - server.mjs (+37 lines):
+        - import { composeCvHtml } from cvTemplate.mjs
+        - POST /api/career/render/pdf:
+          - body: { resume_markdown, options? }
+          - typeof check resume_markdown
+          - length cap 500_000 (256KB express cap on /api/career/* is real cap;
+            500KB defensive)
+          - readIdentity() (复用 m1-identity reader, 不存在返 null then ?? {})
+          - body_html = markdownToTemplateHtml(md) (复用 02-markdown-to-template)
+          - html = composeCvHtml({ identity, body_html, options })
+          - pdf = await htmlToPdf(html, { format, margin })
+          - Content-Type: application/pdf
+          - Content-Disposition: inline; filename="resume.pdf" — 让前端 iframe
+            src=POST 直接预览 (browser inline-render)
+          - 503 + msg on browser/render failure
+        - 留着 m1 _test-html-to-pdf endpoint 作为 dev tool (低层 debug)
+
+    Verification (smoke test, 7/7 passed):
+      1. POST {"resume_markdown":"## Experience\n### Acme — SDE\n- Built X..."}
+         → application/pdf magic %PDF v1.4 1 page, size 69KB ✓
+      2. PUT identity (name/email/phone/links/location 完整) → POST render
+         → 77KB PDF (header populated + bigger because contacts row 渲染) ✓
+      3. options.accent_color = '#cf222e' → 72KB PDF (border + h2 + a 全红) ✓
+      4. body 含 <script>alert(1)</script> → markdown-to-template drop, PDF
+         里没有 script 渲染产物，size 减小 (62KB vs 69KB) ✓
+      5. POST {"resume_markdown":42} → 400 'must be a string' ✓
+      6. 3 concurrent POST → 都 200 + 各 49KB PDF (browser 复用) ✓
+      7. 600KB body → 413 PayloadTooLargeError (256KB express cap on
+         /api/career/*) ✓
+      Server lifecycle: SIGINT → "shutting down chromium..." → server +
+         chromium 子进程都退出 (no zombie) ✓ (m1 已验证, m2 依然)
+
+    Locked design (long-term-best, plan-milestones):
+      - 系统字体 system-ui (no Google Fonts) — Playwright headless 不依赖外部
+        CDN, 离线可用
+      - 单列布局 — ATS parser 友好; 双列易被错切 reading order
+      - 11pt body / 22pt name / 13pt h2 — ~600 词每页 Letter, 合适密度
+      - inline <style> — 不靠外部 fetch, networkidle 等待最快
+      - accent_color 可配但默认 #0969da — 后续按公司风格切
+      - escape header 文本 — 防 identity 含 < > 之类
+      - h2 page-break-after: avoid + break-after: avoid (旧/新属性都写) —
+        section title 不和后续内容分页
+      - -webkit-print-color-adjust: exact + print-color-adjust: exact —
+        accent border 颜色不被浏览器 print-optimization 去掉
+      - Content-Disposition: inline — 让 iframe src= 直接 preview, 不强制下载
+      - 不写 /api/career/render/pdf 到 disk — caller 决定保存; 03-cv-engine 后续
+        要存可以自己 fetch + write
+
+    ROOM COMPLETE work (single-room):
+      - room.yaml lifecycle: in_progress → active
+      - _tree.yaml 同步
+      - spec.md 重写为 ROOM 完成总结
+      - 04-renderer sub-epic: 75% → 100% (2/2 features active) → sub-epic
+        lifecycle: in_progress → active
+      - 04-career-system: 34% → 38%
+
+    下游影响:
+      - 03-cv-engine/03-in-ui-editor: 编辑器右侧 iframe src 指向
+        /api/career/render/pdf POST (debounced re-render on edit)
+      - 03-cv-engine/05-tailor-engine: tailor 完成后 fetch render-pdf 给用户预览
+      - 07-applier: 上传 PDF 到 ATS portal 时直接读这个 endpoint
+      - 04-renderer/03-renderer-pluggable (deferred per plan) 一旦做就把这
+        实现注册成 default renderer
+
+    Sprint 3 进度:
+      - 04-renderer ✅ 100% (2 ROOMs done)
+      - 03-cv-engine 还没起头 (5 features, 后续 plan-milestones)
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m2, backend, pdf, html-template, css, room-complete]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit TBD"
+relations:
+  - "implements intent-html-template-001 (m2/2, ROOM COMPLETE)"
+  - "depends_on change-2026-04-28-m1-playwright-html-to-pdf"
+  - "consumes markdownToTemplateHtml (from 04-renderer/02-markdown-to-template)"
+  - "consumes readIdentity (from 02-profile/01-identity m1)"
+  - "completes 04-renderer sub-epic (2 ROOMs done)"
+anchors:
+  - file: "src/career/lib/cvTemplate.mjs"
+    symbols:
+      - "composeCvHtml"
+      - "buildHeader"
+      - "buildContacts"
+      - "buildLocation"
+      - "buildCss"
+      - "escapeHtml"
+  - file: "server.mjs"
+    symbols:
+      - "POST /api/career/render/pdf"
+created_at: "2026-04-28"
+updated_at: "2026-04-28"
