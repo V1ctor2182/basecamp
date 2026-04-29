@@ -14,14 +14,14 @@ source: manual 简历的 CodeMirror 编辑器 + 实时 PDF 预览 + versions 快
 
 ## Milestones (planned 2026-04-29)
 
-**3 milestones 规划完成**（~610 lines 估算，1/3 完成，all defaults 长期最优锁定）:
+**3 milestones 规划完成**（~610 lines 估算，2/3 完成，all defaults 长期最优锁定）:
 
 - ✅ **m1-content-versions-render-backend** (`7022263`, 185 lines 实际, server.mjs) — 4 endpoints:
   - `GET /api/career/resumes/:id/content` → `{ content, versions: [...] }`
   - `PUT /api/career/resumes/:id/content` (pre-write snapshot to `versions/${ISO}.md` + atomic write + FIFO cap 50)
   - `GET /api/career/resumes/:id/versions/:filename` → `{ content, ts, size }`
   - `GET /api/career/resumes/:id/render` (reads base.md + identity + metadata.renderer → composeCvHtml → htmlToPdf → stream `application/pdf`)
-- **m2-resume-edit-page** (~280 lines) — full-page route `/career/settings/resumes/:id/edit`:
+- ✅ **m2-resume-edit-page** (TBD, 335 lines 实际) — full-page route `/career/settings/resumes/:id/edit`:
   - `Edit.tsx` + `edit.css`: CodeMirror left, iframe PDF preview right (split-pane); Save bar; beforeunload guard
   - Drawer "Edit content" link (m3-resume-index drawer 加 button)
   - Route placement: NOT under SettingsLayout (full-screen, no sidebar)
@@ -50,6 +50,7 @@ source: manual 简历的 CodeMirror 编辑器 + 实时 PDF 预览 + versions 快
 
 - [intent-in-ui-editor-001](specs/intent-in-ui-editor-001.yaml) — source: manual 简历的 CodeMirror 编辑器 + 实时 PDF 预览 + versions 快照
 - [change-2026-04-29-m1-content-versions-render-backend](specs/change-2026-04-29-m1-content-versions-render-backend.yaml) — m1 backend: content / versions / render endpoints
+- [change-2026-04-29-m2-resume-edit-page](specs/change-2026-04-29-m2-resume-edit-page.yaml) — m2 full-page edit route + CodeMirror + iframe PDF + Drawer link
 
 ---
 

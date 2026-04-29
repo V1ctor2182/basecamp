@@ -94,7 +94,13 @@ milestones:
 
   - id: "m2-resume-edit-page"
     name: "Edit page route + CodeMirror + iframe PDF preview + Save + Drawer link"
-    status: pending
+    status: completed
+    actual_lines: 335
+    actual_files:
+      - "src/career/settings/resumes/Edit.tsx"
+      - "src/career/settings/resumes/edit.css"
+      - "src/CareerApp.tsx"
+      - "src/career/settings/Resumes.tsx"
     estimated_files:
       - "src/career/settings/resumes/Edit.tsx"
       - "src/career/settings/resumes/edit.css"
@@ -266,9 +272,17 @@ commits:
       - "change-2026-04-29-m1-content-versions-render-backend (created)"
     milestones_affected:
       - "m1-content-versions-render-backend (→ completed)"
+  - hash: "TBD"
+    date: "2026-04-29"
+    message: "[04-career-system/03-cv-engine/03-in-ui-editor] m2: Full-page resume edit route — CodeMirror + iframe PDF + Save + Drawer link"
+    files_changed: 5
+    specs_affected:
+      - "change-2026-04-29-m2-resume-edit-page (created)"
+    milestones_affected:
+      - "m2-resume-edit-page (→ completed)"
 
 current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-completion: 33
-status_note: "m1 ✅ backend (185 行, 10/10 smoke ✓). 下一步 m2 Edit page (CodeMirror + iframe PDF) — 视觉里程碑."
+completion: 66
+status_note: "🎯 Sprint 3 视觉里程碑达成. m1+m2 ✅ (markdown ↔ PDF 实时编辑流跑通). 下一步 m3 Versions UI = ROOM COMPLETE."
 last_updated: "2026-04-29"

@@ -1,12 +1,12 @@
 milestones: []
 current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-completion: 27  # avg(100, 0, 33, 0, 0) = 26.6 across 5 features
+completion: 33  # avg(100, 0, 66, 0, 0) = 33.2 across 5 features
 children_completion:
   "01-resume-index": 100     # ✅ active
   "02-google-docs-sync": 0
-  "03-in-ui-editor": 33      # 🔄 m1 backend ✅, m2/m3 pending
+  "03-in-ui-editor": 66      # 🔄 m1 backend + m2 Edit page ✅, m3 versions UI 待开
   "04-auto-select": 0
   "05-tailor-engine": 0
-status_note: "01-resume-index ✅. 03-in-ui-editor m1 ✅ backend (4 endpoints + versions FIFO 50 + render PDF). 下一步 m2 Edit page UI."
+status_note: "🎯 Sprint 3 视觉里程碑达成. 01-resume-index ✅, 03-in-ui-editor m1+m2 ✅ (端到端 markdown ↔ PDF 实时编辑流跑通). 下一步 m3 Versions UI = ROOM COMPLETE."
 last_updated: "2026-04-29"

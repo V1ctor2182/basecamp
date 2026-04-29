@@ -1,0 +1,149 @@
+spec_id: "change-2026-04-29-m2-resume-edit-page"
+type: change
+state: active
+intent:
+  summary: "m2: Full-page resume edit route — CodeMirror left + iframe PDF preview right + Save bar + Drawer link"
+  detail: |
+    Sprint 3 视觉里程碑达成. /career/settings/resumes/:id/edit 是 markdown ↔
+    PDF 实时编辑流的入口. iframe 简单 GET /api/career/resumes/:id/render 拿
+    PDF, save 后 ?v=Date.now() 刷新 — 不引入 client blob URL state.
+
+    Files created:
+      - src/career/settings/resumes/Edit.tsx (165 lines):
+        · useParams<{id}>() 拿 resume id
+        · state: content / loaded / dirty / saving / savedAt / serverError /
+          pdfRefreshKey (number, bumped on save)
+        · useEffect(id) GET /:id/content with cancel guard;
+          404 → setServerError "not found"
+        · beforeunload 拦截 (dirty 时)
+        · save() PUT /:id/content; on success setDirty(false) + setSavedAt +
+          setPdfRefreshKey(Date.now())
+        · Layout:
+          - .c-resume-edit-toolbar:
+            ← Back to Resumes (Link to /career/settings/resumes) +
+            mono title (current id) +
+            status text (Ready/Saving/Unsaved/✓ Saved at HH:MM) +
+            Save button (disabled !dirty || saving)
+          - .c-resume-edit-error: dismissable banner if server returned error
+          - .c-resume-edit-split (grid 1fr 1fr):
+            · .c-resume-edit-pane-editor: CodeMirror with markdown extension,
+              line numbers / foldGutter / highlightActiveLine
+            · .c-resume-edit-pane-preview:
+              header with "PDF preview" label + Refresh button (forces
+              setPdfRefreshKey(Date.now()) — for 用户在另 tab 改 identity /
+              metadata 后手动 refresh)
+              <iframe key={pdfRefreshKey} src=`.../render?v=${pdfRefreshKey}`>
+              key= 改变 → React 重建 iframe → 完全重新 fetch (避免某些浏览器
+              缓存 src= 不变就不重 fetch 的边角情况)
+        · 复用 ats-form.css .af-btn-primary / .af-btn-add / .c-resumes-modal-error
+
+      - src/career/settings/resumes/edit.css (149 lines):
+        · .c-resume-edit-page (flex column, height 100vh — full viewport)
+        · .c-resume-edit-toolbar (flex row, sticky-feel via flex-shrink:0,
+          padding 14px, border-bottom)
+        · .c-resume-edit-back (Link styled as quiet ghost button with hover bg)
+        · .c-resume-edit-title (mono 14pt 600 weight)
+        · .c-resume-edit-status / .dirty (黄) / .saved (绿)
+        · .c-resume-edit-split (grid 1fr 1fr, flex:1, gap 12)
+        · .c-resume-edit-pane-editor (border + cm-editor h:100%)
+        · .c-resume-edit-pane-preview (border + flex column)
+        · .c-resume-edit-pane-preview-header (label + Refresh button)
+        · .c-resume-edit-iframe (flex:1, border:0, white bg)
+        · @media (max-width 900px) → grid-template-columns:1fr 单列堆叠
+
+    Files modified:
+      - src/CareerApp.tsx:
+        · + import ResumeEdit
+        · + <Route path="settings/resumes/:id/edit" element={<ResumeEdit />} />
+          (placed OUTSIDE <Route path="settings"> SettingsLayout 嵌套, 因为
+           编辑器要全屏宽度, 不需要 settings sidebar)
+      - src/career/settings/Resumes.tsx (+19 lines):
+        · + import { Link } from 'react-router-dom'
+        · + import { Pencil } from 'lucide-react'
+        · MetadataDrawer 顶部 (close button 旁) 加 "Edit content" Link:
+          to=`/career/settings/resumes/${resumeId}/edit`
+          复用 .af-btn-add 样式 + 内联 small-button overrides
+
+    Verification (smoke E2E):
+      - tsc --noEmit ✓ (0 in-project errors)
+      - vite build ✓ (6.19s)
+      - HTTP E2E 流程 (用 curl 模拟 UI 行为):
+        · POST resume id=e2e source=manual → 201 ✓
+        · GET /e2e/content → content 289 chars (DEFAULT_BASE_MD), versions: [] ✓
+        · PUT /e2e/content { content: "## My experience\n..." } →
+          snapshot returned (ISO 8601 with `:`→`-`) ✓
+        · GET /e2e/render?v=${ts} → application/pdf %PDF v1.4, 69KB ✓
+          (iframe src= 直接命中此 endpoint)
+        · GET /e2e/content roundtrip → content 第一行 "## My experience",
+          versions:1 (旧 skeleton 已快照) ✓
+      - 待手工 UI smoke (留给用户验证):
+        · /career/settings/resumes → click 卡片 → drawer 弹出 → Pencil "Edit
+          content" 跳到 /:id/edit
+        · 全屏 split-pane: 左 CodeMirror 加载 base.md 内容
+        · 改字 → "Unsaved changes" 黄字 + Save 按钮亮
+        · Save → "✓ Saved at HH:MM" 绿字 + 右 iframe 自动 reload (新 PDF)
+        · 关闭 tab (dirty) → beforeunload 拦截
+        · ← Back to Resumes 跳回 gallery
+        · Refresh PDF 按钮: 强制重 render (用于 identity / metadata 改后
+          editor 页 manual refresh)
+
+    Locked design (long-term-best, plan-milestones):
+      - Full-page route OUTSIDE SettingsLayout: 编辑需要全屏宽度
+      - iframe ?v=ts cache bust + key=ts force-rebuild: 服务端读 disk 是
+        ground truth, ts 改了 → 浏览器视为新 URL → re-fetch + 重建 iframe
+      - explicit Save button (no autosave): 简单 + 可预测; 防 race
+      - PDF render endpoint 是 GET /:id/render (m1 已建): iframe src= 一行,
+        不需要 client blob URL 管理
+      - Drawer Link 不破坏 m3-resume-index UX: 仍可在 drawer 编辑 metadata,
+        Click "Edit content" 才进 full-page 编辑器
+      - Refresh button 不 auto-poll identity / metadata 变化: 后台 polling
+        浪费; 用户改了知道, 手动点
+      - encodeURIComponent(id) for iframe src: 防 :id 含 reserved URL chars
+        (虽 slug regex 已 saf, defensive)
+      - useEffect cancel guard: 防 stale resume id 切换时 race condition
+
+    下游影响:
+      - m3 加 Versions dropdown (toolbar 加 button + popover panel)
+      - 03-cv-engine/04-auto-select 选 base 后可 navigate 到 /:id/edit 让
+        用户 review (本 m2 路由就位)
+      - 03-cv-engine/05-tailor-engine 完成 tailor 后产出 markdown, 可创建
+        临时 resume + navigate 到 /:tailoredId/edit 给用户审阅 (本 m2 提供
+        基础设施)
+
+    🎯 Sprint 3 视觉里程碑: markdown ↔ PDF 实时编辑流跑通. 现在能 demo:
+      - Settings → Resumes (Gallery) → Add → Edit content → 改 markdown +
+        Save → 右侧 PDF 立即更新.
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m2, frontend, react, codemirror, iframe-pdf, full-page-route]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit TBD"
+relations:
+  - "implements intent-in-ui-editor-001 (m2/3)"
+  - "depends_on change-2026-04-29-m1-content-versions-render-backend"
+  - "depends_on change-2026-04-29-m3-resume-metadata-editor (drawer location for Edit content link)"
+  - "depends_on change-2026-04-28-m2-cv-template-render (iframe consumes /api/career/resumes/:id/render which uses composeCvHtml)"
+  - "achieves Sprint 3 visual milestone (markdown ↔ PDF live editing demo-ready)"
+anchors:
+  - file: "src/career/settings/resumes/Edit.tsx"
+    symbols: ["default", "ResumeEdit"]
+  - file: "src/career/settings/resumes/edit.css"
+    symbols:
+      - ".c-resume-edit-page"
+      - ".c-resume-edit-toolbar"
+      - ".c-resume-edit-split"
+      - ".c-resume-edit-pane-editor"
+      - ".c-resume-edit-pane-preview"
+      - ".c-resume-edit-iframe"
+  - file: "src/CareerApp.tsx"
+    symbols: ["ResumeEdit"]
+  - file: "src/career/settings/Resumes.tsx"
+    symbols: ["MetadataDrawer (Edit content Link added)"]
+created_at: "2026-04-29"
+updated_at: "2026-04-29"
