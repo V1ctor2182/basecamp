@@ -218,7 +218,7 @@ milestones:
     depends_on: ["m2-resume-edit-page"]
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "e62eec3"
     description: |
       Edit page toolbar 加 Versions dropdown — list of snapshots,
       点 entry → 替换编辑器 content (sets dirty), 用户确认后 Save 创建新
@@ -284,7 +284,7 @@ commits:
       - "change-2026-04-29-m2-resume-edit-page (created)"
     milestones_affected:
       - "m2-resume-edit-page (→ completed)"
-  - hash: "TBD"
+  - hash: "e62eec3"
     date: "2026-04-29"
     message: "[04-career-system/03-cv-engine/03-in-ui-editor] m3: Versions popover + Restore (load → review → Save) (ROOM COMPLETE)"
     files_changed: 6

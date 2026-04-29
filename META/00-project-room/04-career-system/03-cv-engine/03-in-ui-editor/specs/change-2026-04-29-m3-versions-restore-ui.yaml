@@ -121,7 +121,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit e62eec3"
 relations:
   - "implements intent-in-ui-editor-001 (m3/3, ROOM COMPLETE)"
   - "depends_on change-2026-04-29-m2-resume-edit-page"
