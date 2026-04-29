@@ -206,7 +206,11 @@ milestones:
 
   - id: "m3-versions-restore-ui"
     name: "Versions sidebar + Restore action (ROOM COMPLETE)"
-    status: pending
+    status: completed
+    actual_lines: 215
+    actual_files:
+      - "src/career/settings/resumes/Edit.tsx"
+      - "src/career/settings/resumes/edit.css"
     estimated_files:
       - "src/career/settings/resumes/Edit.tsx"
       - "src/career/settings/resumes/edit.css"
@@ -280,9 +284,19 @@ commits:
       - "change-2026-04-29-m2-resume-edit-page (created)"
     milestones_affected:
       - "m2-resume-edit-page (→ completed)"
+  - hash: "TBD"
+    date: "2026-04-29"
+    message: "[04-career-system/03-cv-engine/03-in-ui-editor] m3: Versions popover + Restore (load → review → Save) (ROOM COMPLETE)"
+    files_changed: 6
+    specs_affected:
+      - "change-2026-04-29-m3-versions-restore-ui (created)"
+      - "room.yaml (lifecycle: in_progress → active)"
+      - "_tree.yaml (lifecycle: in_progress → active)"
+    milestones_affected:
+      - "m3-versions-restore-ui (→ completed, ROOM COMPLETE)"
 
 current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-completion: 66
-status_note: "🎯 Sprint 3 视觉里程碑达成. m1+m2 ✅ (markdown ↔ PDF 实时编辑流跑通). 下一步 m3 Versions UI = ROOM COMPLETE."
+completion: 100
+status_note: "🎉 ROOM 03-in-ui-editor COMPLETE (3/3, 735 行 net). Sprint 3 视觉里程碑达成 + versions safety net. 下一个: 04-auto-select / 02-google-docs-sync / 05-tailor-engine."
 last_updated: "2026-04-29"

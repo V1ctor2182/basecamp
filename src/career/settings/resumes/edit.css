@@ -147,3 +147,100 @@
     min-height: 320px;
   }
 }
+
+/* ─── Versions popover (m3) ─── */
+.c-resume-versions-anchor {
+  position: relative;
+}
+
+.c-resume-versions-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1a1a1a;
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.c-resume-versions-button:hover {
+  background: #f6f8fa;
+  border-color: #8c959f;
+}
+
+.c-resume-versions-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  width: 320px;
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.c-resume-versions-header {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  background: #fafbfc;
+  border-bottom: 1px solid #eaeaea;
+}
+
+.c-resume-versions-list {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.c-resume-versions-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.c-resume-versions-row:hover {
+  background: #f6f8fa;
+}
+
+.c-resume-versions-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.c-resume-versions-ts {
+  font-size: 13px;
+  color: #1a1a1a;
+  font-variant-numeric: tabular-nums;
+}
+
+.c-resume-versions-size {
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.c-resume-versions-empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: #888;
+  line-height: 1.5;
+}
