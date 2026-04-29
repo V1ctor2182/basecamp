@@ -1,24 +1,28 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# Nomi dev workflow skills — link into Claude Code
+# Run once after cloning:  bash claude-skills/setup.sh
+set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_DIR="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
 
-mkdir -p "$TARGET_DIR"
+echo "Setting up Nomi dev skills..."
 
-echo "Installing Nomi dev skills → $TARGET_DIR"
+mkdir -p .claude
 
-for skill_dir in "$SCRIPT_DIR"/*/; do
-  skill_name="$(basename "$skill_dir")"
-  [ -f "$skill_dir/SKILL.md" ] || continue
+if [ -L .claude/skills ]; then
+  echo "✓ .claude/skills symlink already exists"
+elif [ -d .claude/skills ]; then
+  echo "⚠ .claude/skills is a real directory, replacing with symlink..."
+  rm -rf .claude/skills
+  ln -s ../claude-skills .claude/skills
+  echo "✓ .claude/skills → claude-skills"
+else
+  ln -s ../claude-skills .claude/skills
+  echo "✓ .claude/skills → claude-skills"
+fi
 
-  dest="$TARGET_DIR/$skill_name"
-  if [ -e "$dest" ] || [ -L "$dest" ]; then
-    rm -rf "$dest"
-  fi
-  cp -R "$skill_dir" "$dest"
-  echo "  ✓ $skill_name"
-done
-
-echo
-echo "Done. Restart Claude Code to pick up the new skills."
+echo ""
+echo "Done! Restart Claude Code to pick up the skills."
+echo "Available: room-init · room · timeline-init · plan-milestones ·"
+echo "           prompt-gen · dev · commit-sync · room-status · random-contexts"
