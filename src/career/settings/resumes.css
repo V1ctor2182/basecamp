@@ -301,3 +301,83 @@
   border-radius: 6px;
   line-height: 1.5;
 }
+
+/* ─── Card expanded drawer (m3) ─── */
+.c-resume-card-expanded {
+  grid-column: 1 / -1;
+  background: #fafbfc;
+  border-color: #0969da;
+  cursor: default;
+}
+
+.c-resume-card-expanded:hover {
+  border-color: #0969da;
+  box-shadow: 0 2px 8px rgba(9, 105, 218, 0.12);
+}
+
+.c-resume-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid #d0d7de;
+}
+
+.c-resume-drawer .af-section {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eaeaea;
+}
+
+.c-resume-drawer .af-section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+/* Color picker — hex text + native color input side-by-side */
+.c-resume-color-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.c-resume-color-row input[type='color'] {
+  width: 40px;
+  height: 38px;
+  padding: 2px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #fff;
+}
+
+.c-resume-color-row input[type='text'] {
+  flex: 1;
+  max-width: 140px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Drawer save bar — sticky inside the drawer body */
+.c-resume-drawer-savebar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #eaeaea;
+}
+
+.c-resume-drawer-status {
+  font-size: 13px;
+  color: #666;
+}
+
+.c-resume-drawer-status.dirty {
+  color: #9a6700;
+}
+
+.c-resume-drawer-status.saved {
+  color: #1a7f37;
+}

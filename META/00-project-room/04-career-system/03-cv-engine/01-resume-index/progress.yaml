@@ -260,11 +260,15 @@ milestones:
 
   - id: "m3-resume-metadata-editor"
     name: "Card 展开 metadata drawer + Match Rules + Emphasize + Renderer config + Duplicate (ROOM COMPLETE)"
-    status: pending
+    status: completed
+    actual_lines: 422
+    actual_files:
+      - "src/career/settings/Resumes.tsx"
+      - "src/career/settings/resumes.css"
+      - "server.mjs"
     estimated_files:
       - "src/career/settings/Resumes.tsx"
       - "src/career/settings/resumes.css"
-      - "src/career/lib/slugify.ts"  # 可能抽
     estimated_lines: 280
     depends_on: ["m2-resume-gallery-ui"]
     complexity_flags: []
@@ -370,9 +374,19 @@ commits:
       - "change-2026-04-29-m2-resume-gallery-ui (created)"
     milestones_affected:
       - "m2-resume-gallery-ui (→ completed)"
+  - hash: "TBD"
+    date: "2026-04-29"
+    message: "[04-career-system/03-cv-engine/01-resume-index] m3: Card expand drawer + metadata editor + Duplicate (ROOM COMPLETE)"
+    files_changed: 6
+    specs_affected:
+      - "change-2026-04-29-m3-resume-metadata-editor (created)"
+      - "room.yaml (lifecycle: in_progress → active)"
+      - "_tree.yaml (lifecycle: in_progress → active)"
+    milestones_affected:
+      - "m3-resume-metadata-editor (→ completed, ROOM COMPLETE)"
 
 current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-completion: 66
-status_note: "m1+m2 ✅ (backend + Gallery UI 跑通). 下一步 m3 = expand drawer + metadata edit + Duplicate = ROOM COMPLETE."
+completion: 100
+status_note: "🎉 ROOM 完成 (3/3 milestones, 1406 行 net). 第一个 03-cv-engine ROOM. 下一个: 02-google-docs-sync 或 03-in-ui-editor."
 last_updated: "2026-04-29"

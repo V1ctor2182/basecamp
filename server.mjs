@@ -2289,5 +2289,50 @@ app.put('/api/career/resumes/:id/metadata', async (req, res) => {
   }
 });
 
+// POST /:id/duplicate — atomic clone of metadata + fresh base.md skeleton.
+// Semantics: "start a new direction from this archetype" — copies match rules
+// / emphasize / renderer config but NOT base.md content. If the user wants
+// to clone the actual resume body, paste-import once 03-in-ui-editor lands.
+app.post('/api/career/resumes/:id/duplicate', async (req, res) => {
+  try {
+    const sourceId = req.params.id;
+    if (!validateResumeId(sourceId)) return res.status(400).json({ error: 'invalid source id' });
+
+    const newId = req.body?.new_id;
+    if (!validateResumeId(newId)) return res.status(400).json({ error: 'invalid new_id (slug only, max 40)' });
+    if (RESERVED_RESUME_IDS.has(newId)) return res.status(400).json({ error: `id "${newId}" is reserved` });
+
+    const idx = await readResumeIndex();
+    const source = idx.resumes.find(r => r.id === sourceId);
+    if (!source) return res.status(404).json({ error: 'source not found' });
+    if (idx.resumes.some(r => r.id === newId)) {
+      return res.status(409).json({ error: `id "${newId}" already in use` });
+    }
+
+    const sourceMetadata = await readResumeMetadata(sourceId);
+    const newDir = resolveResumeDir(newId);
+    await fs.mkdir(path.join(newDir, 'versions'), { recursive: true });
+    await writeResumeMetadata(newId, sourceMetadata);
+    await atomicWriteFile(path.join(newDir, 'base.md'), DEFAULT_BASE_MD);
+
+    const newTitle = (typeof req.body?.new_title === 'string' && req.body.new_title.trim())
+      ? req.body.new_title.trim().slice(0, 200)
+      : `${source.title} (copy)`;
+    const newEntry = {
+      id: newId,
+      title: newTitle,
+      description: source.description,
+      source: 'manual',  // duplicates are always manual; gdoc link is unique
+      is_default: false,
+      created_at: new Date().toISOString(),
+    };
+    await writeResumeIndex({ resumes: [...idx.resumes, newEntry] });
+    res.status(201).json(newEntry);
+  } catch (e) {
+    if (e.status === 400) return res.status(400).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const port = process.env.PORT || 8000;
 app.listen(port, () => console.log(`API server on :${port}`));

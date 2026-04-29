@@ -1,5 +1,7 @@
-import { useEffect, useState, FormEvent } from 'react'
+import { useEffect, useMemo, useState, FormEvent } from 'react'
 import { Plus, MoreVertical, Star, FileText, X } from 'lucide-react'
+import TagInput from '../TagInput'
+import { deepMerge } from '../utils'
 import './ats-form.css'
 import './resumes.css'
 
@@ -14,6 +16,31 @@ type ResumeEntry = {
   last_synced_at?: string
   is_default: boolean
   created_at: string
+}
+
+type ResumeMetadata = {
+  archetype?: string
+  match_rules: {
+    role_keywords: string[]
+    jd_keywords: string[]
+    negative_keywords: string[]
+  }
+  emphasize: {
+    projects: string[]
+    skills: string[]
+    narrative?: string
+  }
+  renderer: {
+    template: string
+    font?: string
+    accent_color: string
+  }
+}
+
+const BLANK_METADATA: ResumeMetadata = {
+  match_rules: { role_keywords: [], jd_keywords: [], negative_keywords: [] },
+  emphasize: { projects: [], skills: [] },
+  renderer: { template: 'default', accent_color: '#0969da' },
 }
 
 const ID_RE = /^[a-z0-9-]{1,40}$/
@@ -42,6 +69,7 @@ export default function Resumes() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<ResumeEntry | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   async function refresh() {
     try {
@@ -62,6 +90,35 @@ export default function Resumes() {
     setOpenMenuId(null)
     try {
       const r = await fetch(`/api/career/resumes/${id}/set-default`, { method: 'PATCH' })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(j.error || `HTTP ${r.status}`)
+        return
+      }
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error')
+    }
+  }
+
+  async function handleDuplicate(source: ResumeEntry) {
+    setOpenMenuId(null)
+    const existingIds = new Set(resumes.map(r => r.id))
+    let newId = window.prompt(
+      `New ID for the copy of "${source.title}":\n` +
+      `(slug only — a-z, 0-9, hyphens, max 40)`,
+      `${source.id}-copy`,
+    )
+    if (!newId) return
+    newId = newId.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
+    if (!ID_RE.test(newId)) { setError(`Invalid id "${newId}". Use a-z, 0-9, hyphens.`); return }
+    if (existingIds.has(newId)) { setError(`Id "${newId}" is already in use.`); return }
+    try {
+      const r = await fetch(`/api/career/resumes/${source.id}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_id: newId }),
+      })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
         setError(j.error || `HTTP ${r.status}`)
@@ -131,8 +188,8 @@ export default function Resumes() {
           {resumes.map(r => (
             <div
               key={r.id}
-              className="c-resume-card"
-              onClick={() => { /* m3 will expand drawer */ }}
+              className={`c-resume-card${expandedId === r.id ? ' c-resume-card-expanded' : ''}`}
+              onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
             >
               <div className="c-resume-actions" onClick={e => e.stopPropagation()}>
                 <button
@@ -149,6 +206,9 @@ export default function Resumes() {
                       disabled={r.is_default}
                     >
                       {r.is_default ? '★ Default' : 'Set as default'}
+                    </button>
+                    <button onClick={() => handleDuplicate(r)}>
+                      Duplicate…
                     </button>
                     <button
                       className="danger"
@@ -181,6 +241,15 @@ export default function Resumes() {
                 <span className="c-resume-id">{r.id}</span>
                 <span>{fmtDate(r.last_synced_at ?? r.created_at)}</span>
               </div>
+
+              {expandedId === r.id && (
+                <div onClick={e => e.stopPropagation()}>
+                  <MetadataDrawer
+                    resumeId={r.id}
+                    onClose={() => setExpandedId(null)}
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -350,6 +419,228 @@ function AddResumeDialog({
           </button>
         </div>
       </form>
+    </div>
+  )
+}
+
+function MetadataDrawer({
+  resumeId, onClose,
+}: {
+  resumeId: string
+  onClose: () => void
+}) {
+  const [meta, setMeta] = useState<ResumeMetadata>(BLANK_METADATA)
+  const [loaded, setLoaded] = useState(false)
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [savedAt, setSavedAt] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoaded(false)
+    setDirty(false)
+    setSavedAt(null)
+    setErr(null)
+    fetch(`/api/career/resumes/${resumeId}/metadata`)
+      .then(r => r.json())
+      .then(data => { setMeta(deepMerge(BLANK_METADATA, data)); setLoaded(true) })
+      .catch(e => { setErr(e instanceof Error ? e.message : 'Network error'); setLoaded(true) })
+  }, [resumeId])
+
+  useEffect(() => {
+    if (!dirty) return
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
+  }, [dirty])
+
+  function patch<K extends keyof ResumeMetadata>(key: K, value: ResumeMetadata[K]) {
+    setMeta(prev => ({ ...prev, [key]: value }))
+    setDirty(true)
+    setSavedAt(null)
+  }
+
+  async function save() {
+    setSaving(true); setErr(null)
+    try {
+      const r = await fetch(`/api/career/resumes/${resumeId}/metadata`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(meta),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setErr(j.error || `HTTP ${r.status}`)
+        return
+      }
+      setDirty(false)
+      setSavedAt(new Date().toLocaleTimeString())
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Network error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Sync hex<->color picker. Native <input type=color> normalizes case;
+  // we keep the canonical text input as the source of truth.
+  const accentColor = meta.renderer.accent_color
+  const colorPickerValue = useMemo(() => {
+    return /^#[0-9a-fA-F]{6}$/.test(accentColor) ? accentColor : '#0969da'
+  }, [accentColor])
+
+  if (!loaded) return <div className="af-loading">Loading metadata…</div>
+
+  return (
+    <div className="c-resume-drawer">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Metadata</h4>
+        <button
+          type="button"
+          className="c-resume-actions-btn"
+          onClick={onClose}
+          aria-label="Collapse"
+        ><X size={14} /></button>
+      </div>
+
+      <section className="af-section">
+        <h3 className="af-section-title">Archetype</h3>
+        <p className="af-section-desc">短标签描述这份简历的方向，例如 "Backend SDE / L4"。</p>
+        <input
+          className="af-input"
+          placeholder="Backend SDE / L4"
+          value={meta.archetype ?? ''}
+          onChange={e => patch('archetype', e.target.value)}
+          maxLength={100}
+        />
+      </section>
+
+      <section className="af-section">
+        <h3 className="af-section-title">Match Rules</h3>
+        <p className="af-section-desc">04-auto-select 用这些 keywords 选 base resume。匹配 role_keywords + jd_keywords 越多越优先；命中 negative_keywords 直接 skip。</p>
+        <div className="af-field">
+          <label className="af-label">Role keywords</label>
+          <TagInput
+            value={meta.match_rules.role_keywords}
+            onChange={v => patch('match_rules', { ...meta.match_rules, role_keywords: v })}
+            placeholder="Backend Engineer, SDE, Platform Engineer"
+          />
+        </div>
+        <div className="af-field">
+          <label className="af-label">JD keywords</label>
+          <TagInput
+            value={meta.match_rules.jd_keywords}
+            onChange={v => patch('match_rules', { ...meta.match_rules, jd_keywords: v })}
+            placeholder="distributed systems, microservices, kubernetes"
+          />
+        </div>
+        <div className="af-field">
+          <label className="af-label">Negative keywords</label>
+          <TagInput
+            value={meta.match_rules.negative_keywords}
+            onChange={v => patch('match_rules', { ...meta.match_rules, negative_keywords: v })}
+            placeholder="frontend-only, embedded, mobile"
+          />
+        </div>
+      </section>
+
+      <section className="af-section">
+        <h3 className="af-section-title">Emphasize</h3>
+        <p className="af-section-desc">tailor-engine 改写时按这些线索调重点。</p>
+        <div className="af-field">
+          <label className="af-label">Projects</label>
+          <TagInput
+            value={meta.emphasize.projects}
+            onChange={v => patch('emphasize', { ...meta.emphasize, projects: v })}
+            placeholder="learn-dashboard, ATS form, Playwright pipeline"
+          />
+        </div>
+        <div className="af-field">
+          <label className="af-label">Skills</label>
+          <TagInput
+            value={meta.emphasize.skills}
+            onChange={v => patch('emphasize', { ...meta.emphasize, skills: v })}
+            placeholder="TypeScript, Node, Zod"
+          />
+        </div>
+        <div className="af-field">
+          <label className="af-label">Narrative hint</label>
+          <textarea
+            className="af-input"
+            placeholder="One-liner shaping how tailor-engine should narrate this resume's voice."
+            value={meta.emphasize.narrative ?? ''}
+            onChange={e => patch('emphasize', { ...meta.emphasize, narrative: e.target.value })}
+            maxLength={2000}
+            rows={3}
+            style={{ resize: 'vertical', fontFamily: 'inherit' }}
+          />
+        </div>
+      </section>
+
+      <section className="af-section">
+        <h3 className="af-section-title">Renderer</h3>
+        <p className="af-section-desc">Per-resume 渲染默认值。`/api/career/render/pdf` 的 options 仍可 override。</p>
+        <div className="af-field-row">
+          <div className="af-field">
+            <label className="af-label">Template</label>
+            <input
+              className="af-input"
+              placeholder="default"
+              value={meta.renderer.template}
+              onChange={e => patch('renderer', { ...meta.renderer, template: e.target.value })}
+              maxLength={50}
+            />
+          </div>
+          <div className="af-field">
+            <label className="af-label">Font (optional)</label>
+            <input
+              className="af-input"
+              placeholder="system-ui"
+              value={meta.renderer.font ?? ''}
+              onChange={e => patch('renderer', { ...meta.renderer, font: e.target.value })}
+              maxLength={50}
+            />
+          </div>
+        </div>
+        <div className="af-field">
+          <label className="af-label">Accent color</label>
+          <div className="c-resume-color-row">
+            <input
+              type="color"
+              value={colorPickerValue}
+              onChange={e => patch('renderer', { ...meta.renderer, accent_color: e.target.value })}
+              aria-label="Accent color picker"
+            />
+            <input
+              type="text"
+              className="af-input"
+              placeholder="#0969da"
+              value={meta.renderer.accent_color}
+              onChange={e => patch('renderer', { ...meta.renderer, accent_color: e.target.value })}
+              maxLength={20}
+            />
+          </div>
+        </div>
+      </section>
+
+      {err && <div className="c-resumes-modal-error">{err}</div>}
+
+      <div className="c-resume-drawer-savebar">
+        <span className={`c-resume-drawer-status${dirty ? ' dirty' : savedAt ? ' saved' : ''}`}>
+          {saving ? 'Saving…' :
+           dirty ? 'Unsaved changes' :
+           savedAt ? `✓ Saved at ${savedAt}` :
+           'Ready'}
+        </span>
+        <button
+          type="button"
+          className="af-btn-primary"
+          disabled={!dirty || saving}
+          onClick={save}
+        >
+          {saving ? 'Saving…' : 'Save Metadata'}
+        </button>
+      </div>
     </div>
   )
 }

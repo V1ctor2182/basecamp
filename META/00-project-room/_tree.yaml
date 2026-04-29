@@ -230,7 +230,7 @@ tree:
         - "00-project-room/04-career-system/03-cv-engine/05-tailor-engine"
     - id: "00-project-room/04-career-system/03-cv-engine/01-resume-index"
       type: feature
-      lifecycle: in_progress
+      lifecycle: active
       owner: fullstack
       parent: "00-project-room/04-career-system/03-cv-engine"
       children: []
