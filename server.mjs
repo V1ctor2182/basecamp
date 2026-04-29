@@ -9,6 +9,7 @@ import os from 'os';
 import { z } from 'zod';
 import yaml from 'js-yaml';
 import { markdownToTemplateHtml, ALLOWED_TAGS } from './src/career/lib/markdownToTemplateHtml.mjs';
+import { htmlToPdf, shutdownBrowser } from './src/career/lib/htmlToPdf.mjs';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const app = express();
@@ -1873,6 +1874,44 @@ app.post('/api/career/render/markdown', (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// HTML → PDF smoke endpoint. Not for end-user UI; 04-renderer/01 m2 will add
+// /api/career/render/pdf which composes identity + markdown body. Keep this
+// dev tool around for low-level debugging of the Playwright pipeline.
+app.post('/api/career/render/_test-html-to-pdf', async (req, res) => {
+  const html = req.body?.html;
+  if (typeof html !== 'string') {
+    return res.status(400).json({ error: 'html must be a string' });
+  }
+  if (html.length > 1_000_000) {
+    return res.status(413).json({ error: 'html too large (>1MB)' });
+  }
+  try {
+    const pdf = await htmlToPdf(html, {
+      format: req.body?.format,
+      margin: req.body?.margin,
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.send(pdf);
+  } catch (e) {
+    // Browser launch failures and chromium-not-installed land here.
+    console.warn('htmlToPdf failed:', e.message);
+    res.status(503).json({ error: e.message });
+  }
+});
+
+// Clean shutdown: kill chromium subprocess on Ctrl+C / docker stop / nodemon
+// restart. Without this, Playwright leaves zombie browsers eating RAM.
+let _shuttingDown = false;
+async function gracefulShutdown(signal) {
+  if (_shuttingDown) return;
+  _shuttingDown = true;
+  console.log(`Received ${signal}, shutting down chromium...`);
+  await shutdownBrowser();
+  process.exit(0);
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // --- Compute dailyCost from JSONL session files and write to DAILY_COST_FILE ---
 const MODEL_PRICING = {
