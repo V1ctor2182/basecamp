@@ -111,7 +111,7 @@ milestones:
     depends_on: ["m1-auto-select-backend"]
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "a8a9e7f"
     description: |
       Resumes 页 toolbar 加 "Test auto-select" 折叠区 — 输入 JD + role,
       展示 picked + 完整排名 + 命中的 keywords。让用户 tune match_rules
@@ -178,7 +178,7 @@ commits:
       - "change-2026-04-29-m1-auto-select-backend (created)"
     milestones_affected:
       - "m1-auto-select-backend (→ completed)"
-  - hash: "TBD"
+  - hash: "a8a9e7f"
     date: "2026-04-29"
     message: "[04-career-system/03-cv-engine/04-auto-select] m2: Resumes Gallery 'Test auto-select' tester panel (ROOM COMPLETE)"
     files_changed: 6

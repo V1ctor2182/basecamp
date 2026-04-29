@@ -114,7 +114,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit a8a9e7f"
 relations:
   - "implements intent-auto-select-001 (m2/2, ROOM COMPLETE)"
   - "depends_on change-2026-04-29-m1-auto-select-backend"
