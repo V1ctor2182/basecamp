@@ -42,6 +42,8 @@ const QA_BANK_DIR = path.join(CAREER_DIR, 'qa-bank');
 const QA_LEGAL_FILE = path.join(QA_BANK_DIR, 'legal.yml');
 const QA_TEMPLATES_FILE = path.join(QA_BANK_DIR, 'templates.md');
 const QA_HISTORY_FILE = path.join(QA_BANK_DIR, 'history.jsonl');
+const RESUMES_DIR = path.join(CAREER_DIR, 'resumes');
+const RESUMES_INDEX_FILE = path.join(RESUMES_DIR, 'index.yml');
 
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(REPOS_FILE)) writeFileSync(REPOS_FILE, '[]');
@@ -51,6 +53,7 @@ if (!existsSync(PR_STATS_FILE)) writeFileSync(PR_STATS_FILE, '{}');
 if (!existsSync(CAREER_DIR)) mkdirSync(CAREER_DIR, { recursive: true });
 if (!existsSync(LLM_COSTS_FILE)) writeFileSync(LLM_COSTS_FILE, '');
 if (!existsSync(QA_BANK_DIR)) mkdirSync(QA_BANK_DIR, { recursive: true });
+if (!existsSync(RESUMES_DIR)) mkdirSync(RESUMES_DIR, { recursive: true });
 if (!existsSync(QA_HISTORY_FILE)) writeFileSync(QA_HISTORY_FILE, '');
 
 // Helpers
@@ -2013,6 +2016,323 @@ async function computeDailyCost() {
 // Run on startup, then every 10 minutes
 computeDailyCost();
 setInterval(computeDailyCost, 10 * 60 * 1000);
+
+// ─────────────────────────────────────────────────────────────
+// Career System: Resume Index — multi-resume management
+// 03-cv-engine/01-resume-index — data layer for tailored CVs.
+//   index.yml                    — list of all base resumes (committed)
+//   {id}/metadata.yml            — match rules / emphasize / renderer (committed)
+//   {id}/base.md                 — resume markdown content (gitignored)
+//   {id}/versions/               — auto-snapshots on edit (gitignored)
+// ─────────────────────────────────────────────────────────────
+
+// Slug regex enforced everywhere. Matches the documented constraint and is
+// the first line of defense against path traversal — `..` and `/` can't
+// satisfy this character class.
+const RESUME_ID_RE = /^[a-z0-9-]{1,40}$/;
+const RESERVED_RESUME_IDS = new Set(['index']); // collides with index.yml
+
+function validateResumeId(id) {
+  return typeof id === 'string'
+    && RESUME_ID_RE.test(id)
+    && !RESERVED_RESUME_IDS.has(id);
+}
+
+// Belt-and-suspenders: regex would already block `..`/`/`, but resolve+prefix
+// check guards against anything sneaky a future schema relaxation might allow.
+function resolveResumeDir(id) {
+  if (!validateResumeId(id)) {
+    const e = new Error('invalid resume id');
+    e.status = 400;
+    throw e;
+  }
+  const dir = path.resolve(RESUMES_DIR, id);
+  if (!dir.startsWith(RESUMES_DIR + path.sep) && dir !== RESUMES_DIR) {
+    const e = new Error('invalid resume path');
+    e.status = 400;
+    throw e;
+  }
+  return dir;
+}
+
+const ResumeIndexEntrySchema = z.object({
+  id: z.string().regex(RESUME_ID_RE),
+  title: z.string().max(200),
+  description: z.string().max(500).optional(),
+  source: z.enum(['manual', 'google_doc']),
+  gdoc_id: z.string().max(200).optional(),
+  last_synced_at: z.string().max(40).optional(),
+  is_default: z.boolean(),
+  created_at: z.string().max(40),
+});
+
+const ResumeIndexSchema = z.object({
+  resumes: z.array(ResumeIndexEntrySchema).max(50),
+});
+
+const MatchRulesSchema = z.object({
+  role_keywords: z.array(z.string().max(100)).max(50).default([]),
+  jd_keywords: z.array(z.string().max(100)).max(50).default([]),
+  negative_keywords: z.array(z.string().max(100)).max(50).default([]),
+});
+
+const EmphasizeSchema = z.object({
+  projects: z.array(z.string().max(100)).max(50).default([]),
+  skills: z.array(z.string().max(100)).max(50).default([]),
+  narrative: z.string().max(2000).optional(),
+});
+
+const RendererConfigSchema = z.object({
+  template: z.string().max(50).default('default'),
+  font: z.string().max(50).optional(),
+  accent_color: z.string().max(20).default('#0969da'),
+});
+
+const ResumeMetadataSchema = z.object({
+  archetype: z.string().max(100).optional(),
+  match_rules: MatchRulesSchema.default({}),
+  emphasize: EmphasizeSchema.default({}),
+  renderer: RendererConfigSchema.default({}),
+});
+
+const NewResumeSchema = z.object({
+  id: z.string().regex(RESUME_ID_RE),
+  title: z.string().min(1).max(200),
+  description: z.string().max(500).optional(),
+  source: z.enum(['manual', 'google_doc']),
+  gdoc_id: z.string().max(200).optional(),
+  set_default: z.boolean().optional(),
+});
+
+// H2 sections here are a soft contract with downstream consumers
+// (04-renderer's CV template + future 03-cv-engine tailor-engine + 04-auto-select
+//  match-rule extractors) — keep them aligned with narrative/proof-points
+// skeletons.
+const DEFAULT_BASE_MD = `# Resume
+
+## Experience
+
+_例如：_
+_- **Company** — Title (Month YYYY – Month YYYY)_
+_  - Bullet 1_
+_  - Bullet 2_
+
+## Education
+
+_例如：_
+_- **University** — Degree (YYYY)_
+
+## Skills
+
+_例如：_
+_- Languages: ..._
+_- Frameworks: ..._
+
+## Projects
+
+_例如：_
+_- **Project name** — one-line description._
+`;
+
+async function readResumeIndex() {
+  try {
+    const raw = await fs.readFile(RESUMES_INDEX_FILE, 'utf-8');
+    if (!raw.trim()) return { resumes: [] };
+    const loaded = yaml.load(raw);
+    return ResumeIndexSchema.parse(loaded ?? { resumes: [] });
+  } catch (e) {
+    if (e.code === 'ENOENT') return { resumes: [] };
+    throw e;
+  }
+}
+
+async function writeResumeIndex(idx) {
+  const parsed = ResumeIndexSchema.parse(idx);
+  const yamlText = yaml.dump(parsed, { lineWidth: 120, noRefs: true });
+  await atomicWriteFile(RESUMES_INDEX_FILE, yamlText);
+  return parsed;
+}
+
+async function readResumeMetadata(id) {
+  const dir = resolveResumeDir(id);
+  const file = path.join(dir, 'metadata.yml');
+  try {
+    const raw = await fs.readFile(file, 'utf-8');
+    if (!raw.trim()) return ResumeMetadataSchema.parse({});
+    return ResumeMetadataSchema.parse(yaml.load(raw) ?? {});
+  } catch (e) {
+    if (e.code === 'ENOENT') return ResumeMetadataSchema.parse({});
+    throw e;
+  }
+}
+
+async function writeResumeMetadata(id, obj) {
+  const dir = resolveResumeDir(id);
+  const file = path.join(dir, 'metadata.yml');
+  const parsed = ResumeMetadataSchema.parse(obj);
+  const yamlText = yaml.dump(parsed, { lineWidth: 120, noRefs: true });
+  await atomicWriteFile(file, yamlText);
+  return parsed;
+}
+
+// GET — full index
+app.get('/api/career/resumes', async (_req, res) => {
+  try {
+    res.json(await readResumeIndex());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST — create new resume (dir + metadata.yml + base.md skeleton + index entry)
+app.post('/api/career/resumes', async (req, res) => {
+  try {
+    const parsed = NewResumeSchema.parse(req.body);
+    if (RESERVED_RESUME_IDS.has(parsed.id)) {
+      return res.status(400).json({ error: `id "${parsed.id}" is reserved` });
+    }
+    const idx = await readResumeIndex();
+    if (idx.resumes.some(r => r.id === parsed.id)) {
+      return res.status(409).json({ error: `id "${parsed.id}" already in use` });
+    }
+    const dir = resolveResumeDir(parsed.id);
+    await fs.mkdir(path.join(dir, 'versions'), { recursive: true });
+    await writeResumeMetadata(parsed.id, {});
+    await atomicWriteFile(path.join(dir, 'base.md'), DEFAULT_BASE_MD);
+
+    const newEntry = {
+      id: parsed.id,
+      title: parsed.title,
+      description: parsed.description,
+      source: parsed.source,
+      gdoc_id: parsed.gdoc_id,
+      is_default: false,
+      created_at: new Date().toISOString(),
+    };
+    let resumes = idx.resumes.slice();
+    if (parsed.set_default) {
+      resumes = resumes.map(r => ({ ...r, is_default: false }));
+      newEntry.is_default = true;
+    }
+    resumes.push(newEntry);
+    await writeResumeIndex({ resumes });
+
+    res.status(201).json(newEntry);
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid resume', details: e.issues });
+    }
+    if (e.status === 400) return res.status(400).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE — remove from index + rm dir (recursive, no archive)
+app.delete('/api/career/resumes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!validateResumeId(id)) return res.status(400).json({ error: 'invalid id' });
+    const idx = await readResumeIndex();
+    const before = idx.resumes.length;
+    const next = idx.resumes.filter(r => r.id !== id);
+    if (next.length === before) return res.status(404).json({ error: 'not found' });
+    await writeResumeIndex({ resumes: next });
+    const dir = resolveResumeDir(id);
+    await fs.rm(dir, { recursive: true, force: true });
+    res.json({ deleted: id });
+  } catch (e) {
+    if (e.status === 400) return res.status(400).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PATCH — set is_default atomically (exactly one default at a time)
+app.patch('/api/career/resumes/:id/set-default', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!validateResumeId(id)) return res.status(400).json({ error: 'invalid id' });
+    const idx = await readResumeIndex();
+    if (!idx.resumes.some(r => r.id === id)) return res.status(404).json({ error: 'not found' });
+    const next = {
+      resumes: idx.resumes.map(r => ({ ...r, is_default: r.id === id })),
+    };
+    await writeResumeIndex(next);
+    res.json(next);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET / PUT metadata
+app.get('/api/career/resumes/:id/metadata', async (req, res) => {
+  try {
+    res.json(await readResumeMetadata(req.params.id));
+  } catch (e) {
+    if (e.status === 400) return res.status(400).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/career/resumes/:id/metadata', async (req, res) => {
+  try {
+    const idx = await readResumeIndex();
+    if (!idx.resumes.some(r => r.id === req.params.id)) {
+      return res.status(404).json({ error: 'not found' });
+    }
+    res.json(await writeResumeMetadata(req.params.id, req.body));
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid metadata', details: e.issues });
+    }
+    if (e.status === 400) return res.status(400).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /:id/duplicate — atomic clone of metadata + fresh base.md skeleton.
+// Semantics: "start a new direction from this archetype" — copies match rules
+// / emphasize / renderer config but NOT base.md content. If the user wants
+// to clone the actual resume body, paste-import once 03-in-ui-editor lands.
+app.post('/api/career/resumes/:id/duplicate', async (req, res) => {
+  try {
+    const sourceId = req.params.id;
+    if (!validateResumeId(sourceId)) return res.status(400).json({ error: 'invalid source id' });
+
+    const newId = req.body?.new_id;
+    if (!validateResumeId(newId)) return res.status(400).json({ error: 'invalid new_id (slug only, max 40)' });
+    if (RESERVED_RESUME_IDS.has(newId)) return res.status(400).json({ error: `id "${newId}" is reserved` });
+
+    const idx = await readResumeIndex();
+    const source = idx.resumes.find(r => r.id === sourceId);
+    if (!source) return res.status(404).json({ error: 'source not found' });
+    if (idx.resumes.some(r => r.id === newId)) {
+      return res.status(409).json({ error: `id "${newId}" already in use` });
+    }
+
+    const sourceMetadata = await readResumeMetadata(sourceId);
+    const newDir = resolveResumeDir(newId);
+    await fs.mkdir(path.join(newDir, 'versions'), { recursive: true });
+    await writeResumeMetadata(newId, sourceMetadata);
+    await atomicWriteFile(path.join(newDir, 'base.md'), DEFAULT_BASE_MD);
+
+    const newTitle = (typeof req.body?.new_title === 'string' && req.body.new_title.trim())
+      ? req.body.new_title.trim().slice(0, 200)
+      : `${source.title} (copy)`;
+    const newEntry = {
+      id: newId,
+      title: newTitle,
+      description: source.description,
+      source: 'manual',  // duplicates are always manual; gdoc link is unique
+      is_default: false,
+      created_at: new Date().toISOString(),
+    };
+    await writeResumeIndex({ resumes: [...idx.resumes, newEntry] });
+    res.status(201).json(newEntry);
+  } catch (e) {
+    if (e.status === 400) return res.status(400).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
 
 const port = process.env.PORT || 8000;
 app.listen(port, () => console.log(`API server on :${port}`));

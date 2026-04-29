@@ -1,0 +1,129 @@
+spec_id: "change-2026-04-29-m2-resume-gallery-ui"
+type: change
+state: active
+intent:
+  summary: "m2: Settings → Resumes Gallery — card grid + Add modal (slugify) + Delete (type-confirm) + Set Default"
+  detail: |
+    Replace 10-line Resumes.tsx 占位 with full Gallery view. Card grid 显示
+    所有 resume metadata (title / source badge / description / id / 默认 ★)
+    + 3-dot actions menu (Set as default / Delete...). Empty state CTA.
+    Add Resume modal with slugify-on-blur and inline duplicate-id detection.
+    Delete confirm requires typing "delete".
+
+    Files created:
+      - src/career/settings/resumes.css (303 lines):
+        · .c-resumes-page (max-width 1080)
+        · .c-resumes-toolbar (h2 + Add button right)
+        · .c-resumes-grid (auto-fill minmax 280px)
+        · .c-resume-card (border, hover shadow, click to expand m3)
+        · .c-resume-card-header / -title / -default-badge (★ blue)
+        · .c-resume-source-{manual|google_doc} (灰/绿 pill)
+        · .c-resume-description (line-clamp 2)
+        · .c-resume-footer (id mono + last_synced/created date)
+        · .c-resume-actions* (3-dot button + dropdown menu)
+        · .c-resume-empty (dashed border + CTA)
+        · .c-resumes-modal-overlay / .c-resumes-modal / -header / -body /
+          -footer / -error
+        · .c-resumes-radio-group / .c-resumes-confirm-input / .c-resumes-warning
+
+    Files modified:
+      - src/career/settings/Resumes.tsx (10 → 406 lines):
+        · ResumeEntry type 镜像 server ResumeIndexEntrySchema
+        · slugify() — lowercase + replace [^a-z0-9-]+ → '-' + trim hyphens +
+          slice 40
+        · fmtDate() — toLocaleDateString month/day/year
+        · refresh() — GET /api/career/resumes → setResumes
+        · handleSetDefault(id) — PATCH /set-default → refresh
+        · handleDelete(id) — DELETE → setConfirmDelete(null) + refresh
+        · Card grid:
+          - card click 留给 m3 (drawer expand) — 当前 stub
+          - 3-dot actions menu: Set default (disabled if already default) /
+            Delete (danger color)
+          - default badge ★ + source pill + description (line-clamp) +
+            id (mono) + date footer
+        · Empty state: FileText icon + h3 "No resumes yet" + CTA Add button
+        · Inline error banner (top of page, dismissable)
+        · AddResumeDialog (sub-component):
+          - id slugify on blur, regex validate inline (red border + helper text)
+          - existingIds Set check inline (避免提交后才看到 409)
+          - title required (1-200)
+          - description optional (max 500)
+          - source radio (manual / google_doc), gdoc_id 仅 google_doc 显示
+          - set_default checkbox
+          - Submit POST /api/career/resumes; 服务端 409/400 → inline error banner
+        · ConfirmDeleteDialog (sub-component):
+          - 警告文案 (base.md / metadata.yml / versions/ 不可恢复)
+          - "type 'delete' to confirm" → button red 高亮 + enabled 才允许删
+          - Cancel / Delete resume button
+        · 复用 ats-form.css: .af-input / .af-btn-primary / .af-btn-add /
+          .af-required-star / .af-help-text / .af-error / .af-radio-label
+
+    Verification:
+      - tsc --noEmit ✓ (0 in-project errors; sibling repo TS noise pre-existing)
+      - vite build ✓ (7.46s)
+      - HTTP E2E smoke (3 steps mirroring UI flow):
+        1. GET 空 → { resumes: [] } ✓
+        2. POST backend (manual) → 201 ✓
+        3. POST applied-ai (google_doc, set_default=true) → 201; backend
+           is_default 自动 flip 掉 → applied-ai is_default:true ✓
+      - 待手工 UI smoke (留给用户验证):
+        - /career/settings/resumes → empty CTA → click → modal 弹出
+        - id="../etc" 输 → onBlur slugify 修成 'etc' → 红边消失
+        - 重复 id="backend" → inline "this id is already in use"
+        - source=google_doc → gdoc_id 字段出现
+        - submit → modal 关 + 卡片出现
+        - 第二张 ★ Set as default → 第一张星灭，第二张星亮
+        - Delete → confirm dialog → type 'delete' → 红 Delete 按钮亮 → click → 卡片消失
+
+    Locked design (long-term-best, plan-milestones):
+      - PDF thumbnail defer: 文本卡足够; 缩略图需要 rasterization 工具链,
+        等真有视觉对比痛点再加
+      - delete 二次确认 type 'delete': 防误删 (base.md + versions 不可恢复)
+      - source badge inline (不是单独 column): 视觉密度低 + 一眼扫到哪些是
+        Google Doc
+      - 3-dot actions menu: 标准 SaaS pattern; 比 inline buttons 简洁
+      - slugify on blur: 不打扰输入节奏，提交前固定到合法 id
+      - 同时 inline regex check + duplicate check: 不等服务端 400/409 才反应
+      - card click 留给 m3: m2 只展示 metadata, m3 加 drawer 编辑 match_rules
+
+    下游影响:
+      - m3 加 expand drawer + Duplicate + metadata 编辑 + POST /:id/duplicate
+        backend
+      - 03-cv-engine/02-google-docs-sync: card 加 "Sync now" action (only
+        for source=google_doc)
+      - 03-cv-engine/03-in-ui-editor: m3 drawer 加第二 tab 编辑 base.md 内容
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m2, frontend, react, gallery, modal, slugify]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit 7ca3475"
+relations:
+  - "implements intent-resume-index-001 (m2/3)"
+  - "depends_on change-2026-04-28-m1-resume-index-backend"
+  - "consumes 5 endpoints from m1: GET / POST / DELETE / PATCH set-default / GET metadata"
+  - "leaves card-click stub for m3 (drawer expand + Duplicate + metadata edit)"
+anchors:
+  - file: "src/career/settings/Resumes.tsx"
+    symbols:
+      - "default"
+      - "ResumeEntry"
+      - "slugify"
+      - "fmtDate"
+      - "AddResumeDialog"
+      - "ConfirmDeleteDialog"
+  - file: "src/career/settings/resumes.css"
+    symbols:
+      - ".c-resumes-grid"
+      - ".c-resume-card"
+      - ".c-resume-source-manual"
+      - ".c-resume-source-google_doc"
+      - ".c-resumes-modal"
+      - ".c-resume-empty"
+created_at: "2026-04-29"
+updated_at: "2026-04-29"

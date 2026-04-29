@@ -1,0 +1,149 @@
+spec_id: "change-2026-04-29-m3-resume-metadata-editor"
+type: change
+state: active
+intent:
+  summary: "m3: Card expand drawer with metadata editor (Match Rules + Emphasize + Renderer) + Duplicate action + backend duplicate endpoint (ROOM COMPLETE)"
+  detail: |
+    Click card → expand inline drawer (not modal) editing metadata.yml all
+    fields. Save bar with dirty/saved status; beforeunload guard.
+    Duplicate via 3-dot menu → window.prompt (slugify) → backend
+    POST /:id/duplicate (atomic clone of metadata + fresh base.md skeleton).
+
+    Files modified:
+      - server.mjs (+45 lines):
+        - POST /api/career/resumes/:id/duplicate:
+          - validate sourceId + new_id (slug regex + reserved 'index')
+          - readResumeIndex → ensure source exists / new_id not in use
+          - readResumeMetadata(source) → mkdir new dir+versions/ →
+            writeResumeMetadata(newId, sourceMetadata) →
+            atomicWriteFile(base.md, DEFAULT_BASE_MD)  ← fresh skeleton,
+            NOT copy of source's base.md (duplicate 是"开始一份新方向"语义)
+          - new entry: source='manual' (always — gdoc link 是 unique),
+            is_default=false, title=`${source.title} (copy)` 默认,
+            new_title 可 override
+          - 201 + new entry
+          - 400 invalid id / 404 source not found / 409 new_id in use
+      - src/career/settings/resumes.css (+80 lines):
+        - .c-resume-card-expanded (grid-column 1/-1, blue border, light bg,
+          cursor:default — click on body inside drawer 不再触发 collapse)
+        - .c-resume-drawer (top-border separator)
+        - .c-resume-drawer .af-section (section divider 复用)
+        - .c-resume-color-row (flex: <input type=color> 40x38 + hex text,
+          mono font, max-width 140)
+        - .c-resume-drawer-savebar (top border + status left + button right)
+        - .c-resume-drawer-status.{dirty | saved} (黄/绿)
+
+      - src/career/settings/Resumes.tsx (+297 lines):
+        - imports: useMemo / TagInput (../TagInput) / deepMerge (../utils)
+        - ResumeMetadata type 镜像 server schema
+        - BLANK_METADATA defaults
+        - State: expandedId (string | null) — single-card expand at a time
+        - Card click toggles expandedId (collapse if same), drawer 内部
+          stopPropagation 防止编辑时折叠
+        - 3-dot menu 加 Duplicate 项
+        - handleDuplicate(source):
+          - prompt new_id (default `${id}-copy`) → slugify → ID_RE check +
+            existingIds dup check inline (避免提交才看到 400/409)
+          - POST /:id/duplicate { new_id }
+          - server 错误 → setError banner
+        - <MetadataDrawer> sub-component (~190 lines):
+          - state: meta / loaded / dirty / saving / savedAt / err
+          - useEffect(resumeId): reset state + GET /:id/metadata →
+            deepMerge(BLANK_METADATA, data) — 老 metadata.yml 不带新字段时
+            前端 hydrate 干净
+          - beforeunload 拦截 (dirty 时)
+          - patch(key, value) helper + save() PUT
+          - 4 sections (.af-section 复用):
+            1. Archetype — single text input (max 100)
+            2. Match Rules — 3 TagInput (role_keywords / jd_keywords /
+               negative_keywords)
+            3. Emphasize — 2 TagInput (projects / skills) + textarea narrative
+            4. Renderer — template / font (text), accent_color
+              (.c-resume-color-row 双向: <input type=color> + hex text;
+              colorPickerValue useMemo guard 非合法 hex 时回 #0969da)
+          - .c-resume-drawer-savebar: status text + Save Metadata button
+            (disabled if !dirty || saving)
+          - X close button collapses drawer
+
+    Verification (smoke 6/6 passed):
+      1. tsc --noEmit ✓ (0 in-project errors)
+      2. vite build ✓ (13.13s)
+      3. POST source backend → 201 ✓
+      4. PUT metadata full (4 sections all populated) → 200 + GET roundtrip
+         identical ✓
+      5. POST /backend/duplicate {new_id:'backend-v2'} → 201:
+         - new index entry: title="Backend (copy)" / source=manual /
+           is_default=false ✓
+         - GET /backend-v2/metadata → 100% identical to source metadata ✓
+         - data/career/resumes/backend-v2/base.md → fresh DEFAULT_BASE_MD
+           skeleton (321 bytes, NOT copy of source) ✓
+      6. error cases:
+         - duplicate same id → 409 ✓
+         - duplicate invalid new_id (../etc) → 400 ✓
+         - duplicate from nonexistent source → 404 ✓
+
+    Locked design (long-term-best, plan-milestones):
+      - In-place expand drawer (不开 modal): 保持 gallery 上下文
+      - Single expandedId — 一次只展开一张, 防止多张 dirty state 难管
+      - Match rules / Emphasize 复用 TagInput (m2-preferences 共享组件)
+      - 复用 deepMerge utils (m1-preferences 引入) — 老 metadata.yml
+        hydrate 干净
+      - Color picker + hex text 双向: useMemo guard 非合法 hex 时 picker
+        回 #0969da (不让 picker 因 invalid value 崩)
+      - Duplicate: 后端 atomic 端点 (避免半失败留 orphan dir);
+        base.md 不复制 (semantically "新方向"; 内容复制是
+        03-in-ui-editor 的 paste-import 范畴)
+      - source='manual' on duplicate: 复制后是新 manual resume, 不
+        clone gdoc 关联 (gdoc 是 unique link)
+      - drawer 内 onClick stopPropagation: 防止编辑时父 card click 触发
+        collapse
+
+    ROOM COMPLETE work:
+      - room.yaml lifecycle: in_progress → active
+      - _tree.yaml 同步
+      - spec.md 重写为 ROOM 完成总结
+      - 03-cv-engine sub-epic: 13% → ~20% (1/5 features done)
+      - 04-career-system: 39% → ~40%
+
+    下游影响:
+      - 03-cv-engine/02-google-docs-sync: card 加 Sync 按钮 (only for
+        source='google_doc')
+      - 03-cv-engine/03-in-ui-editor: drawer 加第二 tab 编辑 base.md 内容
+      - 03-cv-engine/04-auto-select: 读 metadata.match_rules + index 选 base
+      - 03-cv-engine/05-tailor-engine: 读 metadata.emphasize / renderer 调风格
+      - 04-renderer/01 接口已就绪 — 03-in-ui-editor PDF 预览直接调
+        /api/career/render/pdf with metadata.renderer 作 options
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m3, frontend, react, drawer, metadata-editor, duplicate, color-picker, room-complete]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit 638c8ab"
+relations:
+  - "implements intent-resume-index-001 (m3/3, ROOM COMPLETE)"
+  - "depends_on change-2026-04-29-m2-resume-gallery-ui"
+  - "first 03-cv-engine ROOM complete — unblocks 02 google-docs-sync / 03 in-ui-editor / 04 auto-select / 05 tailor-engine"
+  - "consumes shared TagInput (m2-preferences) + deepMerge (m3-identity utils)"
+anchors:
+  - file: "src/career/settings/Resumes.tsx"
+    symbols:
+      - "MetadataDrawer"
+      - "ResumeMetadata"
+      - "BLANK_METADATA"
+      - "handleDuplicate"
+  - file: "src/career/settings/resumes.css"
+    symbols:
+      - ".c-resume-card-expanded"
+      - ".c-resume-drawer"
+      - ".c-resume-color-row"
+      - ".c-resume-drawer-savebar"
+  - file: "server.mjs"
+    symbols:
+      - "POST /api/career/resumes/:id/duplicate"
+created_at: "2026-04-29"
+updated_at: "2026-04-29"

@@ -1,0 +1,383 @@
+/* Resumes Gallery — Settings → Resumes
+ * 03-cv-engine/01-resume-index m2
+ * Card grid + Add/Delete dialog + 3-dot actions menu.
+ * Reuses ats-form.css `.af-*` for inputs / buttons inside dialogs.
+ */
+
+.c-resumes-page {
+  max-width: 1080px;
+}
+
+.c-resumes-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  gap: 12px;
+}
+
+.c-resumes-toolbar h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: #0a0a0a;
+}
+
+.c-resumes-toolbar p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.c-resumes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.c-resume-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.c-resume-card:hover {
+  border-color: #8c959f;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.c-resume-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.c-resume-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0a0a0a;
+  line-height: 1.3;
+}
+
+.c-resume-default-badge {
+  font-size: 12px;
+  color: #0969da;
+  white-space: nowrap;
+}
+
+.c-resume-source {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  width: fit-content;
+}
+
+.c-resume-source-manual {
+  color: #555;
+  background: rgba(85, 85, 85, 0.10);
+}
+
+.c-resume-source-google_doc {
+  color: #1a7f37;
+  background: rgba(26, 127, 55, 0.10);
+}
+
+.c-resume-description {
+  font-size: 13px;
+  color: #555;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.c-resume-footer {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+  font-size: 11px;
+  color: #888;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.c-resume-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.c-resume-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.c-resume-actions-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #666;
+  cursor: pointer;
+}
+
+.c-resume-actions-btn:hover {
+  background: #f0f0f0;
+  color: #1a1a1a;
+}
+
+.c-resume-actions-menu {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  z-index: 10;
+  min-width: 180px;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.10);
+}
+
+.c-resume-actions-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 13px;
+  color: #1a1a1a;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.c-resume-actions-menu button:hover:not(:disabled) {
+  background: #f4f4f4;
+}
+
+.c-resume-actions-menu button:disabled {
+  color: #aaa;
+  cursor: default;
+}
+
+.c-resume-actions-menu button.danger {
+  color: #cf222e;
+}
+
+.c-resume-actions-menu button.danger:hover {
+  background: rgba(207, 34, 46, 0.08);
+}
+
+.c-resume-empty {
+  padding: 60px 24px;
+  text-align: center;
+  color: #666;
+  background: #fafafa;
+  border: 1px dashed #d0d7de;
+  border-radius: 8px;
+}
+
+.c-resume-empty h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.c-resume-empty p {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Modal — Add / Delete confirm dialogs */
+.c-resumes-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.c-resumes-modal {
+  width: 100%;
+  max-width: 480px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.20);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.c-resumes-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #eaeaea;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.c-resumes-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0a0a0a;
+}
+
+.c-resumes-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  max-height: calc(90vh - 140px);
+}
+
+.c-resumes-modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #eaeaea;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  background: #fafafa;
+}
+
+.c-resumes-modal-error {
+  margin-top: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #cf222e;
+  background: rgba(207, 34, 46, 0.08);
+  border: 1px solid rgba(207, 34, 46, 0.20);
+  border-radius: 6px;
+}
+
+.c-resumes-radio-group {
+  display: flex;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.c-resumes-radio-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.c-resumes-confirm-input {
+  margin-top: 12px;
+}
+
+.c-resumes-warning {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #9a6700;
+  background: rgba(154, 103, 0, 0.10);
+  border: 1px solid rgba(154, 103, 0, 0.30);
+  border-radius: 6px;
+  line-height: 1.5;
+}
+
+/* ─── Card expanded drawer (m3) ─── */
+.c-resume-card-expanded {
+  grid-column: 1 / -1;
+  background: #fafbfc;
+  border-color: #0969da;
+  cursor: default;
+}
+
+.c-resume-card-expanded:hover {
+  border-color: #0969da;
+  box-shadow: 0 2px 8px rgba(9, 105, 218, 0.12);
+}
+
+.c-resume-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid #d0d7de;
+}
+
+.c-resume-drawer .af-section {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eaeaea;
+}
+
+.c-resume-drawer .af-section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+/* Color picker — hex text + native color input side-by-side */
+.c-resume-color-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.c-resume-color-row input[type='color'] {
+  width: 40px;
+  height: 38px;
+  padding: 2px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #fff;
+}
+
+.c-resume-color-row input[type='text'] {
+  flex: 1;
+  max-width: 140px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Drawer save bar — sticky inside the drawer body */
+.c-resume-drawer-savebar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #eaeaea;
+}
+
+.c-resume-drawer-status {
+  font-size: 13px;
+  color: #666;
+}
+
+.c-resume-drawer-status.dirty {
+  color: #9a6700;
+}
+
+.c-resume-drawer-status.saved {
+  color: #1a7f37;
+}

@@ -1,0 +1,149 @@
+spec_id: "change-2026-04-28-m1-resume-index-backend"
+type: change
+state: active
+intent:
+  summary: "m1: Resume Index backend — Zod schemas + 5 endpoints + slug guard + atomic default flip + base.md skeleton"
+  detail: |
+    Multi-resume data layer. Lists resumes in `data/career/resumes/index.yml`,
+    per-resume `metadata.yml` (committed) + `base.md` (gitignored skeleton on
+    create) + `versions/` (gitignored snapshots dir). Path-traversal-safe via
+    slug regex + resolve-prefix check. is_default flipping is atomic on the
+    index — single source of truth.
+
+    Files modified:
+      - server.mjs (+275 lines):
+        - Constants: RESUMES_DIR + RESUMES_INDEX_FILE; mkdirSync on startup
+        - Slug regex: /^[a-z0-9-]{1,40}$/  + reserved id 'index' (collides
+          with index.yml file)
+        - validateResumeId(id) + resolveResumeDir(id):
+          regex first; resolve + startsWith(RESUMES_DIR + path.sep) guard
+          belt-and-suspenders against future schema relaxation
+        - Zod schemas:
+          - ResumeIndexEntrySchema { id (regex) / title / description? /
+            source: 'manual'|'google_doc' / gdoc_id? / last_synced_at? /
+            is_default / created_at }
+          - ResumeIndexSchema { resumes: array max 50 }
+          - MatchRulesSchema { role_keywords / jd_keywords /
+            negative_keywords } each .max(50)*str.max(100), .default([])
+          - EmphasizeSchema { projects / skills (.max(50) each) /
+            narrative .max(2000) }
+          - RendererConfigSchema { template .default('default') / font? /
+            accent_color .default('#0969da') }
+          - ResumeMetadataSchema { archetype? / match_rules / emphasize /
+            renderer } — all nested with .default({}) so old files w/o new
+            fields hydrate cleanly
+          - NewResumeSchema (POST body) — id required regex / title 1-200 /
+            source enum / set_default? bool
+        - DEFAULT_BASE_MD: H2 sections (Experience / Education / Skills /
+          Projects) — soft contract with downstream (04-renderer template,
+          tailor-engine match-rule extractors aligned with narrative/
+          proof-points pattern)
+        - Helpers: readResumeIndex / writeResumeIndex / readResumeMetadata /
+          writeResumeMetadata — all use atomicWriteFile + Zod parse, ENOENT
+          → defaults
+        - Endpoints (5):
+          GET /api/career/resumes → full index
+          POST /api/career/resumes:
+            1. NewResumeSchema parse
+            2. reserved-id 400 + duplicate 409 checks
+            3. mkdir resolveResumeDir(id)/versions (recursive)
+            4. write metadata.yml = ResumeMetadataSchema.parse({}) defaults
+            5. write base.md = DEFAULT_BASE_MD (atomic)
+            6. if set_default: map all is_default=false then new=true
+            7. push to index, atomic write
+            8. 201 + new entry
+          DELETE /api/career/resumes/:id:
+            validate id → find in index → 404 if missing → remove entry +
+            atomic write index → fs.rm(dir, recursive, force)
+          PATCH /api/career/resumes/:id/set-default:
+            validate id → 404 if missing → map { is_default: r.id === id }
+            → atomic write
+          GET /api/career/resumes/:id/metadata → ResumeMetadata (Zod defaults)
+          PUT /api/career/resumes/:id/metadata:
+            existence check via readResumeIndex → ResumeMetadataSchema parse
+            → atomicWriteFile
+
+    Verification (smoke 9/9 passed):
+      1. GET empty → { resumes: [] } ✓
+      2. POST id=backend title='Backend SDE' source=manual → 201; on disk:
+         data/career/resumes/backend/{base.md (321 B H2 skeleton),
+         metadata.yml ({} defaults), versions/} ✓
+      3. POST 重复 backend → 409 'already in use' ✓
+      4. POST id=../etc → 400 Zod regex (also resolve-prefix would catch) ✓
+      4b. POST id='index' → 400 reserved ✓
+      5. POST applied-ai set_default=true → backend.is_default flipped to
+         false atomically ✓
+      6. PATCH /backend/set-default → backend=true, applied-ai=false ✓
+      7. PUT /backend/metadata { match_rules: { role_keywords: [...] } } →
+         GET roundtrip 保留 Zod defaults (jd_keywords:[], negative_keywords:[],
+         emphasize: { projects:[], skills:[] }, renderer: { template:'default',
+         accent_color:'#0969da' }) ✓
+      7b. PUT metadata 51-item array → 400 too_big ✓
+      8. DELETE /backend → 200; dir 真删除; index 不再有 backend ✓
+      9. PATCH /nonexistent/set-default → 404 ✓
+
+    Locked design (long-term-best, plan-milestones):
+      - slug regex 严格: 防 path traversal 第一道防线 (regex + resolve-prefix
+        是 belt-and-suspenders)
+      - reserved 'index': 防 collision with index.yml file
+      - 创建时同时写 base.md skeleton: 与 narrative/proof-points 软契约一致
+        (## Experience / ## Education / ## Skills / ## Projects);
+        04-renderer/01 + 03-in-ui-editor + 04-auto-select 都依赖 H2 锚点
+      - DELETE 真删 (不归档): personal app; 想 audit 自己 git commit base.md
+        before delete (其实 base.md gitignored — versions/ 也 gitignored —
+        所以 delete 真的不可恢复, 前端 m2 type-confirm UX 防误操作)
+      - is_default 后端 atomic flip: 不依赖前端正确性; race-safe
+      - metadata 字段 .default([]) / .default({}): 老文件不带新字段时 Zod
+        填默认值, 不崩 (downstream 03-cv-engine/04-auto-select 可以裸查)
+      - atomicWriteFile + Zod parse: 复用现有 helpers, 接口一致
+
+    Complexity:
+      - design_decisions ✓ (path traversal / id validation / default
+        flipping atomicity / metadata schema 的 nested defaults 都仔细想过)
+
+    下游影响:
+      - m2 GalleryUI 调 GET /resumes / POST / DELETE / PATCH set-default
+      - m3 加 PUT /:id/metadata 编辑 + POST /:id/duplicate (本 m1 没做
+        duplicate, 留给 m3 一起做)
+      - 03-cv-engine/02-google-docs-sync 接入 source='google_doc' resume
+      - 03-cv-engine/03-in-ui-editor 读 base.md (本 m1 已建)
+      - 03-cv-engine/04-auto-select 读 index + match_rules 选 base
+      - 03-cv-engine/05-tailor-engine 读 metadata.emphasize / renderer
+
+    NOT yet (m3 加):
+      - POST /api/career/resumes/:id/duplicate — atomic clone metadata + fresh
+        base.md skeleton + new index entry
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, backend, zod, resume, multi-resume, path-traversal-safe]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit 9185a9d"
+relations:
+  - "implements intent-resume-index-001 (m1/3)"
+  - "first 03-cv-engine ROOM milestone — sets data layer for 02/03/04/05 features"
+  - "depends-on-by 04-renderer/01-html-template (composeCvHtml uses identity, will read base.md from this layer in 03-in-ui-editor)"
+anchors:
+  - file: "server.mjs"
+    symbols:
+      - "RESUME_ID_RE"
+      - "validateResumeId"
+      - "resolveResumeDir"
+      - "ResumeIndexSchema"
+      - "ResumeMetadataSchema"
+      - "MatchRulesSchema"
+      - "EmphasizeSchema"
+      - "RendererConfigSchema"
+      - "NewResumeSchema"
+      - "DEFAULT_BASE_MD"
+      - "readResumeIndex"
+      - "writeResumeIndex"
+      - "readResumeMetadata"
+      - "writeResumeMetadata"
+created_at: "2026-04-28"
+updated_at: "2026-04-28"
