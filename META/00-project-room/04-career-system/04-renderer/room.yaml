@@ -3,7 +3,7 @@ room:
   name: "PDF Renderer"
   parent: "00-project-room/04-career-system"
   type: sub-epic
-  lifecycle: in_progress
+  lifecycle: active
   created_at: "2026-04-22"
   updated_at: "2026-04-28"
   owner: fullstack

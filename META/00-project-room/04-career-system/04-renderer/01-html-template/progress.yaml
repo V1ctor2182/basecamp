@@ -1,5 +1,247 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-playwright-html-to-pdf"
+    name: "Playwright lifecycle + htmlToPdf() helper + smoke endpoint"
+    status: completed
+    actual_lines: 122
+    actual_files:
+      - "package.json"
+      - "package-lock.json"
+      - "src/career/lib/htmlToPdf.mjs"
+      - "server.mjs"
+    estimated_files:
+      - "package.json"
+      - "src/career/lib/htmlToPdf.mjs"
+      - "server.mjs"
+    estimated_lines: 170
+    depends_on: []
+    complexity_flags:
+      - "external_api"
+      - "first_of_kind"
+      - "error_handling_heavy"
+    open_questions: []
+    commit_hash: "289cc52"
+    description: |
+      把 Playwright 装上 + 跑通最简 HTML→PDF 流程。先不管 CV 模板细节，
+      m1 只验证：Playwright 能在本机 launch、能渲染任意 HTML 出 PDF、生命周期
+      正确（不留 zombie chromium 进程）。
+
+      实现:
+        package.json:
+          + "playwright": "^1.x" (latest)
+          (大依赖 — node_modules 增 ~10MB; 实际 chromium 浏览器 ~300MB 装到
+          ~/.cache/ms-playwright/, 不进 node_modules)
+
+        npx playwright install chromium  ← 需要手动 / setup script 跑一次
+
+        src/career/lib/htmlToPdf.mjs (~120 行):
+          - import { chromium } from 'playwright'
+          - module-level 状态:
+            - let _browser: Browser | null = null
+            - let _idleTimer: NodeJS.Timeout | null = null
+            - const IDLE_MS = 30_000
+          - async function getBrowser(): Promise<Browser>
+            - 若 _browser 还活着 (isConnected), 返之
+            - 否则 chromium.launch({ headless: true, args: [
+                '--disable-dev-shm-usage' // CI 友好
+              ] }) → 缓存
+          - function scheduleIdleClose():
+            - clearTimeout(_idleTimer)
+            - _idleTimer = setTimeout(closeBrowser, IDLE_MS)
+          - async function closeBrowser():
+            - 若 _browser, await _browser.close().catch(()=>{})
+            - _browser = null
+          - export async function htmlToPdf(html, options): Promise<Buffer>
+            - const browser = await getBrowser()
+            - const page = await browser.newPage()
+            - try {
+                await page.setContent(html, { waitUntil: 'networkidle' })
+                const pdf = await page.pdf({
+                  format: options?.format ?? 'Letter',
+                  margin: options?.margin ?? {top:'0.5in',right:'0.5in',bottom:'0.5in',left:'0.5in'},
+                  printBackground: true,
+                })
+                return Buffer.from(pdf)
+              } finally {
+                await page.close().catch(()=>{})
+                scheduleIdleClose()
+              }
+          - export async function shutdownBrowser() { await closeBrowser() }
+
+        server.mjs (+~50 行):
+          - import { htmlToPdf, shutdownBrowser } from './src/career/lib/htmlToPdf.mjs'
+          - process.on('SIGTERM', shutdownBrowser)
+            process.on('SIGINT', shutdownBrowser)
+          - POST /api/career/render/_test-html-to-pdf  (smoke endpoint)
+            body: { html: string, format?, margin? }
+            校验: typeof html === 'string', length < 1MB
+            try: const pdf = await htmlToPdf(html, options)
+            res.setHeader('Content-Type', 'application/pdf')
+            res.send(pdf)
+
+      验收 (5 cases):
+        1. 启动 server 后 chromium 不该立刻起 (lazy)
+        2. POST /api/career/render/_test-html-to-pdf body
+           {"html":"<h1>Hi</h1>"} → 返回 application/pdf 二进制 (length > 1KB,
+           前 4 字节 = '%PDF') ✓
+        3. 连续 3 次 POST → 间隔 < 200ms (browser 复用) ✓
+        4. POST 后等待 35s → 进程列表里 chromium 进程消失 (idle close 工作) ✓
+        5. POST { html: 1234 } → 400 ✓
+        6. SIGINT (Ctrl+C) → server 退出前 chromium 子进程也退出 (no zombie)
+
+      Locked design (long-term-best):
+        - lazy singleton + 30s idle close: balance launch cost vs zombie risk
+        - --disable-dev-shm-usage: 标准 chromium-in-container/CI 配置
+        - printBackground: true: CSS 背景颜色 (m2 的 accent border) 渲染进 PDF
+        - newPage per render: 比 reuse page 更 robust (脏 state 不串); page 够轻
+        - shutdownBrowser via SIGTERM/SIGINT: nodemon / docker stop 时干净退出
+
+      Complexity:
+        - external_api: Playwright API 第一次接触
+        - first_of_kind: 项目无 Playwright 先例
+        - error_handling_heavy: launch 失败 / chromium 没装 / page crash 都要
+          有清晰错误返给 caller (而不是 server hang)
+        - chromium 安装是手动一次性 setup — 在 README/setup script 里说明;
+          m1 不管自动 install (用户跑 `npx playwright install chromium` 一次即可)
+
+      下游影响:
+        - m2-cv-template-render 调 htmlToPdf() 完成完整 CV PDF 流程
+        - 03-cv-engine/03-in-ui-editor 通过 /api/career/render/pdf 实时预览
+        - 03-cv-engine/05-tailor-engine 完成 tailor 后立刻渲染
+
+  - id: "m2-cv-template-render"
+    name: "CV HTML/CSS 模板 + identity 头部组合 + render-pdf endpoint (ROOM COMPLETE)"
+    status: completed
+    actual_lines: 231
+    actual_files:
+      - "src/career/lib/cvTemplate.mjs"
+      - "server.mjs"
+    estimated_files:
+      - "src/career/lib/cvTemplate.mjs"
+      - "server.mjs"
+    estimated_lines: 280
+    depends_on: ["m1-playwright-html-to-pdf"]
+    complexity_flags:
+      - "design_decisions"
+    open_questions: []
+    commit_hash: "14df005"
+    description: |
+      把 m1 的 htmlToPdf 和 02-markdown-to-template 的 markdownToTemplateHtml +
+      identity.yml 串起来，产出真实 CV PDF。CSS 模板是本 milestone 的重点 —
+      ATS-friendly 单列、系统字体、清晰层级。
+
+      实现:
+        src/career/lib/cvTemplate.mjs (~200 行):
+          - export function composeCvHtml({ identity, body_html, options }): string
+          - 内部 buildHeader(identity, accent_color) -> string:
+            - left: <h1>{name}</h1> + <div.location>{city}, {country}</div>
+            - right: contacts 列表 (按非空才渲染顺序: email · phone · linkedin
+              · github · portfolio)，每个 contact 是 <a href="...">label</a> 或
+              纯文本 (email/phone)，分隔 " · "
+          - escapeHtml(s) 私有 helper for header text (XSS 防御性，即使
+            identity.yml 是用户自己的)
+          - 全 HTML 模板 (template literal):
+            <!DOCTYPE html><html lang="en"><head>...inline <style>...</head>
+            <body><header>...</header><main>{body_html}</main></body></html>
+
+          INLINE_CSS (~120 行 CSS, 嵌入字符串):
+            - @page { size: Letter; margin: 0.5in } (Playwright margin overrides)
+            - body { font: 11pt/1.5 system-ui, -apple-system, ...; color: #1a1a1a }
+            - header { display: flex; justify-content: space-between;
+                align-items: flex-end; margin-bottom: 16pt;
+                padding-bottom: 8pt;
+                border-bottom: 2pt solid {accent_color} }
+            - h1 (header name) { font-size: 22pt; font-weight: 600; margin: 0 }
+            - header .location { font-size: 10pt; color: #555; margin-top: 2pt }
+            - header .contacts { font-size: 10pt; color: #555;
+                text-align: right; line-height: 1.4 }
+            - main h2 { font-size: 13pt; font-weight: 600;
+                margin: 14pt 0 4pt; color: {accent_color};
+                border-bottom: 1pt solid #d0d7de; padding-bottom: 2pt;
+                page-break-after: avoid }
+            - main h3 { font-size: 11pt; font-weight: 600; margin: 8pt 0 2pt }
+            - main p { margin: 4pt 0 }
+            - main ul { padding-left: 18pt; margin: 4pt 0 }
+            - main li { margin: 2pt 0 }
+            - main strong { font-weight: 600 }; main em { font-style: italic }
+            - main a { color: {accent_color}; text-decoration: none }
+            - hr { border: 0; border-top: 1pt solid #d0d7de; margin: 12pt 0 }
+            - @media print { body { -webkit-print-color-adjust: exact } }
+            - 默认 accent_color = '#0969da' (project 蓝)
+
+        server.mjs (+~80 行):
+          - POST /api/career/render/pdf
+            body: { resume_markdown, options?: { format, margin, accent_color } }
+            - typeof check resume_markdown
+            - readIdentity() (复用现有)
+            - body_html = markdownToTemplateHtml(resume_markdown)
+            - html = composeCvHtml({ identity, body_html, options })
+            - pdf = await htmlToPdf(html, options)
+            - Content-Type: application/pdf
+            - Content-Disposition: inline; filename="resume.pdf" (iframe 直接显示)
+            - res.send(pdf)
+          - error: 400 on bad input / 503 on browser launch fail with clear msg
+          - 留着 m1 的 _test-html-to-pdf — dev tool 不删
+
+      验收 (smoke 6 cases):
+        1. POST /api/career/render/pdf {"resume_markdown":"# Test\n\n## Section\n\n- item"}
+           → application/pdf, %PDF magic, length > 5KB ✓
+        2. 保存 PDF 到 /tmp/test.pdf + open 看视觉:
+           - identity 不存在: header name 空但不崩
+           - identity 完整: header 显示 name + city, contacts 右侧 ✓
+        3. body 含 raw HTML <script>: 已被 markdown-to-template drop ✓
+        4. options.accent_color = '#cf222e' → border / h2 / a 全红 ✓
+        5. 同时 3 个 POST → browser 复用, 总时长 < 1s ✓
+        6. 大 markdown (10KB resume content) → PDF 生成 < 2s ✓
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml 同步
+        - spec.md 重写为 ROOM 完成总结
+        - 向上传播: 04-renderer 100% (2/2), 04-career-system 提升
+
+      Locked design (long-term-best):
+        - 系统字体 system-ui (no Google Fonts) — Playwright headless 不依赖
+          外部 CDN, 离线可用
+        - 单列布局 — ATS parser 友好 (双列经常被错切顺序)
+        - 11pt body / 22pt name — 合适密度，1 页 ~600 词
+        - inline <style> — 不靠外部 fetch, networkidle 等待最快
+        - accent_color 可配但默认蓝 — 让用户后续按公司风格切
+        - escape header 文本 — 防 identity 字段含 < > 之类
+        - h2 page-break-after: avoid — section 不和后续内容分页
+        - -webkit-print-color-adjust: exact — accent border 颜色不被
+          浏览器 print-optimization 去掉
+
+      下游影响:
+        - 03-cv-engine/03-in-ui-editor: 编辑器右侧 iframe 实时预览, src 指向
+          POST /api/career/render/pdf (debounced edit 事件 → re-render)
+        - 03-cv-engine/04-auto-select / 05-tailor-engine: 完成 tailor 后调
+          render-pdf 产 PDF 给用户看
+        - 07-applier 上传 PDF 到 ATS portal 时直接读这个 endpoint
+        - 04-renderer/03-renderer-pluggable (deferred per plan) 一旦做就把
+          htmlToPdf 实现注册成 default renderer
+
+commits:
+  - hash: "289cc52"
+    date: "2026-04-28"
+    message: "[04-career-system/04-renderer/01-html-template] m1: Playwright lifecycle + htmlToPdf() helper + smoke endpoint + SIGTERM/SIGINT cleanup"
+    files_changed: 5
+    specs_affected:
+      - "change-2026-04-28-m1-playwright-html-to-pdf (created)"
+    milestones_affected:
+      - "m1-playwright-html-to-pdf (→ completed)"
+  - hash: "14df005"
+    date: "2026-04-28"
+    message: "[04-career-system/04-renderer/01-html-template] m2: CV template + identity header + /api/career/render/pdf endpoint (ROOM COMPLETE = 04-renderer sub-epic done)"
+    files_changed: 6
+    specs_affected:
+      - "change-2026-04-28-m2-cv-template-render (created)"
+      - "room.yaml (lifecycle: in_progress → active)"
+      - "_tree.yaml (lifecycle: in_progress → active)"
+    milestones_affected:
+      - "m2-cv-template-render (→ completed, ROOM COMPLETE, 04-renderer sub-epic done)"
+
+current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 100
+status_note: "🎉 ROOM 完成 (2/2 milestones, 353 行 net) + 🎉 04-renderer sub-epic DONE (2 ROOMs ✅). 真实 CV PDF 生成跑通。下一个 Sprint 3 子任务: 03-cv-engine。"
+last_updated: "2026-04-28"

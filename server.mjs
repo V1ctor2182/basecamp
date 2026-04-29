@@ -9,6 +9,8 @@ import os from 'os';
 import { z } from 'zod';
 import yaml from 'js-yaml';
 import { markdownToTemplateHtml, ALLOWED_TAGS } from './src/career/lib/markdownToTemplateHtml.mjs';
+import { htmlToPdf, shutdownBrowser } from './src/career/lib/htmlToPdf.mjs';
+import { composeCvHtml } from './src/career/lib/cvTemplate.mjs';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const app = express();
@@ -1873,6 +1875,74 @@ app.post('/api/career/render/markdown', (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// CV PDF endpoint — the real renderer entry point.
+// Pipeline: resume markdown → markdownToTemplateHtml → composeCvHtml (with
+// identity.yml-driven header) → htmlToPdf → application/pdf stream.
+// Caller (CV editor preview / tailor-engine output / applier upload) decides
+// what to do with the bytes; renderer keeps no on-disk state.
+app.post('/api/career/render/pdf', async (req, res) => {
+  const md = req.body?.resume_markdown;
+  if (typeof md !== 'string') {
+    return res.status(400).json({ error: 'resume_markdown must be a string' });
+  }
+  if (md.length > 500_000) {
+    return res.status(413).json({ error: 'resume_markdown too large (>500KB)' });
+  }
+  try {
+    const identity = (await readIdentity()) ?? {};
+    const body_html = markdownToTemplateHtml(md);
+    const options = req.body?.options ?? {};
+    const html = composeCvHtml({ identity, body_html, options });
+    const pdf = await htmlToPdf(html, {
+      format: options.format,
+      margin: options.margin,
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="resume.pdf"');
+    res.send(pdf);
+  } catch (e) {
+    console.warn('render/pdf failed:', e.message);
+    res.status(503).json({ error: e.message });
+  }
+});
+
+// HTML → PDF smoke endpoint. Low-level debug tool for the Playwright pipeline.
+// /api/career/render/pdf above is the real entry point for CV rendering.
+app.post('/api/career/render/_test-html-to-pdf', async (req, res) => {
+  const html = req.body?.html;
+  if (typeof html !== 'string') {
+    return res.status(400).json({ error: 'html must be a string' });
+  }
+  if (html.length > 1_000_000) {
+    return res.status(413).json({ error: 'html too large (>1MB)' });
+  }
+  try {
+    const pdf = await htmlToPdf(html, {
+      format: req.body?.format,
+      margin: req.body?.margin,
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.send(pdf);
+  } catch (e) {
+    // Browser launch failures and chromium-not-installed land here.
+    console.warn('htmlToPdf failed:', e.message);
+    res.status(503).json({ error: e.message });
+  }
+});
+
+// Clean shutdown: kill chromium subprocess on Ctrl+C / docker stop / nodemon
+// restart. Without this, Playwright leaves zombie browsers eating RAM.
+let _shuttingDown = false;
+async function gracefulShutdown(signal) {
+  if (_shuttingDown) return;
+  _shuttingDown = true;
+  console.log(`Received ${signal}, shutting down chromium...`);
+  await shutdownBrowser();
+  process.exit(0);
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // --- Compute dailyCost from JSONL session files and write to DAILY_COST_FILE ---
 const MODEL_PRICING = {

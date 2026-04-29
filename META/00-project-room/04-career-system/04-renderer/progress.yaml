@@ -1,9 +1,9 @@
 milestones: []
 current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-completion: 50   # avg(0, 100) = 50 across 2 features (02-markdown-to-template ✅)
+completion: 100  # ✅ avg(100, 100) = 100 across 2 features (sub-epic DONE)
 children_completion:
-  "01-html-template": 0
-  "02-markdown-to-template": 100  # ✅ active — single milestone, ROOM COMPLETE
-status_note: "🔄 Sprint 3 起手。02-markdown-to-template ✅ (transformer 就位). 下一个: 01-html-template (Playwright PDF 渲染)。"
+  "01-html-template": 100  # ✅ active — m1+m2 done (ROOM COMPLETE)
+  "02-markdown-to-template": 100  # ✅ active
+status_note: "🎉 04-renderer sub-epic DONE (2 ROOMs ✅, 真实 CV PDF 跑通). 下一个 Sprint 3 子任务: 03-cv-engine (5 features)."
 last_updated: "2026-04-28"

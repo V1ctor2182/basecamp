@@ -1,0 +1,116 @@
+spec_id: "change-2026-04-28-m1-playwright-html-to-pdf"
+type: change
+state: active
+intent:
+  summary: "m1: Playwright lifecycle + htmlToPdf() helper + smoke endpoint + SIGTERM/SIGINT cleanup"
+  detail: |
+    Bring Playwright + headless Chromium online as the renderer pipeline's
+    leaf. m1 验证基础设施跑通: 能 launch / 能 render HTML → PDF / 不留 zombie
+    chromium 进程。CV 模板细节是 m2 的事。
+
+    Files modified:
+      - package.json: + "playwright": "^1.59.1" (~10MB node_modules)
+      - package-lock.json: 同步
+      - server.mjs (+39 lines):
+        - import { htmlToPdf, shutdownBrowser } from htmlToPdf.mjs
+        - POST /api/career/render/_test-html-to-pdf (smoke endpoint, dev tool):
+          - body { html, format?, margin? }, html typeof check + 1MB cap
+          - 503 with caller-friendly msg on browser launch failure
+          - chromium not installed → 503 (清晰错误)
+        - process.on('SIGTERM' / 'SIGINT', gracefulShutdown):
+          - _shuttingDown guard 防止 double-fire
+          - await shutdownBrowser() 然后 process.exit(0)
+          - 防 nodemon / docker stop / Ctrl+C 留 zombie chromium
+
+    Files created:
+      - src/career/lib/htmlToPdf.mjs (83 lines):
+        - module-level state: _browser / _idleTimer / _launching (concurrent
+          first-callers 用 _launching coalesce 到同一个 launch promise)
+        - getBrowser(): lazy launch + cache + isConnected check
+          - chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] })
+          - browser.on('disconnected', drop _browser cache) — chromium 崩了
+            下次自动 relaunch
+        - scheduleIdleClose(): clear+set 30s timeout → closeBrowser
+        - closeBrowser(): await b.close().catch(...) + null cache + clear timer
+        - htmlToPdf(html, options?):
+          - typeof check
+          - newPage / setContent({waitUntil:'networkidle'}) /
+            page.pdf({format, margin, printBackground:true}) →
+            Buffer.from(...)
+          - finally { page.close() + scheduleIdleClose() }
+        - shutdownBrowser(): public 出口供 server SIGTERM/SIGINT 调
+
+    Manual setup (one-time, README/setup script document):
+      - `npx playwright install chromium` 装 chromium-headless-shell
+        (~92MB download → ~/.cache/ms-playwright/)
+      - 不是 npm install 自动完成 (Playwright 设计如此)
+
+    Verification (smoke test, 6/6 passed):
+      1. Server start → no chromium subprocess yet (lazy launch ✓)
+      2. POST /_test-html-to-pdf {html:"<h1>Hi</h1>"} →
+         Content-Type: application/pdf, 6.5KB, magic %PDF, v1.4 1page ✓
+      3. After first POST → chrome-headless-shell 进程出现 ✓
+      4. 3 连续 POST → ~600ms 每次 (browser 复用，无 relaunch overhead) ✓
+      5. POST {html:42} → 400 'html must be a string' ✓
+      6. SIGINT → "Received SIGINT, shutting down chromium..." logged →
+         chromium 子进程消失 + server 退出 (no zombie) ✓
+
+    Locked design (long-term-best, plan-milestones):
+      - lazy singleton + 30s idle close: 平衡 launch 成本 (~1.5s) vs zombie
+        风险; 闲置 30s 自动收
+      - --disable-dev-shm-usage: docker/CI 友好 (chromium 默认用 /dev/shm,
+        小容器会 OOM); 本机不影响
+      - printBackground: true: m2 的 accent border 是 background-color, 不开
+        会被 print-optimization 去掉
+      - newPage per render: page 轻量，per-request 干净 state，比 page reuse
+        更 robust
+      - 'disconnected' handler: chromium crash 不让 _browser cache 留 stale
+        handle (否则下次 newPage 会 throw on dead browser)
+      - _launching promise coalesce: 启动并发 5 个 POST 时 chromium 只 launch
+        一次
+
+    Complexity (declared in plan):
+      - external_api: Playwright API 第一次接触 ✓ (用 chromium.launch / newPage /
+        page.pdf 三个就够 m1)
+      - first_of_kind: 项目无 Playwright 先例 ✓
+      - error_handling_heavy: launch 失败 / chromium 没装 / page crash ✓
+        (503 + 清晰 msg + caller 不 hang)
+
+    下游影响:
+      - m2-cv-template-render 直接 import { htmlToPdf } 调函数 — 不走 HTTP
+      - 长期: 04-renderer/03-renderer-pluggable (deferred) 把 htmlToPdf
+        实现注册成 default renderer
+      - 03-cv-engine/03-in-ui-editor 后续通过 m2 的 /api/career/render/pdf
+        实时预览 (debounced re-render)
+
+    NOT yet (m2 的事):
+      - CV 模板 (HTML / CSS structure)
+      - identity → header 组合
+      - markdown body 集成
+      - /api/career/render/pdf 真正的端点
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, backend, playwright, pdf, infrastructure]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit 289cc52"
+relations:
+  - "implements intent-html-template-001 (m1/2)"
+  - "consumes-no-deps yet — m2 wires to markdownToTemplateHtml + readIdentity"
+  - "first project-wide Playwright usage — sets pattern for any future browser-based features"
+anchors:
+  - file: "src/career/lib/htmlToPdf.mjs"
+    symbols: ["htmlToPdf", "shutdownBrowser", "getBrowser", "closeBrowser", "scheduleIdleClose"]
+  - file: "server.mjs"
+    symbols:
+      - "POST /api/career/render/_test-html-to-pdf"
+      - "gracefulShutdown"
+  - file: "package.json"
+    symbols: ["dependencies.playwright"]
+created_at: "2026-04-28"
+updated_at: "2026-04-28"
