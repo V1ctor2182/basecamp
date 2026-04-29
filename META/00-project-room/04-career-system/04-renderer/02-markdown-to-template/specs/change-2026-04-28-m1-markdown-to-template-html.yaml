@@ -1,0 +1,106 @@
+spec_id: "change-2026-04-28-m1-markdown-to-template-html"
+type: change
+state: active
+intent:
+  summary: "m1: marked-based markdown → CV-template HTML transformer + debug endpoint (ROOM COMPLETE)"
+  detail: |
+    Markdown → CV 模板正文 HTML 的纯函数 transformer。`marked` 库 +
+    renderer-level HTML drop (XSS-safe by construction; 不引入 jsdom +
+    dompurify)。输出语义 HTML 无 class/id/style — 模板 / 内容两层完全解耦。
+
+    Files created:
+      - src/career/lib/markdownToTemplateHtml.mjs (48 lines):
+        - import { Marked } from 'marked' + new Marked({ gfm:false, breaks:false,
+          pedantic:false }) — disables tables / task-lists / autolink /
+          strikethrough（CV 用不上 + 输出会跟模板 CSS 冲突）
+        - marked.use({ renderer: { html: () => '' } }) — renderer-level drop
+          on raw HTML tokens (block + inline). resume.md 不该有 raw HTML,
+          drop 比 escape 更干净
+        - export ALLOWED_TAGS = [h1-h6, p, ul, ol, li, strong, em, a, code,
+          hr, br] (16 tags; downstream 可用作 sanitization audit reference)
+        - export markdownToTemplateHtml(md): string — typeof check + 空字符串
+          兜底 + marked.parse with async:false (确保同步返回)
+
+    Files modified:
+      - package.json: + "marked": "^18.0.2"  (~20KB, no transitive deps)
+      - package-lock.json: 同步
+      - server.mjs (+24 lines):
+        - import { markdownToTemplateHtml, ALLOWED_TAGS } from
+          './src/career/lib/markdownToTemplateHtml.mjs'
+        - POST /api/career/render/markdown:
+          - body: { content: string }
+          - typeof check → 400 'content must be a string'
+          - length > 500_000 → 413 (defensive bound; 256KB express cap on
+            /api/career/* 实际 first-line)
+          - 返回 { html, allowed_tags }
+          - debug + dev tool only — 04-renderer/01-html-template 直接函数调用
+
+    Verification (smoke test 7/7 passed via HTTP):
+      1. POST { content:"# Hello\n\nworld" } → "<h1>Hello</h1><p>world</p>" ✓
+      2. POST { content:"" } → "" ✓
+      3. CV-like nested (h1 + h2 + ul + strong + em + a) → 正确嵌套 + 无
+         class/id/style ✓
+      4. XSS:
+         - `<script>alert(1)</script>` → "" ✓ (renderer drop)
+         - `<img src=x onerror=alert(2)>` → "" ✓
+         - inline `<b>bold</b>` → text "bold" ✓
+         - 字面 `<` `>` 字符 → entities `&lt;` `&gt;` ✓
+      5. GFM table syntax `| a | b |` → 普通 `<p>` 段落（不解析为 table）✓
+      6. typeof body.content === 'number' → 400 ✓
+      7. body 600KB → 413 PayloadTooLargeError (256KB express cap caught it
+         first, 实际我们的 500KB 是 second-line defense) ✓
+
+    Locked design decisions (long-term-best, plan-milestones Phase 3):
+      - 库: marked (~20KB, no transitive deps, server+browser native)
+        vs markdown-it (更大、需要 plugin 配置)
+      - HTML drop on tokenizer/renderer level vs sanitize-after (dompurify
+        + jsdom): drop 更轻 + 更明确（CV 不需要 raw HTML）
+      - 文件位置: src/career/lib/*.mjs (Vite frontend 和 Node server 共用)
+      - debug endpoint kept: dev tool + 用户可以测；01-html-template 后续
+        函数式调用，不必走 HTTP
+      - allowed-tags export: 给 downstream sanitization audit 留 reference
+
+    Output contract (与 04-renderer/01-html-template 的契约):
+      - 输出纯语义 HTML — 无 class / id / style
+      - 模板层 (01-html-template CSS) 通过 element selector (h2 { ... } 等)
+        套样式
+      - 换模板 = 改 CSS; 改内容 = 改 markdown — 两层解耦
+
+    ROOM COMPLETE work:
+      - Single-milestone room (feature 太小不拆) → 完成即 ROOM COMPLETE
+      - room.yaml lifecycle: planning → active
+      - _tree.yaml 同步
+      - spec.md 已经 plan-milestones 阶段写好 summary
+
+    下游影响:
+      - 04-renderer/01-html-template MUST import markdownToTemplateHtml() 直接
+        函数调用 — 组装 <body> = header(identity.yml) + transformer(resume.md)
+        + CSS 模板 → Playwright PDF
+      - 03-cv-engine/03-in-ui-editor 当前用 react-markdown 做实时预览 — 将来
+        如果 print/preview 出现差异，可改用本 transformer (前端 ESM import 同
+        一个文件) 让 preview 和 print 100% 一致
+      - 06-evaluator 不直接读本 transformer (只读 markdown)
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, backend, library, marked, markdown, html, room-complete, single-milestone-room]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit 7366c72"
+relations:
+  - "implements intent-markdown-to-template-001 (m1/1, ROOM COMPLETE)"
+  - "provides-import-target for future 04-renderer/01-html-template"
+  - "first Sprint 3 ROOM complete (Renderer + CV Engine sprint)"
+anchors:
+  - file: "src/career/lib/markdownToTemplateHtml.mjs"
+    symbols: ["markdownToTemplateHtml", "ALLOWED_TAGS"]
+  - file: "server.mjs"
+    symbols: ["POST /api/career/render/markdown"]
+  - file: "package.json"
+    symbols: ["dependencies.marked"]
+created_at: "2026-04-28"
+updated_at: "2026-04-28"
