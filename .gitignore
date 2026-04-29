@@ -29,7 +29,6 @@ dist-ssr
 # the json files that exist at data/ root (pings/stats/cache/config/repos).
 data/*.json
 data/*.jsonl
-claude-skills/
 start.sh
 .gstack/
 
