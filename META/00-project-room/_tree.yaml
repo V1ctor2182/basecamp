@@ -248,7 +248,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/03-cv-engine/04-auto-select"
       type: feature
-      lifecycle: in_progress
+      lifecycle: active
       owner: backend
       parent: "00-project-room/04-career-system/03-cv-engine"
       children: []

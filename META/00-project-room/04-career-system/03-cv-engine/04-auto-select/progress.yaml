@@ -99,7 +99,11 @@ milestones:
 
   - id: "m2-auto-select-tester-ui"
     name: "Resumes Gallery Toolbar 加 'Test auto-select' 折叠区 — JD textarea + 排名结果 (ROOM COMPLETE)"
-    status: pending
+    status: completed
+    actual_lines: 412
+    actual_files:
+      - "src/career/settings/Resumes.tsx"
+      - "src/career/settings/resumes.css"
     estimated_files:
       - "src/career/settings/Resumes.tsx"
       - "src/career/settings/resumes.css"
@@ -174,9 +178,19 @@ commits:
       - "change-2026-04-29-m1-auto-select-backend (created)"
     milestones_affected:
       - "m1-auto-select-backend (→ completed)"
+  - hash: "TBD"
+    date: "2026-04-29"
+    message: "[04-career-system/03-cv-engine/04-auto-select] m2: Resumes Gallery 'Test auto-select' tester panel (ROOM COMPLETE)"
+    files_changed: 6
+    specs_affected:
+      - "change-2026-04-29-m2-auto-select-tester-ui (created)"
+      - "room.yaml (lifecycle: in_progress → active)"
+      - "_tree.yaml (lifecycle: in_progress → active)"
+    milestones_affected:
+      - "m2-auto-select-tester-ui (→ completed, ROOM COMPLETE)"
 
 current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-completion: 50
-status_note: "m1 ✅ scoring + endpoint (110 行, 8/8 smoke ✓, 49KB JD < 12ms). 下一步 m2 tester UI = ROOM COMPLETE."
+completion: 100
+status_note: "🎉 ROOM 04-auto-select COMPLETE (2/2). 03-cv-engine 60% (3/5 features ✅). 下一个: 02-google-docs-sync 或 05-tailor-engine."
 last_updated: "2026-04-29"
