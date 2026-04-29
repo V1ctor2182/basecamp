@@ -179,7 +179,7 @@ milestones:
     depends_on: ["m1-resume-index-backend"]
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "7ca3475"
     description: |
       Settings → Resumes 页面 — Gallery 视图 + 创建/删除/置默认。
       m3 加 metadata edit drawer 完成 ROOM。
@@ -362,7 +362,7 @@ commits:
       - "change-2026-04-28-m1-resume-index-backend (created)"
     milestones_affected:
       - "m1-resume-index-backend (→ completed)"
-  - hash: "TBD"
+  - hash: "7ca3475"
     date: "2026-04-29"
     message: "[04-career-system/03-cv-engine/01-resume-index] m2: Resumes Gallery UI — card grid + Add modal + Delete confirm + Set Default"
     files_changed: 5
