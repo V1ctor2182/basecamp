@@ -1,5 +1,182 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-auto-select-backend"
+    name: "Backend: scoring algorithm + POST /api/career/resumes/auto-select endpoint"
+    status: completed
+    actual_lines: 110
+    actual_files:
+      - "server.mjs"
+    estimated_files:
+      - "server.mjs"
+    estimated_lines: 160
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    commit_hash: null
+    description: |
+      Pure keyword-based scoring algorithm + endpoint. No LLM. Reads metadata.yml
+      of every resume in index, scores against incoming { jd_text, role? } body,
+      returns picked id + per-resume rationale.
+
+      实现 (server.mjs +~160 lines):
+
+        - Zod input schema:
+          AutoSelectRequestSchema = z.object({
+            jd_text: z.string().max(50_000),     // raw JD body — match against jd_keywords + negative_keywords
+            role: z.string().max(200).optional(),// 可选 — 单独 match role_keywords
+          })
+
+        - Helpers:
+          - countMatches(text, keywords): returns matched[] list of unique keywords
+            (same kw 出现多次只算 1 — 防 jd 灌水关键词刷分)
+          - scoreResume(metadata, jd_text, role):
+            const role_text = (role ?? '').toLowerCase()
+            const jd_lower = jd_text.toLowerCase()
+            roleMatches = role_keywords filter(kw => role_text.includes(kw.toLowerCase()))
+            jdMatches = jd_keywords filter(kw => jd_lower.includes(kw.toLowerCase()))
+            negativeMatches = negative_keywords filter(kw => jd_lower.includes(kw.toLowerCase()))
+            score = roleMatches.length * 1 + jdMatches.length * 1 - negativeMatches.length * 2
+            return { score, matched: { role_keywords, jd_keywords, negative_keywords } }
+
+        - Endpoint POST /api/career/resumes/auto-select:
+          - parse body via AutoSelectRequestSchema
+          - readResumeIndex
+          - if resumes.length === 0 → 404 { error: "No resumes registered" }
+          - for each resume in index:
+            - md = await readResumeMetadata(r.id)
+            - { score, matched } = scoreResume(md, jd_text, role)
+            - rankings.push({ id, title, score, matched, is_default, created_at })
+          - sort rankings:
+            1. score descending
+            2. is_default true first
+            3. created_at ascending (older established first)
+          - 返回:
+            {
+              picked: rankings[0].id,
+              picked_score: rankings[0].score,
+              picked_reason: human-readable explanation
+              fallback_to_default: boolean (true if max_score <= 0 and used is_default)
+              rankings: full sorted array
+            }
+          - 400 on Zod error / 500 on internal
+
+        - 复用现有: readResumeIndex / readResumeMetadata
+          (Zod-defaulted nested fields ensure 老 metadata.yml 不带新字段时
+          read 出来的 match_rules 是空数组而非 undefined)
+
+      验收 (smoke 6 cases):
+        1. 没有 resume → 404 ✓
+        2. 1 resume, jd_text 不命中 → score=0, picked = that resume, fallback_to_default 反映 is_default ✓
+        3. 3 resumes (backend / applied-ai / fullstack):
+           - backend: role_kw=[Backend, SDE], jd_kw=[k8s, microservices], neg=[frontend]
+           - applied-ai: role_kw=[ML, AI], jd_kw=[LangChain, RAG]
+           - fullstack: role_kw=[Fullstack], jd_kw=[React, Node]
+           POST { jd_text: "Build microservices on k8s with grpc...", role: "Backend SDE" }
+           → picked = backend (score 4: 2 role + 2 jd) ✓
+           → applied-ai score 0 ✓
+           → fullstack score 0 ✓
+        4. JD with negative keyword "frontend-only" + neg=[frontend]
+           → backend score = role_count + jd_count - 2 (negative penalty)
+        5. Tie: 2 resumes both score 2, one is_default → default 排第一 ✓
+        6. 大 jd_text (40KB) → 200 + 算完 < 200ms (case-insensitive substring is O(n*m))
+
+      Locked design (long-term-best):
+        - keyword-based, NOT LLM: 3-5 base 选 base 不需要 LLM 细微; transparent
+          + free + deterministic + 用户可 debug
+        - 同 keyword 多次只算 1: 防 jd 灌水关键词刷分
+        - +1 / +1 / -2 weight 简单线性: 易理解, 不调参; 后续若需要可在
+          metadata.yml 加 weight override
+        - tie-break is_default → created_at: established resume 优先
+        - case-insensitive substring (no \b): 跑 "k8s" 匹配 "k8s/" 既要简单
+          又要 cheap; 我们 keyword 是 slug-y, 不会有 false positive
+        - fallback always returns 一个 picked: 不让前端处理 "无 picked" 状态
+        - rankings 全返: 前端可显示完整排名, 用户能 override 看为啥别的没被选
+
+      下游影响:
+        - m2 tester UI 调本 endpoint
+        - 03-cv-engine/05-tailor-engine 调本 endpoint 选 base 后 tailor
+        - 06-evaluator/02-stage-b-sonnet 后续可参考 picked + matched
+        - 07-applier 真正 apply 时调本 endpoint
+
+  - id: "m2-auto-select-tester-ui"
+    name: "Resumes Gallery Toolbar 加 'Test auto-select' 折叠区 — JD textarea + 排名结果 (ROOM COMPLETE)"
+    status: pending
+    estimated_files:
+      - "src/career/settings/Resumes.tsx"
+      - "src/career/settings/resumes.css"
+    estimated_lines: 200
+    depends_on: ["m1-auto-select-backend"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: null
+    description: |
+      Resumes 页 toolbar 加 "Test auto-select" 折叠区 — 输入 JD + role,
+      展示 picked + 完整排名 + 命中的 keywords。让用户 tune match_rules
+      时能立刻看效果。
+
+      实现 (Resumes.tsx +~150 lines):
+        - state: showAutoSelect / jdText / role / autoSelectResult /
+          autoSelectLoading / autoSelectError
+        - Toolbar 加 button "Test auto-select" (Search icon) — 与 Add Resume
+          button 同行
+        - 展开 .c-resumes-tester-panel (grid 上方):
+          - 输入区 (.c-resumes-tester-inputs):
+            - role input (text, max 200, placeholder "Backend SDE / Senior")
+            - jd_text textarea (rows=6, max 50000, placeholder "Paste full JD")
+            - "Run auto-select" button (disabled if !jdText.trim() || loading)
+          - 结果区 (autoSelectResult 时显示):
+            - 大字: "Picked: {title} ({id})" + score badge
+            - reason 小字
+            - "Fallback to default" 黄 badge 仅 fallback=true 时
+            - 折叠 details "Show all rankings ({count})":
+              <table.c-resumes-tester-rankings>: # / id / title / score /
+                role_kw matched / jd_kw matched / neg_kw matched
+              picked 行高亮 .c-resumes-tester-row-picked
+              命中 keywords inline pills (.c-resumes-tester-kw-pill 绿/红)
+
+      新 CSS (~50 lines):
+        - .c-resumes-tester-panel (background + padding + border-radius)
+        - .c-resumes-tester-inputs (vertical stack)
+        - .c-resumes-tester-textarea (resize vertical)
+        - .c-resumes-tester-result-header (大 score + picked 突出)
+        - .c-resumes-tester-rankings (table, monospace cols)
+        - .c-resumes-tester-row-picked (蓝背景)
+        - .c-resumes-tester-kw-pill 绿/红 (positive vs negative)
+        - .c-resumes-tester-fallback-badge (黄)
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml 同步
+        - spec.md ROOM-COMPLETE rewrite
+        - 03-cv-engine sub-epic: 40% → 60% (3/5 features done)
+
+      验收 (build + 手工 UI):
+        - tsc / vite build 0 errors
+        - /career/settings/resumes → 顶部 "Test auto-select" 按钮
+        - 点击 → 折叠区显示
+        - 填 jd_text + role + Run → POST 调用; 显示 picked card + rankings table
+        - 命中 keywords pill 颜色正确 (绿正/红负)
+        - 折叠 "Show all rankings" 默认折叠, 点击展开
+        - jd_text 空 → button disabled
+        - 服务端错误 → error banner
+
+      Locked design:
+        - tester UI 仅做 explore/debug — apply 时真正调用是 07-applier 的事
+        - 折叠区不是 modal — 不打断 gallery 节奏
+        - 不持久化 jd_text/role 输入 — 测试性质, 不用 localStorage
+        - 排名展开默认折叠 — picked 是首要信息
+
+commits:
+  - hash: "TBD"
+    date: "2026-04-29"
+    message: "[04-career-system/03-cv-engine/04-auto-select] m1: keyword scoring + POST /api/career/resumes/auto-select endpoint"
+    files_changed: 3
+    specs_affected:
+      - "change-2026-04-29-m1-auto-select-backend (created)"
+    milestones_affected:
+      - "m1-auto-select-backend (→ completed)"
+
+current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 50
+status_note: "m1 ✅ scoring + endpoint (110 行, 8/8 smoke ✓, 49KB JD < 12ms). 下一步 m2 tester UI = ROOM COMPLETE."
+last_updated: "2026-04-29"

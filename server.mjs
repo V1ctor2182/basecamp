@@ -2519,5 +2519,115 @@ app.get('/api/career/resumes/:id/render', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────
+// Auto-select base resume — keyword scoring against a JD.
+// 03-cv-engine/04-auto-select. No LLM; transparent + free + deterministic.
+// Score = +1 per role_keyword matched in role + +1 per jd_keyword matched
+// in jd_text − 2 per negative_keyword matched in jd_text.
+// Ties broken by is_default first, then created_at ascending.
+// ─────────────────────────────────────────────────────────────
+
+const AutoSelectRequestSchema = z.object({
+  jd_text: z.string().max(50_000),
+  role: z.string().max(200).optional(),
+});
+
+// Lower-case substring match. Each keyword counted once even if it appears
+// multiple times — prevents JDs that repeat a word from inflating the score.
+function matchKeywords(haystack, keywords) {
+  if (!keywords || keywords.length === 0) return [];
+  const hay = haystack.toLowerCase();
+  const matched = [];
+  for (const kw of keywords) {
+    const k = String(kw).toLowerCase().trim();
+    if (k && hay.includes(k)) matched.push(kw);
+  }
+  return matched;
+}
+
+function scoreResumeAgainstJd(metadata, jd_text, role) {
+  const rules = metadata?.match_rules ?? {};
+  const role_text = role ?? '';
+  const role_matched = matchKeywords(role_text, rules.role_keywords);
+  const jd_matched = matchKeywords(jd_text, rules.jd_keywords);
+  const negative_matched = matchKeywords(jd_text, rules.negative_keywords);
+  const score = role_matched.length + jd_matched.length - 2 * negative_matched.length;
+  return {
+    score,
+    matched: {
+      role_keywords: role_matched,
+      jd_keywords: jd_matched,
+      negative_keywords: negative_matched,
+    },
+  };
+}
+
+function buildPickReason(top) {
+  const { score, matched, is_default } = top;
+  const role_n = matched.role_keywords.length;
+  const jd_n = matched.jd_keywords.length;
+  const neg_n = matched.negative_keywords.length;
+  if (score > 0) {
+    const parts = [];
+    if (role_n) parts.push(`${role_n} role keyword${role_n > 1 ? 's' : ''}`);
+    if (jd_n) parts.push(`${jd_n} jd keyword${jd_n > 1 ? 's' : ''}`);
+    let reason = `Matched ${parts.join(', ')}`;
+    if (neg_n) reason += `, ${neg_n} negative penalty`;
+    return reason;
+  }
+  if (score === 0) {
+    return is_default
+      ? 'No positive matches; using default resume'
+      : 'No positive matches; tie-broken by created_at';
+  }
+  return 'Best available has net-negative match; review match_rules';
+}
+
+app.post('/api/career/resumes/auto-select', async (req, res) => {
+  try {
+    const parsed = AutoSelectRequestSchema.parse(req.body);
+    const idx = await readResumeIndex();
+    if (idx.resumes.length === 0) {
+      return res.status(404).json({ error: 'No resumes registered' });
+    }
+
+    const rankings = [];
+    for (const r of idx.resumes) {
+      const md = await readResumeMetadata(r.id);
+      const { score, matched } = scoreResumeAgainstJd(md, parsed.jd_text, parsed.role);
+      rankings.push({
+        id: r.id,
+        title: r.title,
+        score,
+        matched,
+        is_default: r.is_default,
+        created_at: r.created_at,
+      });
+    }
+
+    rankings.sort((a, b) => {
+      if (a.score !== b.score) return b.score - a.score;
+      if (a.is_default !== b.is_default) return a.is_default ? -1 : 1;
+      return (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
+    });
+
+    const top = rankings[0];
+    const fallback_to_default = top.score <= 0 && top.is_default;
+
+    res.json({
+      picked: top.id,
+      picked_score: top.score,
+      picked_reason: buildPickReason(top),
+      fallback_to_default,
+      rankings,
+    });
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid auto-select request', details: e.issues });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const port = process.env.PORT || 8000;
 app.listen(port, () => console.log(`API server on :${port}`));
