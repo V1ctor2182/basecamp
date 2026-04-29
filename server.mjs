@@ -2334,5 +2334,190 @@ app.post('/api/career/resumes/:id/duplicate', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────
+// Resume content + versions + render
+// 03-cv-engine/03-in-ui-editor — full editor pipeline.
+//   GET /:id/content                  base.md text + versions list
+//   PUT /:id/content                  snapshot prior + atomic write + FIFO 50
+//   GET /:id/versions/:filename       single snapshot read
+//   GET /:id/render                   PDF stream (reads base.md + identity +
+//                                     metadata.renderer → composeCvHtml →
+//                                     htmlToPdf)
+// ─────────────────────────────────────────────────────────────
+
+const VERSION_FILENAME_RE = /^[0-9TZ\-:.]{10,40}\.md$/i;
+const VERSIONS_CAP = 50;
+
+// ISO 8601 with colons replaced by dashes — keeps lexical sort + filename-safe.
+function isoSnapshotFilename() {
+  return new Date().toISOString().replace(/:/g, '-') + '.md';
+}
+
+async function listResumeVersions(id) {
+  const dir = path.join(resolveResumeDir(id), 'versions');
+  let names;
+  try {
+    names = await fs.readdir(dir);
+  } catch (e) {
+    if (e.code === 'ENOENT') return [];
+    throw e;
+  }
+  const entries = [];
+  for (const filename of names) {
+    if (!VERSION_FILENAME_RE.test(filename)) continue;
+    try {
+      const stat = await fs.stat(path.join(dir, filename));
+      entries.push({
+        filename,
+        ts: stat.mtime.toISOString(),
+        size: stat.size,
+      });
+    } catch { /* skip unreadable */ }
+  }
+  // Newest first.
+  entries.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+  return entries;
+}
+
+// FIFO eviction once cap is exceeded. Called after a fresh snapshot is written.
+async function pruneResumeVersions(id) {
+  const dir = path.join(resolveResumeDir(id), 'versions');
+  const entries = await listResumeVersions(id);
+  if (entries.length <= VERSIONS_CAP) return;
+  // Drop the oldest (entries are newest-first).
+  const toDelete = entries.slice(VERSIONS_CAP);
+  for (const e of toDelete) {
+    await fs.rm(path.join(dir, e.filename), { force: true }).catch(() => {});
+  }
+}
+
+async function readResumeContent(id) {
+  const baseFile = path.join(resolveResumeDir(id), 'base.md');
+  try {
+    return await fs.readFile(baseFile, 'utf-8');
+  } catch (e) {
+    if (e.code === 'ENOENT') return DEFAULT_BASE_MD;
+    throw e;
+  }
+}
+
+// GET — returns content + versions list (newest first).
+app.get('/api/career/resumes/:id/content', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!validateResumeId(id)) return res.status(400).json({ error: 'invalid id' });
+    const idx = await readResumeIndex();
+    if (!idx.resumes.some(r => r.id === id)) return res.status(404).json({ error: 'not found' });
+    const [content, versions] = await Promise.all([
+      readResumeContent(id),
+      listResumeVersions(id),
+    ]);
+    res.json({ content, versions });
+  } catch (e) {
+    if (e.status === 400) return res.status(400).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT — pre-write snapshot of current base.md, then atomic write new content,
+// then FIFO-prune versions/ to VERSIONS_CAP.
+app.put('/api/career/resumes/:id/content', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!validateResumeId(id)) return res.status(400).json({ error: 'invalid id' });
+    const content = req.body?.content;
+    if (typeof content !== 'string') {
+      return res.status(400).json({ error: 'content must be a string' });
+    }
+    if (content.length > 500_000) {
+      return res.status(413).json({ error: 'content too large (>500KB)' });
+    }
+    const idx = await readResumeIndex();
+    if (!idx.resumes.some(r => r.id === id)) return res.status(404).json({ error: 'not found' });
+
+    const dir = resolveResumeDir(id);
+    const baseFile = path.join(dir, 'base.md');
+    const versionsDir = path.join(dir, 'versions');
+    await fs.mkdir(versionsDir, { recursive: true });
+
+    let snapshotName = null;
+    try {
+      const previous = await fs.readFile(baseFile, 'utf-8');
+      if (previous.trim().length > 0) {
+        snapshotName = isoSnapshotFilename();
+        await atomicWriteFile(path.join(versionsDir, snapshotName), previous);
+      }
+    } catch (e) {
+      // If base.md doesn't exist yet, skip the snapshot — first save.
+      if (e.code !== 'ENOENT') throw e;
+    }
+
+    await atomicWriteFile(baseFile, content);
+    await pruneResumeVersions(id);
+
+    res.json({ content, snapshot: snapshotName });
+  } catch (e) {
+    if (e.status === 400) return res.status(400).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET single version — used by m3 versions UI for restore preview.
+app.get('/api/career/resumes/:id/versions/:filename', async (req, res) => {
+  try {
+    const { id, filename } = req.params;
+    if (!validateResumeId(id)) return res.status(400).json({ error: 'invalid id' });
+    // basename + regex defence — refuses anything that isn't a snapshot filename.
+    const safe = path.basename(filename);
+    if (!VERSION_FILENAME_RE.test(safe)) {
+      return res.status(400).json({ error: 'invalid version filename' });
+    }
+    const file = path.join(resolveResumeDir(id), 'versions', safe);
+    let content;
+    try {
+      content = await fs.readFile(file, 'utf-8');
+    } catch (e) {
+      if (e.code === 'ENOENT') return res.status(404).json({ error: 'version not found' });
+      throw e;
+    }
+    const stat = await fs.stat(file);
+    res.json({ content, ts: stat.mtime.toISOString(), size: stat.size });
+  } catch (e) {
+    if (e.status === 400) return res.status(400).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET render — full PDF pipeline keyed by resume id (m2 iframe src targets this).
+// Reads from disk so the PDF reflects ground truth; ?v=ts is just a cache buster.
+app.get('/api/career/resumes/:id/render', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!validateResumeId(id)) return res.status(400).json({ error: 'invalid id' });
+    const idx = await readResumeIndex();
+    if (!idx.resumes.some(r => r.id === id)) return res.status(404).json({ error: 'not found' });
+
+    const [identity, metadata, content] = await Promise.all([
+      readIdentity().then(v => v ?? {}),
+      readResumeMetadata(id),
+      readResumeContent(id),
+    ]);
+    const body_html = markdownToTemplateHtml(content);
+    const html = composeCvHtml({
+      identity,
+      body_html,
+      options: { accent_color: metadata.renderer?.accent_color },
+    });
+    const pdf = await htmlToPdf(html);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${id}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    if (e.status === 400) return res.status(400).json({ error: e.message });
+    console.warn(`render/${req.params.id} failed:`, e.message);
+    res.status(503).json({ error: e.message });
+  }
+});
+
 const port = process.env.PORT || 8000;
 app.listen(port, () => console.log(`API server on :${port}`));

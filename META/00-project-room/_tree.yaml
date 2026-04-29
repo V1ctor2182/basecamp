@@ -242,7 +242,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/03-cv-engine/03-in-ui-editor"
       type: feature
-      lifecycle: planning
+      lifecycle: in_progress
       owner: frontend
       parent: "00-project-room/04-career-system/03-cv-engine"
       children: []
