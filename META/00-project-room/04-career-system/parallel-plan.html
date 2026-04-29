@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Career System — Parallel Dispatch · 2026-04-29</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400..900,0..100&family=Newsreader:opsz,wght@6..72,400..600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({
+    startOnLoad: true,
+    securityLevel: "loose",
+    theme: "base",
+    fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+    themeVariables: {
+      background: "#ebe6dc",
+      primaryColor: "#ebe6dc",
+      primaryTextColor: "#0c0a08",
+      primaryBorderColor: "#0c0a08",
+      secondaryColor: "#dcd4c2",
+      tertiaryColor: "#f4efe5",
+      lineColor: "#0c0a08",
+      textColor: "#0c0a08",
+      mainBkg: "#ebe6dc",
+      nodeBorder: "#0c0a08",
+      clusterBkg: "#dcd4c2",
+      titleColor: "#0c0a08"
+    },
+    gantt: {
+      barHeight: 22,
+      barGap: 6,
+      topPadding: 56,
+      leftPadding: 220,
+      gridLineStartPadding: 40,
+      fontSize: 12,
+      sectionFontSize: 13,
+      numberSectionStyles: 5
+    },
+    flowchart: {
+      curve: "basis",
+      padding: 18
+    }
+  });
+</script>
+
+<style>
+  :root {
+    --paper: #ebe6dc;
+    --paper-dim: #dcd4c2;
+    --paper-warm: #f4efe5;
+    --ink: #0c0a08;
+    --ink-soft: #2a2520;
+    --muted: #6b6356;
+    --rule: #0c0a08;
+    --rule-thin: rgba(12, 10, 8, 0.18);
+    --vermilion: #bf3a06;
+    --olive: #2d4a1f;
+    --cobalt: #1a3a5c;
+    --amber: #b07404;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { background: var(--paper); }
+
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: "Newsreader", Georgia, "Iowan Old Style", serif;
+    font-feature-settings: "kern", "liga", "onum";
+    font-variation-settings: "opsz" 16;
+    line-height: 1.55;
+    font-size: 16px;
+    background-image:
+      radial-gradient(circle at 12% 8%, rgba(12,10,8,0.022) 0, transparent 28%),
+      radial-gradient(circle at 88% 92%, rgba(12,10,8,0.025) 0, transparent 30%);
+  }
+
+  /* Subtle paper grain via SVG noise */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.45;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.05 0 0 0 0 0.04 0 0 0 0 0.03 0 0 0 0.05 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 56px 56px 96px;
+  }
+
+  /* ─────────  MASTHEAD  ───────── */
+  .masthead {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: end;
+    gap: 24px;
+    padding-bottom: 18px;
+    border-bottom: 2px solid var(--rule);
+  }
+  .masthead .left {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .masthead .left strong { color: var(--ink); font-weight: 600; }
+  .masthead h1 {
+    font-family: "Fraunces", Georgia, serif;
+    font-variation-settings: "opsz" 144, "SOFT" 30, "wght" 600;
+    font-size: clamp(40px, 6vw, 68px);
+    line-height: 0.95;
+    letter-spacing: -0.025em;
+    margin: 0;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .masthead .right {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: right;
+    line-height: 1.6;
+  }
+  .masthead .right .issue {
+    color: var(--vermilion);
+    font-weight: 600;
+  }
+  .subhead {
+    margin: 14px 0 0;
+    padding-top: 10px;
+    border-top: 0.5px solid var(--rule-thin);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: "Newsreader", serif;
+    font-style: italic;
+    color: var(--ink-soft);
+    font-size: 18px;
+    font-variation-settings: "opsz" 36;
+  }
+  .subhead .tag {
+    font-family: "JetBrains Mono", monospace;
+    font-style: normal;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ─────────  TICKER (status metrics)  ───────── */
+  .ticker {
+    margin: 36px 0 48px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+  .ticker .cell {
+    padding: 22px 24px;
+    border-right: 0.5px solid var(--rule-thin);
+    position: relative;
+  }
+  .ticker .cell:last-child { border-right: none; }
+  .ticker .cell .label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .ticker .cell .value {
+    font-family: "Fraunces", serif;
+    font-variation-settings: "opsz" 144, "wght" 500, "SOFT" 30;
+    font-size: 38px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .ticker .cell .value .accent { color: var(--vermilion); }
+  .ticker .cell .value .muted-num { color: var(--muted); font-size: 24px; }
+  .ticker .cell .sub {
+    margin-top: 8px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+  }
+  .ticker .cell .pulse {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    background: var(--vermilion);
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(191, 58, 6, 0.45); }
+    50% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(191, 58, 6, 0); }
+  }
+
+  /* ─────────  SECTION  ───────── */
+  .section { margin: 64px 0 0; }
+  .section-head {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 18px;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+  .section-num {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .section-title {
+    font-family: "Fraunces", serif;
+    font-variation-settings: "opsz" 72, "wght" 500, "SOFT" 30;
+    font-size: 28px;
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+  .section-rule {
+    height: 1px;
+    background: var(--rule);
+  }
+  .section-meta {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ─────────  TABLE  ───────── */
+  .spec-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14.5px;
+  }
+  .spec-table thead th {
+    text-align: left;
+    padding: 10px 16px 10px 0;
+    border-bottom: 1px solid var(--rule);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .spec-table tbody td {
+    padding: 14px 16px 14px 0;
+    border-bottom: 0.5px solid var(--rule-thin);
+    vertical-align: top;
+  }
+  .spec-table tbody tr:last-child td { border-bottom: none; }
+  .spec-table .room-id {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    letter-spacing: -0.01em;
+  }
+  .spec-table .room-id .num {
+    color: var(--muted);
+  }
+  .owner {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .who {
+    font-family: "Newsreader", serif;
+    font-style: italic;
+    font-variation-settings: "opsz" 18;
+  }
+  .who.primary {
+    color: var(--cobalt);
+    font-weight: 600;
+    font-style: normal;
+    font-family: "Fraunces", serif;
+    font-variation-settings: "opsz" 36, "wght" 600;
+  }
+  .who.primary::before {
+    content: "▶ ";
+    color: var(--cobalt);
+    font-size: 0.85em;
+  }
+  .note {
+    font-family: "Newsreader", serif;
+    color: var(--ink-soft);
+    font-size: 14.5px;
+  }
+
+  /* ─────────  MERMAID FRAMES  ───────── */
+  .frame {
+    margin-top: 8px;
+    padding: 28px 28px 18px;
+    background: var(--paper-warm);
+    border: 1px solid var(--rule);
+    position: relative;
+  }
+  .frame::before, .frame::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+  }
+  .frame::before { top: -8px; left: -8px; }
+  .frame::after { bottom: -8px; right: -8px; }
+  .frame-caption {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 0.5px solid var(--rule-thin);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .mermaid {
+    background: transparent;
+    text-align: center;
+    overflow-x: auto;
+  }
+  .mermaid svg { max-width: 100%; height: auto; }
+
+  /* ─────────  ORDERS (recommendations)  ───────── */
+  .orders {
+    display: grid;
+    gap: 0;
+    margin-top: 8px;
+  }
+  .order {
+    display: grid;
+    grid-template-columns: 90px 1fr auto;
+    gap: 28px;
+    padding: 24px 0;
+    border-bottom: 0.5px solid var(--rule-thin);
+    align-items: baseline;
+  }
+  .order:first-child { padding-top: 8px; }
+  .order:last-child { border-bottom: none; }
+  .order-num {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .order-num strong {
+    display: block;
+    font-family: "Fraunces", serif;
+    font-variation-settings: "opsz" 144, "wght" 600;
+    font-size: 32px;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    margin-top: 2px;
+    line-height: 1;
+  }
+  .order-body .order-headline {
+    font-family: "Fraunces", serif;
+    font-variation-settings: "opsz" 36, "wght" 500, "SOFT" 50;
+    font-size: 22px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+  }
+  .order-body .order-headline code {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.78em;
+    background: var(--paper-dim);
+    padding: 2px 8px;
+    border-radius: 0;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .order-body .order-detail {
+    font-family: "Newsreader", serif;
+    font-style: italic;
+    font-variation-settings: "opsz" 18;
+    color: var(--ink-soft);
+    font-size: 15px;
+  }
+  .order-body .order-detail code {
+    font-style: normal;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12.5px;
+    background: var(--paper-dim);
+    padding: 1px 6px;
+  }
+  .order-tag {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+  .order-tag.go { background: var(--olive); color: var(--paper-warm); }
+  .order-tag.next { background: var(--cobalt); color: var(--paper-warm); }
+  .order-tag.hold { background: var(--paper-dim); color: var(--ink); border: 1px solid var(--rule); }
+
+  /* ─────────  TERMINAL (onboarding)  ───────── */
+  .terminal {
+    background: var(--ink);
+    color: var(--paper-warm);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    padding: 22px 26px;
+    margin-top: 14px;
+    position: relative;
+  }
+  .terminal-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 18px;
+    background: var(--ink-soft);
+    color: var(--paper-dim);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    border-bottom: 0.5px solid rgba(255,255,255,0.08);
+  }
+  .terminal-bar .dots { display: flex; gap: 6px; }
+  .terminal-bar .dots span {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: rgba(255,255,255,0.18);
+  }
+  .terminal-block { background: var(--ink); }
+  .terminal-block pre { margin: 0; padding: 22px 26px; }
+  .terminal .prompt { color: var(--vermilion); }
+  .terminal .cmd { color: var(--paper-warm); }
+  .terminal .comment { color: rgba(255,255,255,0.4); font-style: italic; }
+  .terminal .first-cmd {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 0.5px solid rgba(255,255,255,0.08);
+  }
+  .terminal .first-cmd .label {
+    color: rgba(255,255,255,0.45);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 6px;
+  }
+  .terminal .first-cmd .cmd { color: #ffd9b8; }
+
+  /* ─────────  COLOPHON  ───────── */
+  .colophon {
+    margin-top: 80px;
+    padding-top: 24px;
+    border-top: 2px solid var(--rule);
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 24px;
+    align-items: end;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .colophon .center {
+    font-family: "Fraunces", serif;
+    font-variation-settings: "opsz" 36, "wght" 400, "SOFT" 80;
+    font-style: italic;
+    font-size: 14px;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--ink-soft);
+  }
+  .colophon .right { text-align: right; }
+
+  /* ─────────  ENTRY ANIMATION  ───────── */
+  .reveal { opacity: 0; transform: translateY(8px); animation: reveal 0.7s ease-out forwards; }
+  @keyframes reveal {
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .d1 { animation-delay: 0.05s; }
+  .d2 { animation-delay: 0.18s; }
+  .d3 { animation-delay: 0.34s; }
+  .d4 { animation-delay: 0.5s; }
+  .d5 { animation-delay: 0.66s; }
+  .d6 { animation-delay: 0.82s; }
+
+  /* ─────────  RESPONSIVE  ───────── */
+  @media (max-width: 880px) {
+    .page { padding: 32px 24px 64px; }
+    .masthead { grid-template-columns: 1fr; }
+    .masthead .right { text-align: left; }
+    .masthead h1 { text-align: left; white-space: normal; }
+    .ticker { grid-template-columns: repeat(2, 1fr); }
+    .ticker .cell:nth-child(2n) { border-right: none; }
+    .ticker .cell:nth-child(-n+2) { border-bottom: 0.5px solid var(--rule-thin); }
+    .order { grid-template-columns: auto 1fr; gap: 16px; }
+    .order-tag { grid-column: 1 / -1; justify-self: start; margin-top: 4px; }
+    .colophon { grid-template-columns: 1fr; text-align: left; }
+    .colophon .right { text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- MASTHEAD -->
+  <header class="masthead reveal d1">
+    <div class="left">
+      Career&nbsp;System<br/>
+      <strong>Parallel Dispatch</strong>
+    </div>
+    <h1>Career System</h1>
+    <div class="right">
+      <span class="issue">Issue Nº 04 · 29 · 26</span><br/>
+      Two-engineer cadence
+    </div>
+  </header>
+  <div class="subhead reveal d1">
+    A short briefing for synchronizing two engineers across the career-system epic — what's shipped, what's live, where the next hand-offs land.
+    <span class="tag">Repo · basecamp</span>
+  </div>
+
+  <!-- TICKER -->
+  <section class="ticker reveal d2">
+    <div class="cell">
+      <div class="label">Active Now · Victor</div>
+      <div class="value">04-auto-select</div>
+      <div class="sub"><span class="pulse"></span>milestone m2 · 50% · unblocked</div>
+    </div>
+    <div class="cell">
+      <div class="label">Throughput</div>
+      <div class="value">10 <span class="muted-num">/ 32</span></div>
+      <div class="sub">features shipped · 31% complete</div>
+    </div>
+    <div class="cell">
+      <div class="label">Ready for Colleague</div>
+      <div class="value">02-google-docs-sync</div>
+      <div class="sub">backend · zero conflict · pickup now</div>
+    </div>
+    <div class="cell">
+      <div class="label">Critical Path</div>
+      <div class="value"><span class="accent">tailor-engine</span></div>
+      <div class="sub">awaits evaluator stage-b · downstream of both tracks</div>
+    </div>
+  </section>
+
+  <!-- SECTION 01 — PARALLEL ROOMS -->
+  <section class="section reveal d3">
+    <div class="section-head">
+      <span class="section-num">§ 01</span>
+      <h2 class="section-title">Rooms with No Blockers</h2>
+      <span class="section-meta">Pickup-ready · 04 rooms</span>
+    </div>
+    <table class="spec-table">
+      <thead>
+        <tr>
+          <th style="width: 42%;">Room</th>
+          <th style="width: 12%;">Owner</th>
+          <th style="width: 18%;">Assignment</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="room-id"><span class="num">03/</span>cv-engine/02-google-docs-sync</td>
+          <td class="owner">backend</td>
+          <td class="who primary">Colleague</td>
+          <td class="note">Only feature both ready and free of overlap with current work.</td>
+        </tr>
+        <tr>
+          <td class="room-id"><span class="num">06/</span>evaluator/01-stage-a-haiku</td>
+          <td class="owner">backend</td>
+          <td class="who">Colleague · backup</td>
+          <td class="note">Planning state — start with <code>plan-milestones</code> first.</td>
+        </tr>
+        <tr>
+          <td class="room-id"><span class="num">06/</span>evaluator/02-stage-b-sonnet</td>
+          <td class="owner">backend</td>
+          <td class="who">Colleague · backup</td>
+          <td class="note">Unlocks the downstream <code>tailor-engine</code> — high leverage.</td>
+        </tr>
+        <tr>
+          <td class="room-id"><span class="num">05/</span>finder/02-job-schema-normalize</td>
+          <td class="owner">backend</td>
+          <td class="who">Colleague · backup</td>
+          <td class="note">Finder upstream; standalone, safe to start cold.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- SECTION 02 — TIMELINE -->
+  <section class="section reveal d4">
+    <div class="section-head">
+      <span class="section-num">§ 02</span>
+      <h2 class="section-title">Timeline · Two-Lane Cadence</h2>
+      <span class="section-meta">Now → 2 sprints</span>
+    </div>
+    <div class="frame">
+      <div class="frame-caption">
+        <span>Fig. 01 — Gantt projection</span>
+        <span>Lanes: Done · Victor · Colleague · Backlog</span>
+      </div>
+      <div class="mermaid">
+gantt
+    title Career System — Now to Next Two Sprints
+    dateFormat YYYY-MM-DD
+    axisFormat %m-%d
+
+    section Done
+    01-foundation (3)             :done, f1, 2026-04-15, 5d
+    02-profile (4)                :done, f2, 2026-04-18, 6d
+    03-cv-engine/01-resume-index  :done, f3, 2026-04-23, 4d
+    03-cv-engine/03-in-ui-editor  :done, f4, 2026-04-25, 4d
+    04-renderer (2)               :done, f5, 2026-04-26, 3d
+
+    section Victor
+    cv-engine/04-auto-select m1     :done,    v1, 2026-04-28, 1d
+    cv-engine/04-auto-select m2 UI  :active,  v2, 2026-04-29, 2d
+    cv-engine/04-auto-select m3+    :         v3, after v2, 2d
+    cv-engine/05-tailor-engine      :crit,    v4, after eb, 5d
+
+    section Colleague
+    cv-engine/02-google-docs-sync   :active,  c1, 2026-04-29, 4d
+    evaluator/01-stage-a-haiku      :         c2, after c1, 3d
+    evaluator/02-stage-b-sonnet     :         eb, after c2, 4d
+
+    section Backlog
+    finder (5 rooms)                :         bl1, after eb, 10d
+    applier (7 rooms)               :         bl2, after bl1, 14d
+    human-gate-tracker (4)          :         bl3, after bl1, 7d
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 03 — DEPENDENCY GRAPH -->
+  <section class="section reveal d5">
+    <div class="section-head">
+      <span class="section-num">§ 03</span>
+      <h2 class="section-title">Dependency Lattice</h2>
+      <span class="section-meta">Critical path highlighted</span>
+    </div>
+    <div class="frame">
+      <div class="frame-caption">
+        <span>Fig. 02 — Room dependencies</span>
+        <span>Solid = required · Dashed = optional</span>
+      </div>
+      <div class="mermaid">
+graph LR
+    A["01-resume-index<br/>shipped"] --> B["03-in-ui-editor<br/>shipped"]
+    A --> C["04-auto-select<br/>VICTOR"]
+    A --> D["02-google-docs-sync<br/>COLLEAGUE"]
+    C --> E["05-tailor-engine"]
+    F["06-evaluator/02-stage-b<br/>COLLEAGUE"] --> E
+    G["06-evaluator/01-stage-a<br/>COLLEAGUE"] --> F
+    D -.optional.-> E
+    E --> H["07-applier"]
+    F --> I["05-finder"]
+    I --> H
+
+    classDef done fill:#dcd4c2,stroke:#2d4a1f,stroke-width:1.5px,color:#0c0a08;
+    classDef victor fill:#fbe5d6,stroke:#bf3a06,stroke-width:2px,color:#0c0a08;
+    classDef colleague fill:#dde6f0,stroke:#1a3a5c,stroke-width:1.5px,color:#0c0a08;
+    classDef downstream fill:#f4efe5,stroke:#6b6356,stroke-width:1px,stroke-dasharray:3 3,color:#2a2520;
+    classDef pending fill:#ebe6dc,stroke:#0c0a08,stroke-width:1px,color:#0c0a08;
+
+    class A,B done;
+    class C victor;
+    class D,F,G colleague;
+    class E pending;
+    class H,I downstream;
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 04 — ORDERS -->
+  <section class="section reveal d6">
+    <div class="section-head">
+      <span class="section-num">§ 04</span>
+      <h2 class="section-title">Orders of Operation</h2>
+      <span class="section-meta">For Colleague, ranked</span>
+    </div>
+    <div class="orders">
+      <div class="order">
+        <div class="order-num">Order<strong>01</strong></div>
+        <div class="order-body">
+          <p class="order-headline">Pick up <code>03-cv-engine/02-google-docs-sync</code> first.</p>
+          <p class="order-detail">Standalone, in the same sub-epic as <code>resume-index</code>, so context inherits cleanly. No conflict with Victor's work in flight.</p>
+        </div>
+        <div class="order-tag go">Start now</div>
+      </div>
+
+      <div class="order">
+        <div class="order-num">Order<strong>02</strong></div>
+        <div class="order-body">
+          <p class="order-headline">Then <code>06-evaluator/01-stage-a-haiku</code> → <code>02-stage-b-sonnet</code>.</p>
+          <p class="order-detail">Highest-leverage sequence — unblocks Victor's <code>05-tailor-engine</code>, the bottleneck on the critical path.</p>
+        </div>
+        <div class="order-tag next">Up next</div>
+      </div>
+
+      <div class="order">
+        <div class="order-num">Order<strong>03</strong></div>
+        <div class="order-body">
+          <p class="order-headline">Do not touch <code>05-tailor-engine</code>, finder, or applier.</p>
+          <p class="order-detail">Tailor-engine is gated on evaluator stage-b. Finder and applier are further downstream and not yet specced for parallel execution.</p>
+        </div>
+        <div class="order-tag hold">Hold</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 05 — ONBOARDING -->
+  <section class="section reveal d6">
+    <div class="section-head">
+      <span class="section-num">§ 05</span>
+      <h2 class="section-title">Colleague Onboarding</h2>
+      <span class="section-meta">~30 seconds · zero config</span>
+    </div>
+
+    <div class="terminal-bar">
+      <span class="dots"><span></span><span></span><span></span></span>
+      <span>zsh · ~/work</span>
+      <span>setup</span>
+    </div>
+    <div class="terminal-block">
+      <pre><span class="prompt">$</span> <span class="cmd">git clone git@github.com:V1ctor2182/basecamp.git</span>
+<span class="prompt">$</span> <span class="cmd">cd basecamp</span>
+<span class="prompt">$</span> <span class="cmd">bash claude-skills/setup.sh</span>
+<span class="comment"># symlinks .claude/skills → ../claude-skills</span>
+<span class="comment"># restart Claude Code to pick up the skills</span>
+
+<div class="first-cmd"><span class="label">First instruction to Claude</span><span class="prompt">›</span> <span class="cmd">dev 02-google-docs-sync m1</span></div></pre>
+    </div>
+  </section>
+
+  <!-- COLOPHON -->
+  <footer class="colophon">
+    <div class="left">
+      Set in Fraunces &amp; Newsreader<br/>
+      Data · JetBrains Mono
+    </div>
+    <div class="center">— end of dispatch —</div>
+    <div class="right">
+      Generated 2026-04-29<br/>
+      Repo · basecamp / main
+    </div>
+  </footer>
+
+</div>
+
+</body>
+</html>
