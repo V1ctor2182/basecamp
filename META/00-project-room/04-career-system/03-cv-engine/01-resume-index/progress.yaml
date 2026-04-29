@@ -12,7 +12,7 @@ milestones:
     complexity_flags:
       - "design_decisions"
     open_questions: []
-    commit_hash: null
+    commit_hash: "9185a9d"
     description: |
       多 base resume 数据层。Zod schemas + atomic CRUD + path-traversal 防御。
       Frontend 在 m2/m3 接入。
@@ -350,8 +350,8 @@ milestones:
         - 03-cv-engine/05-tailor-engine 读 metadata.emphasize / renderer 调风格
 
 commits:
-  - hash: "TBD"
-    date: "2026-04-28"
+  - hash: "9185a9d"
+    date: "2026-04-29"
     message: "[04-career-system/03-cv-engine/01-resume-index] m1: Resume Index backend — Zod schemas + 5 endpoints + slug guard + atomic default flip"
     files_changed: 3
     specs_affected:

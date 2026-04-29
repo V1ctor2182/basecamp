@@ -123,7 +123,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit 9185a9d"
 relations:
   - "implements intent-resume-index-001 (m1/3)"
   - "first 03-cv-engine ROOM milestone — sets data layer for 02/03/04/05 features"
