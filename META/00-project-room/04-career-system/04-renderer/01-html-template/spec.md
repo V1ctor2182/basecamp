@@ -17,7 +17,7 @@ career-system 的默认 PDF 渲染器。Pipeline: 调 `markdownToTemplateHtml()`
 **2 milestones 完成**（2026-04-28）— ~353 lines net + 真实 PDF 输出已可用:
 
 - ✅ **m1-playwright-html-to-pdf** (`289cc52`, 122 lines) — Playwright 基础设施: lazy singleton browser + 30s idle close + `htmlToPdf(html, options)` Promise<Buffer> + SIGTERM/SIGINT cleanup + `_test-html-to-pdf` smoke endpoint
-- ✅ **m2-cv-template-render** (TBD, 231 lines, ROOM COMPLETE) — `cvTemplate.mjs` (`composeCvHtml` + identity-driven header + ~120 行 inline CSS) + `POST /api/career/render/pdf` (markdown → identity header → CV HTML → PDF stream)
+- ✅ **m2-cv-template-render** (`14df005`, 231 lines, ROOM COMPLETE) — `cvTemplate.mjs` (`composeCvHtml` + identity-driven header + ~120 行 inline CSS) + `POST /api/career/render/pdf` (markdown → identity header → CV HTML → PDF stream)
 
 ## Backend API
 

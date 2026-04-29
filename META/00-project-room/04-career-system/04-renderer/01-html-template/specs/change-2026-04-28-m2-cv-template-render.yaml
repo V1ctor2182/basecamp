@@ -114,7 +114,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit 14df005"
 relations:
   - "implements intent-html-template-001 (m2/2, ROOM COMPLETE)"
   - "depends_on change-2026-04-28-m1-playwright-html-to-pdf"

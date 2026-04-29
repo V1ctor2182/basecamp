@@ -123,7 +123,7 @@ milestones:
     complexity_flags:
       - "design_decisions"
     open_questions: []
-    commit_hash: null
+    commit_hash: "14df005"
     description: |
       把 m1 的 htmlToPdf 和 02-markdown-to-template 的 markdownToTemplateHtml +
       identity.yml 串起来，产出真实 CV PDF。CSS 模板是本 milestone 的重点 —
@@ -229,7 +229,7 @@ commits:
       - "change-2026-04-28-m1-playwright-html-to-pdf (created)"
     milestones_affected:
       - "m1-playwright-html-to-pdf (→ completed)"
-  - hash: "TBD"
+  - hash: "14df005"
     date: "2026-04-28"
     message: "[04-career-system/04-renderer/01-html-template] m2: CV template + identity header + /api/career/render/pdf endpoint (ROOM COMPLETE = 04-renderer sub-epic done)"
     files_changed: 6
