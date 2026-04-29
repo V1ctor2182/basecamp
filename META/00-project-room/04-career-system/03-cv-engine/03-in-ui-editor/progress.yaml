@@ -1,5 +1,302 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-content-versions-render-backend"
+    name: "Backend: GET/PUT /:id/content + versions snapshots + GET /:id/render PDF endpoint"
+    status: completed
+    actual_lines: 185
+    actual_files:
+      - "server.mjs"
+    estimated_files:
+      - "server.mjs"
+    estimated_lines: 180
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "7022263"
+    description: |
+      Resume base.md content endpoints + versions snapshot management +
+      由 server 直接 render PDF (作 iframe src 的 GET 端点)。
+
+      实现 (server.mjs +~180 lines):
+        - GET /api/career/resumes/:id/content
+          - validateResumeId / resolveResumeDir
+          - read base.md (ENOENT → return 空字符串 with default skeleton 兜底)
+          - read versions/ dir → list { filename, ts, size } (newest first)
+          - return { content, versions: [...] }
+
+        - PUT /api/career/resumes/:id/content body { content }
+          - typeof check + length cap 500_000
+          - existence check via readResumeIndex
+          - PRE-WRITE snapshot: 若当前 base.md 有内容, copy 到
+            versions/${ISO8601}.md (atomic write — 用同 atomicWriteFile)
+          - 然后 atomic write 新 content 到 base.md
+          - Versions cleanup: 读 versions/ 列表 sort by mtime → 保留最近 50,
+            其余 fs.rm (FIFO eviction)
+          - return { content, snapshot: latest_filename | null }
+
+        - GET /api/career/resumes/:id/versions/:filename
+          - validate id + filename (slug + .md suffix; 防 traversal via
+            path.basename + 长度限制)
+          - 读 versions/${filename} → return { content, ts, size }
+          - 404 if not found
+
+        - GET /api/career/resumes/:id/render
+          - validateResumeId
+          - readResumeIndex 确认存在 → 404
+          - readIdentity ?? {}
+          - readResumeMetadata(id) (with Zod defaults)
+          - read base.md (ENOENT → DEFAULT_BASE_MD fallback)
+          - body_html = markdownToTemplateHtml(base.md content)
+          - options = { accent_color: metadata.renderer.accent_color }
+          - html = composeCvHtml({ identity, body_html, options })
+          - pdf = await htmlToPdf(html)
+          - res.setHeader('Content-Type', 'application/pdf')
+          - res.setHeader('Content-Disposition', `inline; filename="${id}.pdf"`)
+          - res.send(pdf)
+          - 503 on browser launch fail (复用 m1-html-template error pattern)
+
+        - 复用现有: validateResumeId / resolveResumeDir /
+          atomicWriteFile / readIdentity / readResumeMetadata /
+          markdownToTemplateHtml / composeCvHtml / htmlToPdf
+
+      验收 (smoke 8 cases):
+        1. POST resume id=test source=manual → GET /test/content →
+           { content: H2 skeleton, versions: [] } ✓ (m1-resume-index 创建
+           的 base.md 默认 skeleton 在)
+        2. PUT /test/content { content: "## hi\nedit 1" } → 200 ✓
+           (snapshot 写入: versions/{ISO}.md = original skeleton)
+        3. GET /test/content → versions 1 entry; ts 有效 ✓
+        4. PUT /test/content { content: "## hi\nedit 2" } → snapshot edit 1 ✓
+        5. GET /test/versions/{filename} → { content: "edit 1", ts, size } ✓
+        6. GET /test/render → application/pdf, %PDF magic, length > 5KB ✓
+           (Content-Disposition: inline; filename="test.pdf")
+        7. PUT /test/content with 600KB → 413 PayloadTooLargeError (256KB
+           career cap) ✓
+        8. PUT for nonexistent id → 404 ✓
+
+      Locked design (long-term-best):
+        - PRE-write snapshot: 修改前先存原文, 不会丢历史
+        - ISO8601 filename (replace : → -): lexically sortable + 人类可读
+          + URL safe
+        - 50 snapshots cap FIFO: ~years of edits; 防 versions/ 无限膨胀
+        - GET /render 直接从 disk 读 base.md: PDF 反映 ground truth
+          (避免 client-blob 状态管理); iframe src= 一行就够
+        - 默认 accent_color from metadata.renderer (per-resume 风格);
+          /api/career/render/pdf 仍接受 explicit options.accent_color override
+        - inline filename 用 ${id}.pdf: 浏览器 download 时有合理默认名
+
+      下游影响:
+        - m2 编辑器路由调 GET /content + PUT /content + iframe
+          src=/render?v=${ts}
+        - m3 versions UI 调 GET /versions/:filename
+        - 03-cv-engine/04-auto-select 后续选 base 后, 可用 /render 做 review
+          preview (no extra endpoint needed)
+        - 03-cv-engine/05-tailor-engine 同上
+
+  - id: "m2-resume-edit-page"
+    name: "Edit page route + CodeMirror + iframe PDF preview + Save + Drawer link"
+    status: completed
+    actual_lines: 335
+    actual_files:
+      - "src/career/settings/resumes/Edit.tsx"
+      - "src/career/settings/resumes/edit.css"
+      - "src/CareerApp.tsx"
+      - "src/career/settings/Resumes.tsx"
+    estimated_files:
+      - "src/career/settings/resumes/Edit.tsx"
+      - "src/career/settings/resumes/edit.css"
+      - "src/CareerApp.tsx"
+      - "src/career/settings/Resumes.tsx"
+    estimated_lines: 280
+    depends_on: ["m1-content-versions-render-backend"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "283cb55"
+    description: |
+      新路由 /career/settings/resumes/:id/edit — 全页 split-pane 编辑器。
+      Drawer 加 "Edit content" 按钮跳转。
+
+      文件结构:
+        src/career/settings/resumes/
+          Edit.tsx               (~210 行, 新建)
+          edit.css               (~50 行, 新建)
+
+      实现 src/career/settings/resumes/Edit.tsx:
+        - import CodeMirror from '@uiw/react-codemirror'
+        - import { markdown } from '@codemirror/lang-markdown'
+        - import { useParams, useNavigate } from 'react-router-dom'
+        - state: content / loaded / dirty / saving / savedAt / serverError /
+          pdfRefreshKey (number, bumped on save to bust iframe cache)
+        - useEffect(id) load:
+          - GET /api/career/resumes/:id/content
+          - setContent(data.content)
+          - 404 → setServerError "Resume not found"
+        - beforeunload 拦截 (dirty 时)
+        - save():
+          - PUT /api/career/resumes/:id/content { content }
+          - 200 → setDirty(false) + setSavedAt + setPdfRefreshKey(Date.now())
+          - error → setServerError
+        - Layout (.c-resume-edit-page):
+          - 顶部 toolbar (.c-resume-edit-toolbar):
+            - 左: "← Back to Resumes" (Link 或 navigate('..'))
+            - 中: title (current resume id, mono)
+            - 右: status + "Save" button (disabled !dirty || saving)
+          - 主体 split (.c-resume-edit-split, grid 1fr 1fr):
+            - 左 .c-resume-edit-pane-editor:
+              CodeMirror, theme=light, extensions=[markdown()],
+              basicSetup { lineNumbers, foldGutter, highlightActiveLine }
+            - 右 .c-resume-edit-pane-preview:
+              <iframe src={`/api/career/resumes/${id}/render?v=${pdfRefreshKey}`}
+                      title="PDF preview" />
+              + 顶部 "Refresh PDF" 按钮 (强制 setPdfRefreshKey(Date.now()) —
+                identity / metadata 改了之后无 save 也能重新 render)
+        - 错误 banner (顶部 toolbar 下) — 复用 .c-resumes-modal-error
+
+      新 CSS src/career/settings/resumes/edit.css:
+        .c-resume-edit-page (flex column, height 100%)
+        .c-resume-edit-toolbar (flex row, sticky top, padding, border-bottom)
+        .c-resume-edit-toolbar h2 (mono, 14pt)
+        .c-resume-edit-status / .dirty / .saved (黄/绿)
+        .c-resume-edit-split (grid 1fr 1fr, gap 12, height calc 100vh - 180px)
+        .c-resume-edit-pane-editor (border + overflow hidden)
+        .c-resume-edit-pane-preview (border + flex column)
+        .c-resume-edit-pane-preview iframe (flex 1, border 0)
+        .c-resume-edit-pane-preview-header (padding + Refresh button right)
+        @media (max-width: 900px) → grid-template-columns: 1fr (单列)
+
+      路由 (src/CareerApp.tsx):
+        Edit 全页应该 NOT 在 SettingsLayout 里 (不需要 sidebar). 当前结构:
+          <Route path="settings" element={<SettingsLayout />}>
+            <Route path="resumes" element={<Resumes />} />
+            ...
+          </Route>
+        改为:
+          <Route path="settings" element={<SettingsLayout />}>
+            <Route path="resumes" element={<Resumes />} />
+            ... (其他 settings sub)
+          </Route>
+          <Route path="settings/resumes/:id/edit" element={<Edit />} />
+            (full-page, 不走 settings sidebar)
+
+      Drawer 改造 (src/career/settings/Resumes.tsx):
+        在 MetadataDrawer 顶部 (close button 旁) 加:
+        <Link to={`./${resumeId}/edit`} className="af-btn-add">
+          Edit content
+        </Link>
+        (相对路径; from /career/settings/resumes → /resumes/:id/edit)
+
+      验收 (build + 手工 UI smoke):
+        - tsc / vite build 0 errors
+        - /career/settings/resumes → 进 drawer → "Edit content" 按钮跳转
+        - /career/settings/resumes/:id/edit → 左 CodeMirror 加载 base.md
+        - 改字 → status "Unsaved" + Save 按钮亮
+        - Save → status "✓ Saved at HH:MM" + 右 iframe re-render (新 PDF)
+        - 关闭 tab (dirty) → beforeunload 提示
+        - "← Back to Resumes" → 回 gallery
+        - 网络断 → save 失败 → error banner
+
+      Locked design:
+        - Full-page route 不走 SettingsLayout: 编辑需要全屏宽度
+        - iframe ?v=ts cache bust: PDF render 是 GET, 服务端读 disk;
+          ts 改了 → 浏览器认为是新 URL → 重新 fetch → 新 PDF
+        - Refresh PDF button: identity/metadata 在另一个 tab 改了之后,
+          编辑页可以手动 refresh 看新视觉 (no auto-poll)
+        - 不在 drawer 里嵌编辑: 空间不够; full-page 是正确分层
+        - dirty + beforeunload 复用 m3 的 pattern
+        - Drawer 加 "Edit content" Link: 不破坏 m3 现有 metadata edit UX
+
+  - id: "m3-versions-restore-ui"
+    name: "Versions sidebar + Restore action (ROOM COMPLETE)"
+    status: completed
+    actual_lines: 215
+    actual_files:
+      - "src/career/settings/resumes/Edit.tsx"
+      - "src/career/settings/resumes/edit.css"
+    estimated_files:
+      - "src/career/settings/resumes/Edit.tsx"
+      - "src/career/settings/resumes/edit.css"
+    estimated_lines: 150
+    depends_on: ["m2-resume-edit-page"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "e62eec3"
+    description: |
+      Edit page toolbar 加 Versions dropdown — list of snapshots,
+      点 entry → 替换编辑器 content (sets dirty), 用户确认后 Save 创建新
+      snapshot。
+
+      实现 (Edit.tsx +~120 lines):
+        - state 加: versions: VersionEntry[] / showVersions: boolean
+        - VersionEntry type = { filename, ts, size }
+        - load 时 GET /content 返回的 versions 数组就够; 不必另外 GET
+          /versions list
+        - 顶部 toolbar 加 Versions button: opens dropdown panel
+        - Dropdown panel (.c-resume-versions-panel) 显示:
+          - "Versions ({count})" header
+          - 每行: 时间戳 (toLocaleString) + size (KB) + button "Load"
+          - button click:
+            1. 若 current dirty → confirm "Discard unsaved changes?"
+            2. fetch GET /versions/:filename
+            3. setContent(versionContent) + setDirty(true)
+               (loaded but not yet saved — 表示需要 Save 才生效)
+            4. Toast 提示 "Loaded version from {ts}. Click Save to commit."
+        - 关闭 dropdown 通过 click outside / X / Escape
+        - 不直接 "restore-then-save" 一步: 给用户 review 机会
+
+      新 CSS (+~30 行):
+        - .c-resume-versions-button (toolbar button)
+        - .c-resume-versions-panel (popover, absolute, scrollable)
+        - .c-resume-versions-row (flex row, padding, hover)
+        - .c-resume-versions-empty (居中灰)
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml 同步
+        - spec.md ROOM-COMPLETE rewrite (3 milestone overview + Backend API +
+          UI structure + 下游 contracts)
+        - 03-cv-engine sub-epic: 20% → ~40% (2/5 features done)
+
+      验收:
+        - 编辑 + Save 几次 → versions 累积 (3-5 条)
+        - 点 Versions button → panel 显示
+        - 点 "Load" → editor content 替换 + status "Unsaved"
+        - 不 Save → 关闭 → beforeunload 拦截
+        - Save → versions list 多一条 (旧的当前 + 即将 load 的也成 snapshot)
+
+      Locked design:
+        - 不直接 restore-then-save: 给用户 review 机会, 防误操作
+        - 用 GET /content 返回的 versions 列表: 不重复请求
+        - dropdown 不是 modal: 不打断编辑节奏
+
+commits:
+  - hash: "7022263"
+    date: "2026-04-29"
+    message: "[04-career-system/03-cv-engine/03-in-ui-editor] m1: Resume editor backend — content GET/PUT + versions snapshots (FIFO 50) + render PDF endpoint"
+    files_changed: 3
+    specs_affected:
+      - "change-2026-04-29-m1-content-versions-render-backend (created)"
+    milestones_affected:
+      - "m1-content-versions-render-backend (→ completed)"
+  - hash: "283cb55"
+    date: "2026-04-29"
+    message: "[04-career-system/03-cv-engine/03-in-ui-editor] m2: Full-page resume edit route — CodeMirror + iframe PDF + Save + Drawer link"
+    files_changed: 5
+    specs_affected:
+      - "change-2026-04-29-m2-resume-edit-page (created)"
+    milestones_affected:
+      - "m2-resume-edit-page (→ completed)"
+  - hash: "e62eec3"
+    date: "2026-04-29"
+    message: "[04-career-system/03-cv-engine/03-in-ui-editor] m3: Versions popover + Restore (load → review → Save) (ROOM COMPLETE)"
+    files_changed: 6
+    specs_affected:
+      - "change-2026-04-29-m3-versions-restore-ui (created)"
+      - "room.yaml (lifecycle: in_progress → active)"
+      - "_tree.yaml (lifecycle: in_progress → active)"
+    milestones_affected:
+      - "m3-versions-restore-ui (→ completed, ROOM COMPLETE)"
+
+current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 100
+status_note: "🎉 ROOM 03-in-ui-editor COMPLETE (3/3, 735 行 net). Sprint 3 视觉里程碑达成 + versions safety net. 下一个: 04-auto-select / 02-google-docs-sync / 05-tailor-engine."
+last_updated: "2026-04-29"

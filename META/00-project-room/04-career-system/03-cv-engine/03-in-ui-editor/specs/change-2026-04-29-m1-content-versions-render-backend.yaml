@@ -1,0 +1,132 @@
+spec_id: "change-2026-04-29-m1-content-versions-render-backend"
+type: change
+state: active
+intent:
+  summary: "m1: Resume editor backend — content GET/PUT + versions snapshots (FIFO 50) + GET /:id/render PDF endpoint"
+  detail: |
+    Backend pipeline for the in-UI resume editor. Adds 4 endpoints sharing
+    the same path traversal defense + atomic write + Zod-defaulted metadata
+    pattern as m1-resume-index. Render endpoint reads disk so the iframe
+    src= simple-GET reflects ground truth without client blob URL state.
+
+    Files modified:
+      - server.mjs (+185 lines):
+        - Constants:
+          VERSION_FILENAME_RE = /^[0-9TZ\-:.]{10,40}\.md$/i
+          VERSIONS_CAP = 50
+
+        - Helpers:
+          - isoSnapshotFilename(): ISO 8601 with `:` → `-` (lex-sortable +
+            filename-safe; URL-safe via path.basename + regex on read)
+          - listResumeVersions(id): readdir versions/ → filter by regex →
+            stat each → return [{filename, ts, size}] newest-first
+            (ENOENT → [])
+          - pruneResumeVersions(id): if entries > VERSIONS_CAP, FIFO-evict
+            oldest (entries newest-first → slice(VERSIONS_CAP) is oldest)
+          - readResumeContent(id): read base.md, ENOENT → DEFAULT_BASE_MD
+            (m1-resume-index 已建)
+
+        - GET /api/career/resumes/:id/content:
+          - validateResumeId + readResumeIndex existence check
+          - parallel readResumeContent + listResumeVersions
+          - return { content, versions: [...] }
+
+        - PUT /api/career/resumes/:id/content:
+          - typeof check + 500KB cap (256KB express cap on /api/career/* is
+            real first-line; 500KB second-line defense)
+          - existence check via readResumeIndex
+          - mkdir versions/ (recursive, idempotent)
+          - PRE-WRITE snapshot: read current base.md, if non-empty → atomic
+            write to versions/${ISO}.md
+          - atomic write new content to base.md
+          - pruneResumeVersions(id) — FIFO evict beyond 50
+          - return { content, snapshot: latest_filename | null }
+
+        - GET /api/career/resumes/:id/versions/:filename:
+          - validateResumeId + path.basename(filename) + VERSION_FILENAME_RE
+            check (3 layers vs path traversal)
+          - read versions/${safe} + stat → { content, ts, size }
+          - 404 if not found / 400 if invalid filename
+
+        - GET /api/career/resumes/:id/render:
+          - validateResumeId + existence check
+          - parallel readIdentity + readResumeMetadata + readResumeContent
+          - body_html = markdownToTemplateHtml(content)
+          - composeCvHtml({ identity, body_html, options: {
+              accent_color: metadata.renderer?.accent_color
+            }})  ← per-resume default; /api/career/render/pdf 仍接受 explicit
+                   override, 这条 endpoint 简化为 by-id 形式
+          - htmlToPdf(html) → Content-Type: application/pdf +
+            Content-Disposition: inline; filename="${id}.pdf"
+          - 503 on browser launch fail (复用 m1-html-template error pattern)
+
+        - 复用现有: validateResumeId / resolveResumeDir / atomicWriteFile /
+          readIdentity / readResumeMetadata / markdownToTemplateHtml /
+          composeCvHtml / htmlToPdf / DEFAULT_BASE_MD / readResumeIndex
+
+    Verification (smoke 10/10 passed):
+      1. POST resume test-r → 201 ✓
+      2. GET /test-r/content → { content: DEFAULT_BASE_MD, versions: [] } ✓
+      3. PUT edit 1 → 200 + snapshot 'YYYY-MM-DDTHH-mm-ss.SSSZ.md' ✓
+      4. GET → versions has 1 entry (original skeleton, 321 B) ✓
+      5. PUT edit 2 → versions newest-first: edit1 (12 B) → skeleton (321 B) ✓
+      6. GET /test-r/versions/${old} → exact original skeleton ✓
+      7. GET /test-r/render → application/pdf %PDF v1.4 1page 57KB ✓
+      8. GET /unknown/content → 404 ✓
+      9. PUT 600KB → 413 (256KB express cap) ✓
+      10. GET /versions/..%2Fbase.md → 400 'invalid version filename' ✓
+
+    Locked design (long-term-best, plan-milestones):
+      - PRE-write snapshot before atomic write of new content: 即使后续
+        process crash, 历史 + new content 都保住其一 (atomic write 保证 base.md
+        要么是旧的要么是新的, 不会半写; pre-snapshot 保证旧的另存一份)
+      - ISO 8601 with `:` → `-`: lex-sortable + filename-safe + URL-safe
+        + 人类可读
+      - 50 FIFO cap: ~years of casual edits; bounded disk; 真正历史保留请
+        export markdown + commit (versions/ gitignored per m1-resume-index)
+      - 3-layer path traversal defence on /versions/:filename: id slug regex
+        + path.basename(filename) + VERSION_FILENAME_RE on filename
+      - GET /:id/render reads disk: PDF reflects ground truth; iframe src= 简单
+        GET; 不引入 client blob URL state management
+      - per-resume accent_color default from metadata.renderer: 03-in-ui-editor
+        m2 iframe 自然采用本 resume 的视觉风格, 不需要 explicit options
+      - 4 endpoints 都返 standard error shape: 复用前端现有 error banner
+
+    下游影响:
+      - m2 编辑器路由: GET /content + PUT /content + iframe src=/render?v=${ts}
+      - m3 versions UI: 用 GET /content 已返的 versions 列表 (newest first) +
+        点 entry 调 GET /versions/:filename 拿 content 加载到编辑器 (review
+        before save)
+      - 03-cv-engine/04-auto-select / 05-tailor-engine 后续也可调 /render
+        给用户预览 base / tailored 输出
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, backend, content, versions, pdf-render, fifo, path-traversal-safe]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit 7022263"
+relations:
+  - "implements intent-in-ui-editor-001 (m1/3)"
+  - "depends_on change-2026-04-29-m3-resume-metadata-editor (m1-resume-index ROOM COMPLETE)"
+  - "depends_on change-2026-04-28-m2-cv-template-render (composeCvHtml + htmlToPdf)"
+  - "depends_on change-2026-04-28-m1-markdown-to-template-html (markdownToTemplateHtml)"
+anchors:
+  - file: "server.mjs"
+    symbols:
+      - "VERSION_FILENAME_RE"
+      - "VERSIONS_CAP"
+      - "isoSnapshotFilename"
+      - "listResumeVersions"
+      - "pruneResumeVersions"
+      - "readResumeContent"
+      - "GET /api/career/resumes/:id/content"
+      - "PUT /api/career/resumes/:id/content"
+      - "GET /api/career/resumes/:id/versions/:filename"
+      - "GET /api/career/resumes/:id/render"
+created_at: "2026-04-29"
+updated_at: "2026-04-29"

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, FormEvent } from 'react'
-import { Plus, MoreVertical, Star, FileText, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Plus, MoreVertical, Star, FileText, X, Pencil } from 'lucide-react'
 import TagInput from '../TagInput'
 import { deepMerge } from '../utils'
 import './ats-form.css'
@@ -493,14 +494,24 @@ function MetadataDrawer({
 
   return (
     <div className="c-resume-drawer">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Metadata</h4>
-        <button
-          type="button"
-          className="c-resume-actions-btn"
-          onClick={onClose}
-          aria-label="Collapse"
-        ><X size={14} /></button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Link
+            to={`/career/settings/resumes/${resumeId}/edit`}
+            className="af-btn-add"
+            style={{ marginTop: 0, padding: '4px 10px', fontSize: 12, textDecoration: 'none' }}
+            title="Open the full-page editor for base.md content"
+          >
+            <Pencil size={12} /> Edit content
+          </Link>
+          <button
+            type="button"
+            className="c-resume-actions-btn"
+            onClick={onClose}
+            aria-label="Collapse"
+          ><X size={14} /></button>
+        </div>
       </div>
 
       <section className="af-section">
