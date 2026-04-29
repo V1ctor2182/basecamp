@@ -1,0 +1,146 @@
+spec_id: "change-2026-04-29-m3-versions-restore-ui"
+type: change
+state: active
+intent:
+  summary: "m3: Versions popover dropdown + Restore (load-into-editor → review → Save) — ROOM COMPLETE"
+  detail: |
+    Final piece of the in-UI resume editor. Toolbar Versions button opens
+    a popover listing m1's snapshot history (newest-first). Clicking Load
+    fetches the version content, drops it into the editor as a draft (sets
+    dirty), and the user clicks Save to commit — which itself creates a
+    new pre-write snapshot. So restore is fully reversible.
+
+    Files modified:
+      - src/career/settings/resumes/Edit.tsx (+118 lines):
+        · types: VersionEntry { filename, ts, size }
+        · helpers: fmtVersionTs (toLocaleString month/day h:m), fmtSize (B / KB)
+        · state additions:
+          - versions: VersionEntry[]  (loaded from GET /content)
+          - showVersions: boolean
+          - versionsBtnRef: ref for outside-click detection
+        · load: GET /:id/content already returns versions array — capture into
+          state alongside content
+        · save: after successful PUT, refresh versions list (server just
+          appended a new pre-write snapshot)
+        · handleRestore(filename):
+          - if dirty: window.confirm 'Discard unsaved changes?'
+          - GET /:id/versions/:filename
+          - setContent + setDirty(true) — version is loaded as a DRAFT;
+            user must Save to commit (which creates a new snapshot capturing
+            the current state pre-restore)
+          - Errors → setServerError banner
+        · useEffect(showVersions): outside-click + Escape close
+        · Toolbar additions (between title and status/Save):
+          - .c-resume-versions-anchor wraps button + popover
+          - Button: <History> icon + "Versions ({count})"
+            aria-expanded + aria-haspopup="menu"
+          - Popover panel:
+            · header "Saved snapshots"
+            · empty state: "No versions yet. Save the editor once to start
+              the snapshot history."
+            · list: ts (toLocaleString) + size (B/KB) + Load button
+              (.af-btn-add small variant)
+        · Removed unused state setter; minor type adjustments
+
+      - src/career/settings/resumes/edit.css (+97 lines):
+        · .c-resume-versions-anchor (relative; pivots popover)
+        · .c-resume-versions-button (white bg, hover #f6f8fa)
+        · .c-resume-versions-panel:
+          - position:absolute, top:calc(100% + 6), right:0
+          - z-index:50, width 320, max-height 420 with overflow scroll
+          - shadow + border + rounded
+        · .c-resume-versions-header (uppercase label, gray bg)
+        · .c-resume-versions-list (scrollable)
+        · .c-resume-versions-row (flex with hover bg)
+        · .c-resume-versions-meta + ts (tabular-nums) + size (gray)
+        · .c-resume-versions-empty (centered help text)
+
+    Verification (smoke 5/5 passed):
+      - tsc --noEmit ✓ (0 in-project errors)
+      - vite build ✓ (6.99s)
+      - HTTP E2E:
+        1. POST resume v3 source=manual → 201 ✓
+        2. PUT content x4 (v1/v2/v3/v4) — each one snapshots prior content ✓
+        3. GET /v3/content → 4 versions newest-first:
+           [v3 (21B), v2 (21B), v1 (21B), DEFAULT_BASE_MD (321B)] ✓
+        4. GET /v3/versions/{oldest} → returns original DEFAULT_BASE_MD
+           "# Resume\n..." ✓
+        5. GET /v3/versions/2026-01-01T00-00-00.000Z.md → 404 ✓
+      - 待手工 UI smoke (留给用户验证):
+        · /career/settings/resumes/:id/edit → toolbar shows
+          "Versions ({count})" with History icon
+        · Click Versions → popover panel slides down (top right)
+        · Each row: timestamp + size + "Load" button
+        · Click Load (no dirty) → content replaced + status "Unsaved" yellow
+        · Click Save → new snapshot appears in versions list (count +1)
+        · Click Load with dirty → window.confirm "Discard unsaved?"
+        · Click outside / Escape key → popover closes
+        · Empty resume (no saves yet) → "No versions yet" empty state
+
+    Locked design (long-term-best, plan-milestones):
+      - 不直接 restore-then-save: 给用户 review 机会, 防误操作 (重要因为
+        editor 是 markdown, 看 diff 比按钮二次确认更直观)
+      - GET /content 的 versions 字段直接用: 不重复请求
+      - dropdown 不是 modal: 不打断编辑节奏 (modal 强制全屏 attention)
+      - 4 关闭方式: 按钮再点 / outside-click / Escape / Load-after (Load
+        关闭 popover 同时填进 editor)
+      - Load 后 setDirty(true): 即使 version 内容和当前 content 100% 一样,
+        UI 也表示需要 Save 才生效 — 一致性 > 边角优化
+      - Save 后 refresh versions list: 保证 UI 显示最新 (FIFO eviction
+        在 cap 50 内不会马上看到, 但 count 准确)
+      - encodeURIComponent on version filename: 防 ISO 文件名含 special
+        chars (虽然我们 ISO 已替换 :→-, 但 defensive)
+
+    ROOM COMPLETE work:
+      - room.yaml lifecycle: in_progress → active
+      - _tree.yaml 同步
+      - spec.md ROOM-COMPLETE rewrite (3 milestone overview + Backend API +
+        UI structure + locked decisions + 下游 contracts)
+      - 03-cv-engine sub-epic: 33% → 40% (2/5 features done)
+      - 04-career-system: 42% → 43%
+
+    🎯 ROOM 03-in-ui-editor COMPLETE — Sprint 3 视觉里程碑 + versions safety net.
+    Now demoable: edit markdown → save → PDF live preview → restore from any of
+    50 snapshot history → discard or re-save.
+
+    下游影响:
+      - 03-cv-engine/04-auto-select 选 base 后可 navigate 到 /:id/edit
+        让用户 review (路由就位)
+      - 03-cv-engine/05-tailor-engine 完成后产出 markdown 可以临时存到
+        新 resume + navigate 到 /:tailoredId/edit 让用户审阅 + Save 后
+        生成 versions snapshot history
+      - 04-renderer/01 已就绪, /api/career/resumes/:id/render 已是 1st-class
+        consumer of htmlToPdf
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m3, frontend, react, versions, restore, popover, room-complete]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit e62eec3"
+relations:
+  - "implements intent-in-ui-editor-001 (m3/3, ROOM COMPLETE)"
+  - "depends_on change-2026-04-29-m2-resume-edit-page"
+  - "consumes versions list from change-2026-04-29-m1-content-versions-render-backend"
+  - "completes Sprint 3 visual milestone (markdown ↔ PDF live editing + versioned safety net)"
+anchors:
+  - file: "src/career/settings/resumes/Edit.tsx"
+    symbols:
+      - "VersionEntry"
+      - "fmtVersionTs"
+      - "fmtSize"
+      - "handleRestore"
+  - file: "src/career/settings/resumes/edit.css"
+    symbols:
+      - ".c-resume-versions-anchor"
+      - ".c-resume-versions-button"
+      - ".c-resume-versions-panel"
+      - ".c-resume-versions-list"
+      - ".c-resume-versions-row"
+      - ".c-resume-versions-empty"
+created_at: "2026-04-29"
+updated_at: "2026-04-29"

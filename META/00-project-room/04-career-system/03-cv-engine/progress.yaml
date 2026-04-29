@@ -1,12 +1,12 @@
 milestones: []
 current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-completion: 20  # avg(100, 0, 0, 0, 0) = 20 across 5 features (resume-index ROOM COMPLETE)
+completion: 40  # avg(100, 0, 100, 0, 0) = 40 across 5 features (2/5 ROOMs ✅)
 children_completion:
-  "01-resume-index": 100     # ✅ active — ROOM COMPLETE
+  "01-resume-index": 100     # ✅ active
   "02-google-docs-sync": 0
-  "03-in-ui-editor": 0
+  "03-in-ui-editor": 100     # ✅ active — ROOM COMPLETE
   "04-auto-select": 0
   "05-tailor-engine": 0
-status_note: "🎉 01-resume-index COMPLETE (3/3). 下一个: 02-google-docs-sync 或 03-in-ui-editor (DAG: 03-in-ui-editor 依赖 04-renderer/01 已 ready)."
+status_note: "🎉 03-in-ui-editor COMPLETE (Sprint 3 视觉里程碑 + versions safety net). 2/5 features ✅. 下一个: 04-auto-select / 02-google-docs-sync / 05-tailor-engine."
 last_updated: "2026-04-29"
