@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, MoreVertical, Star, FileText, X, Pencil } from 'lucide-react'
+import { Plus, MoreVertical, Star, FileText, X, Pencil, Sparkles, ChevronDown } from 'lucide-react'
 import TagInput from '../TagInput'
 import { deepMerge } from '../utils'
 import './ats-form.css'
@@ -17,6 +17,27 @@ type ResumeEntry = {
   last_synced_at?: string
   is_default: boolean
   created_at: string
+}
+
+type AutoSelectRanking = {
+  id: string
+  title: string
+  score: number
+  matched: {
+    role_keywords: string[]
+    jd_keywords: string[]
+    negative_keywords: string[]
+  }
+  is_default: boolean
+  created_at: string
+}
+
+type AutoSelectResponse = {
+  picked: string
+  picked_score: number
+  picked_reason: string
+  fallback_to_default: boolean
+  rankings: AutoSelectRanking[]
 }
 
 type ResumeMetadata = {
@@ -71,6 +92,15 @@ export default function Resumes() {
   const [showAdd, setShowAdd] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<ResumeEntry | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // Auto-select tester (m2 of 04-auto-select).
+  const [showTester, setShowTester] = useState(false)
+  const [testJdText, setTestJdText] = useState('')
+  const [testRole, setTestRole] = useState('')
+  const [testResult, setTestResult] = useState<AutoSelectResponse | null>(null)
+  const [testLoading, setTestLoading] = useState(false)
+  const [testError, setTestError] = useState<string | null>(null)
+  const [showAllRankings, setShowAllRankings] = useState(false)
 
   async function refresh() {
     try {
@@ -146,6 +176,33 @@ export default function Resumes() {
     }
   }
 
+  async function runAutoSelect() {
+    if (!testJdText.trim() || testLoading) return
+    setTestLoading(true); setTestError(null)
+    try {
+      const r = await fetch('/api/career/resumes/auto-select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jd_text: testJdText,
+          role: testRole.trim() || undefined,
+        }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setTestError(j.error || `HTTP ${r.status}`)
+        setTestResult(null)
+        return
+      }
+      setTestResult(await r.json())
+    } catch (e) {
+      setTestError(e instanceof Error ? e.message : 'Network error')
+      setTestResult(null)
+    } finally {
+      setTestLoading(false)
+    }
+  }
+
   if (!loaded) return <div className="af-loading">Loading resumes…</div>
 
   return (
@@ -155,13 +212,151 @@ export default function Resumes() {
           <h2>Resumes</h2>
           <p>多份方向化 base 简历。每份对应不同的 archetype（backend / applied-ai / fullstack 等），auto-select 按 JD match-rules 自动挑选 base 用于 tailor。</p>
         </div>
-        {resumes.length > 0 && (
-          <button className="af-btn-primary" onClick={() => setShowAdd(true)}>
-            <Plus size={14} style={{ marginRight: 6, verticalAlign: '-2px' }} />
-            Add Resume
-          </button>
-        )}
+        <div className="c-resumes-toolbar-actions">
+          {resumes.length > 0 && (
+            <button
+              className="af-btn-add"
+              onClick={() => setShowTester(v => !v)}
+              style={{ marginTop: 0 }}
+            >
+              <Sparkles size={14} />
+              Test auto-select
+            </button>
+          )}
+          {resumes.length > 0 && (
+            <button className="af-btn-primary" onClick={() => setShowAdd(true)}>
+              <Plus size={14} style={{ marginRight: 6, verticalAlign: '-2px' }} />
+              Add Resume
+            </button>
+          )}
+        </div>
       </div>
+
+      {showTester && resumes.length > 0 && (
+        <div className="c-resumes-tester-panel">
+          <div className="c-resumes-tester-header">
+            <h3>Test auto-select</h3>
+            <button
+              type="button"
+              className="c-resume-actions-btn"
+              onClick={() => setShowTester(false)}
+              aria-label="Close tester"
+            ><X size={14} /></button>
+          </div>
+          <p className="c-resumes-tester-help">
+            Paste a job description and (optionally) a role title. Scoring runs against each resume's <code>match_rules</code> — useful for tuning your keywords.
+          </p>
+
+          <div className="c-resumes-tester-inputs">
+            <div className="af-field">
+              <label className="af-label">Role (optional)</label>
+              <input
+                className="af-input"
+                placeholder="Backend SDE / Senior Platform Engineer"
+                value={testRole}
+                onChange={e => setTestRole(e.target.value)}
+                maxLength={200}
+              />
+            </div>
+            <div className="af-field">
+              <label className="af-label">Job description <span className="af-required-star">*</span></label>
+              <textarea
+                className="af-input c-resumes-tester-textarea"
+                placeholder="Paste full JD here…"
+                value={testJdText}
+                onChange={e => setTestJdText(e.target.value)}
+                rows={6}
+                maxLength={50_000}
+              />
+              <span className="af-help-text">{testJdText.length} / 50,000 chars</span>
+            </div>
+            <div>
+              <button
+                type="button"
+                className="af-btn-primary"
+                disabled={!testJdText.trim() || testLoading}
+                onClick={runAutoSelect}
+              >
+                {testLoading ? 'Scoring…' : 'Run auto-select'}
+              </button>
+            </div>
+          </div>
+
+          {testError && (
+            <div className="c-resumes-modal-error" style={{ marginTop: 12 }}>{testError}</div>
+          )}
+
+          {testResult && (
+            <div className="c-resumes-tester-result">
+              <div className="c-resumes-tester-result-header">
+                <div>
+                  <div className="c-resumes-tester-picked-label">Picked</div>
+                  <div className="c-resumes-tester-picked-id">
+                    {testResult.rankings.find(r => r.id === testResult.picked)?.title ?? testResult.picked}
+                    <span className="c-resumes-tester-picked-mono"> ({testResult.picked})</span>
+                  </div>
+                </div>
+                <div className="c-resumes-tester-score">
+                  score <strong>{testResult.picked_score}</strong>
+                </div>
+              </div>
+              <div className="c-resumes-tester-reason">
+                {testResult.picked_reason}
+                {testResult.fallback_to_default && (
+                  <span className="c-resumes-tester-fallback-badge">fallback to default</span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className="c-resumes-tester-toggle"
+                onClick={() => setShowAllRankings(v => !v)}
+              >
+                <ChevronDown
+                  size={12}
+                  style={{ transform: showAllRankings ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
+                />
+                {showAllRankings ? 'Hide' : 'Show'} all rankings ({testResult.rankings.length})
+              </button>
+
+              {showAllRankings && (
+                <div className="c-resumes-tester-rankings-wrap">
+                  <table className="c-resumes-tester-rankings">
+                    <thead>
+                      <tr>
+                        <th>#</th><th>id</th><th>title</th><th>score</th>
+                        <th>role kw</th><th>jd kw</th><th>negative</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {testResult.rankings.map((r, i) => (
+                        <tr
+                          key={r.id}
+                          className={r.id === testResult.picked ? 'c-resumes-tester-row-picked' : ''}
+                        >
+                          <td>{i + 1}</td>
+                          <td className="c-resume-id">{r.id}</td>
+                          <td>{r.title}</td>
+                          <td className="c-resumes-tester-num">{r.score}</td>
+                          <td>{r.matched.role_keywords.map(k => (
+                            <span key={k} className="c-resumes-tester-kw-pill positive">{k}</span>
+                          ))}</td>
+                          <td>{r.matched.jd_keywords.map(k => (
+                            <span key={k} className="c-resumes-tester-kw-pill positive">{k}</span>
+                          ))}</td>
+                          <td>{r.matched.negative_keywords.map(k => (
+                            <span key={k} className="c-resumes-tester-kw-pill negative">{k}</span>
+                          ))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="c-resumes-modal-error" style={{ marginBottom: 16 }}>

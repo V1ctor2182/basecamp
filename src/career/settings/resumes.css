@@ -381,3 +381,213 @@
 .c-resume-drawer-status.saved {
   color: #1a7f37;
 }
+
+/* ─── Auto-select tester (m2 of 04-auto-select) ─── */
+.c-resumes-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.c-resumes-tester-panel {
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+}
+
+.c-resumes-tester-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.c-resumes-tester-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0a0a0a;
+}
+
+.c-resumes-tester-help {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #555;
+  line-height: 1.5;
+}
+
+.c-resumes-tester-help code {
+  padding: 1px 5px;
+  font-size: 12px;
+  background: #fff;
+  border: 1px solid #eaeaea;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.c-resumes-tester-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.c-resumes-tester-textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 120px;
+}
+
+.c-resumes-tester-result {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+}
+
+.c-resumes-tester-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.c-resumes-tester-picked-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.c-resumes-tester-picked-id {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0a0a0a;
+  margin-top: 2px;
+}
+
+.c-resumes-tester-picked-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  font-weight: 400;
+  color: #888;
+}
+
+.c-resumes-tester-score {
+  font-size: 13px;
+  color: #555;
+  font-variant-numeric: tabular-nums;
+}
+
+.c-resumes-tester-score strong {
+  font-size: 22px;
+  color: #0969da;
+  margin-left: 4px;
+}
+
+.c-resumes-tester-reason {
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.c-resumes-tester-fallback-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9a6700;
+  background: rgba(154, 103, 0, 0.12);
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.c-resumes-tester-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #0969da;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.c-resumes-tester-toggle:hover {
+  background: rgba(9, 105, 218, 0.08);
+}
+
+.c-resumes-tester-rankings-wrap {
+  margin-top: 8px;
+  overflow-x: auto;
+}
+
+.c-resumes-tester-rankings {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.c-resumes-tester-rankings th,
+.c-resumes-tester-rankings td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid #eaeaea;
+  vertical-align: top;
+}
+
+.c-resumes-tester-rankings th {
+  background: #fafafa;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+.c-resumes-tester-num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.c-resumes-tester-row-picked {
+  background: rgba(9, 105, 218, 0.06);
+}
+
+.c-resumes-tester-row-picked td {
+  font-weight: 600;
+}
+
+.c-resumes-tester-kw-pill {
+  display: inline-block;
+  margin: 1px 3px 1px 0;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.c-resumes-tester-kw-pill.positive {
+  color: #1a7f37;
+  background: rgba(26, 127, 55, 0.10);
+  border: 1px solid rgba(26, 127, 55, 0.20);
+}
+
+.c-resumes-tester-kw-pill.negative {
+  color: #cf222e;
+  background: rgba(207, 34, 46, 0.10);
+  border: 1px solid rgba(207, 34, 46, 0.20);
+}

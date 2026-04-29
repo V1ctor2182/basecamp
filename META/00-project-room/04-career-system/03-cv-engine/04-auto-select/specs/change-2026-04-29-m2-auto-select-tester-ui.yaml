@@ -1,0 +1,136 @@
+spec_id: "change-2026-04-29-m2-auto-select-tester-ui"
+type: change
+state: active
+intent:
+  summary: "m2: Resumes Gallery 'Test auto-select' 折叠区 — JD textarea + role + 排名表 (ROOM COMPLETE)"
+  detail: |
+    Resumes 页 toolbar 加 "Test auto-select" 按钮. 展开折叠区: role input
+    + JD textarea + Run button. 结果展示: 大字 picked + reason + fallback
+    badge + 折叠 rankings 表 (per-resume score + 命中 keywords pills 绿正/红负).
+
+    Files modified:
+      - src/career/settings/Resumes.tsx (+202 lines):
+        · Imports: + Sparkles + ChevronDown icons
+        · Types: AutoSelectRanking + AutoSelectResponse 镜像 server schema
+        · State (6): showTester / testJdText / testRole / testResult /
+          testLoading / testError / showAllRankings (rankings table 默认折叠)
+        · runAutoSelect():
+          - guard !jdText.trim() || loading
+          - POST /api/career/resumes/auto-select { jd_text, role: trim||undef }
+          - server 错误 → setTestError + 清 testResult
+        · Toolbar: 新加 .c-resumes-toolbar-actions wraps 现有 Add Resume +
+          新增 "Test auto-select" button (Sparkles icon, .af-btn-add 风格)
+          仅 resumes.length > 0 显示 (空状态时无意义)
+        · 折叠区 .c-resumes-tester-panel:
+          - Header: h3 "Test auto-select" + X close
+          - Help text: 说明用途 + match_rules 调试
+          - Inputs: role (max 200) + jd_text textarea (max 50000, char counter
+            "{N} / 50,000 chars") + Run button (disabled if !jd || loading)
+          - Result (testResult 时显示):
+            · Picked card: "Picked" label + title + mono id + score (大数字)
+            · Reason text + fallback_to_default badge (黄)
+            · Toggle button "Show/Hide all rankings ({count})" with
+              chevron rotate animation
+            · Rankings table (折叠展开): cols # / id / title / score /
+              role kw / jd kw / negative
+              - picked 行高亮 .c-resumes-tester-row-picked (蓝 bg + bold)
+              - matched keywords inline pills:
+                positive (role/jd matched) → 绿
+                negative (negative_kw matched) → 红
+                mono font for keyword text
+
+      - src/career/settings/resumes.css (+210 lines):
+        · .c-resumes-toolbar-actions (flex row gap)
+        · .c-resumes-tester-panel (light bg, padding, border, rounded)
+        · .c-resumes-tester-header (h3 + X close)
+        · .c-resumes-tester-help (gray text + inline code styling)
+        · .c-resumes-tester-inputs (vertical stack)
+        · .c-resumes-tester-textarea (mono font, resize vertical, 120 min-h)
+        · .c-resumes-tester-result (white card)
+        · .c-resumes-tester-result-header (flex with picked left, score right)
+        · .c-resumes-tester-picked-{label/id/mono} (uppercase / 18pt / mono dim)
+        · .c-resumes-tester-score (number 22pt 蓝)
+        · .c-resumes-tester-reason (gray 13pt)
+        · .c-resumes-tester-fallback-badge (黄 pill, "FALLBACK TO DEFAULT")
+        · .c-resumes-tester-toggle (蓝 link button + chevron)
+        · .c-resumes-tester-rankings (table, mono cols where appropriate)
+        · .c-resumes-tester-rankings-wrap (overflow-x scroll)
+        · .c-resumes-tester-row-picked (蓝背景 + 加粗)
+        · .c-resumes-tester-num (tabular-nums, right-align)
+        · .c-resumes-tester-kw-pill .positive (绿) / .negative (红)
+          (mono font for keyword text + small border)
+
+    Verification (smoke):
+      - tsc --noEmit ✓ (0 in-project errors)
+      - vite build ✓ (8.67s)
+      - HTTP E2E (mirroring UI flow):
+        · 创建 backend (default) + applied-ai resumes
+        · POST /api/career/resumes/auto-select { jd_text:"Distributed k8s",
+          role:"Backend SDE" }
+          → picked=backend score=2 (1 role + 1 jd), fallback=false ✓
+          → reason="Matched 1 role keyword, 1 jd keyword" ✓
+      - 待手工 UI smoke (留给用户验证):
+        · /career/settings/resumes 顶部多 "Test auto-select" 按钮 (Sparkles)
+        · 点击 → 折叠区出现 (light bg)
+        · 填 JD + role + Run → loading "Scoring…" → 结果显示
+        · Picked card: title + mono id + 大 score
+        · "Show all rankings" 默认折叠, 点击展开 → 表格
+        · 命中 keywords inline pills 颜色正确 (绿正/红负)
+        · 关闭按钮 / 再点 toolbar button → 折叠区消失
+        · jd_text 空 → Run button disabled
+        · 50001 chars (textarea max 50000 限制 + server cap) → 无法输入超过
+        · 服务端错误 → error banner 显示
+
+    Locked design (long-term-best, plan-milestones):
+      - tester UI 仅 explore/debug — 真正 apply 时用 endpoint 是 07-applier 的事
+      - 折叠区 NOT modal — 不打断 gallery 节奏
+      - Add Resume + Test auto-select 同 toolbar 行 — 视觉密度合理
+      - 不持久化 jd_text/role — 测试性质, 不用 localStorage
+      - rankings table 默认折叠 — picked card 是首要信息, 详情按需展开
+      - 命中 keywords 用 inline pills (mono font) — 一眼能扫到关键词列表
+      - Sparkles icon: 暗示 "smart" 选 base, 不是普通 search
+
+    ROOM COMPLETE work:
+      - room.yaml lifecycle: in_progress → active
+      - _tree.yaml 同步
+      - spec.md ROOM-COMPLETE rewrite
+      - 03-cv-engine sub-epic: 50% → 60% (3/5 features done)
+      - 04-career-system: 44% → ~46%
+
+    🎉 ROOM 04-auto-select COMPLETE — 用户现在可以在 Gallery 直接 paste JD
+    + role 看 auto-select 怎么打分, tune match_rules 时立刻验证.
+
+    下游影响:
+      - 03-cv-engine/05-tailor-engine 调本 endpoint 选 base 后 LLM 改写
+      - 06-evaluator/02-stage-b-sonnet 后续可参考 picked + matched
+      - 07-applier 真正 apply 时调本 endpoint
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m2, frontend, react, tester-ui, auto-select, room-complete]
+provenance:
+  source_type: commit
+  confidence: 1.0
+  source_ref: "commit a8a9e7f"
+relations:
+  - "implements intent-auto-select-001 (m2/2, ROOM COMPLETE)"
+  - "depends_on change-2026-04-29-m1-auto-select-backend"
+  - "consumes POST /api/career/resumes/auto-select endpoint"
+  - "third 03-cv-engine ROOM complete (3/5 features)"
+anchors:
+  - file: "src/career/settings/Resumes.tsx"
+    symbols:
+      - "AutoSelectRanking"
+      - "AutoSelectResponse"
+      - "runAutoSelect"
+  - file: "src/career/settings/resumes.css"
+    symbols:
+      - ".c-resumes-tester-panel"
+      - ".c-resumes-tester-rankings"
+      - ".c-resumes-tester-kw-pill"
+      - ".c-resumes-tester-fallback-badge"
+created_at: "2026-04-29"
+updated_at: "2026-04-29"
