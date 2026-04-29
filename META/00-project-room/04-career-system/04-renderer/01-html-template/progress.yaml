@@ -19,7 +19,7 @@ milestones:
       - "first_of_kind"
       - "error_handling_heavy"
     open_questions: []
-    commit_hash: null
+    commit_hash: "289cc52"
     description: |
       把 Playwright 装上 + 跑通最简 HTML→PDF 流程。先不管 CV 模板细节，
       m1 只验证：Playwright 能在本机 launch、能渲染任意 HTML 出 PDF、生命周期
@@ -217,7 +217,7 @@ milestones:
           htmlToPdf 实现注册成 default renderer
 
 commits:
-  - hash: "TBD"
+  - hash: "289cc52"
     date: "2026-04-28"
     message: "[04-career-system/04-renderer/01-html-template] m1: Playwright lifecycle + htmlToPdf() helper + smoke endpoint + SIGTERM/SIGINT cleanup"
     files_changed: 5

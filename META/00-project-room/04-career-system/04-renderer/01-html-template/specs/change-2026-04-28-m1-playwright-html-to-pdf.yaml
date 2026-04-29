@@ -98,7 +98,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit 289cc52"
 relations:
   - "implements intent-html-template-001 (m1/2)"
   - "consumes-no-deps yet — m2 wires to markdownToTemplateHtml + readIdentity"

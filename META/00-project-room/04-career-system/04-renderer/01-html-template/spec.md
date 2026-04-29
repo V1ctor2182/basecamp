@@ -16,7 +16,7 @@ career-system 的默认 PDF 渲染器。输入：tailored markdown（或 base.md
 
 **2 milestones 规划完成**（~450 lines 估算，1/2 完成，all defaults 长期最优锁定）:
 
-- ✅ **m1-playwright-html-to-pdf** (TBD, 122 lines 实际) — Playwright 基础设施
+- ✅ **m1-playwright-html-to-pdf** (`289cc52`, 122 lines 实际) — Playwright 基础设施
   - `playwright@^1.x` (~10MB node_modules + ~300MB chromium browser to `~/.cache/ms-playwright/`)
   - `src/career/lib/htmlToPdf.mjs`: lazy-singleton browser + 30s idle close + `htmlToPdf(html, options)` Promise<Buffer>
   - `server.mjs`: SIGTERM/SIGINT cleanup + `POST /api/career/render/_test-html-to-pdf` smoke endpoint
