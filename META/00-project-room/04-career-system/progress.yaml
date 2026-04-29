@@ -1,15 +1,15 @@
 milestones: []
 current_sprint: "Sprint 2 — Profile"
 blockers: []
-completion: 38  # avg(100, 100, 7, 100, 0, 0, 0, 0) = 38.4 across 8 sub-epics
+completion: 39  # avg(100, 100, 13, 100, 0, 0, 0, 0) = 39 across 8 sub-epics
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
   "02-profile": 100     # ✅ Sprint 2 CLOSED
-  "03-cv-engine": 7     # 🔄 01-resume-index m1 backend ✅
-  "04-renderer": 100    # ✅ Sprint 3 partial — sub-epic DONE
+  "03-cv-engine": 13    # 🔄 01-resume-index m1+m2 ✅
+  "04-renderer": 100    # ✅ sub-epic DONE
   "05-finder": 0
   "06-evaluator": 0
   "07-applier": 0
   "08-human-gate-tracker": 0
-status_note: "Sprint 3 进行中. 04-renderer ✅. 03-cv-engine 起手 (01-resume-index m1 backend ✅, 下一步 m2 Gallery UI)."
+status_note: "Sprint 3 进行中. 04-renderer ✅. 03-cv-engine 起手 (01-resume-index m1+m2 ✅, 下一步 m3 metadata drawer + Duplicate = ROOM COMPLETE)."
 last_updated: "2026-04-29"

@@ -14,11 +14,11 @@ resumes/index.yml + {id}/metadata.yml 多简历索引 + Gallery UI
 
 ## Milestones (planned 2026-04-28)
 
-**3 milestones 规划完成**（~910 lines 估算，1/3 完成，all defaults 长期最优锁定）:
+**3 milestones 规划完成**（~910 lines 估算，2/3 完成，all defaults 长期最优锁定）:
 
 - ✅ **m1-resume-index-backend** (`9185a9d`, 275 lines 实际, complexity_flags: design_decisions) —
   Zod schemas (ResumeIndex / ResumeMetadata with MatchRules / Emphasize / RendererConfig nested) + `validateResumeId` slug regex + `resolveResumeDir` path-traversal guard + 5 endpoints (`GET /api/career/resumes` / `POST` / `DELETE /:id` / `PATCH /:id/set-default` / `GET+PUT /:id/metadata`). Atomic write index + atomic flip default. Creates dir + metadata.yml defaults + base.md skeleton on POST.
-- **m2-resume-gallery-ui** (~350 lines) — `Settings → Resumes` Gallery: card grid + source badge + default ★ + Add (modal with slugify) + Delete (type-to-confirm) + Set Default. Empty state with CTA. New `resumes.css`.
+- ✅ **m2-resume-gallery-ui** (TBD, 709 lines 实际 — overestimated headroom included card+modal+empty-state+slugify;实际更详细) — `Settings → Resumes` Gallery: card grid + source badge + default ★ + Add (modal with slugify) + Delete (type-to-confirm) + Set Default. Empty state with CTA. New `resumes.css`.
 - **m3-resume-metadata-editor** (~280 lines, ROOM COMPLETE) — Click card → expand drawer in-place. 4 sections (Archetype / Match Rules with TagInput / Emphasize / Renderer with color picker). Sticky save bar (复用 ats-form pattern). + Duplicate action with backend `POST /:id/duplicate` endpoint (atomic copy of metadata, fresh base.md skeleton).
 
 **Locked design decisions** (long-term-best, no questions to user):
@@ -46,6 +46,7 @@ resumes/index.yml + {id}/metadata.yml 多简历索引 + Gallery UI
 
 - [intent-resume-index-001](specs/intent-resume-index-001.yaml) — resumes/index.yml + {id}/metadata.yml 多简历索引 + Gallery UI
 - [change-2026-04-28-m1-resume-index-backend](specs/change-2026-04-28-m1-resume-index-backend.yaml) — m1 backend Zod schemas + 5 endpoints + slug guard + atomic default flip
+- [change-2026-04-29-m2-resume-gallery-ui](specs/change-2026-04-29-m2-resume-gallery-ui.yaml) — m2 Gallery card grid + Add modal (slugify) + Delete confirm + Set Default
 
 ---
 

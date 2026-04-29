@@ -166,7 +166,11 @@ milestones:
 
   - id: "m2-resume-gallery-ui"
     name: "Settings → Resumes Gallery: card grid + Add/Delete/SetDefault"
-    status: pending
+    status: completed
+    actual_lines: 709
+    actual_files:
+      - "src/career/settings/Resumes.tsx"
+      - "src/career/settings/resumes.css"
     estimated_files:
       - "src/career/settings/Resumes.tsx"
       - "src/career/settings/resumes.css"
@@ -358,9 +362,17 @@ commits:
       - "change-2026-04-28-m1-resume-index-backend (created)"
     milestones_affected:
       - "m1-resume-index-backend (→ completed)"
+  - hash: "TBD"
+    date: "2026-04-29"
+    message: "[04-career-system/03-cv-engine/01-resume-index] m2: Resumes Gallery UI — card grid + Add modal + Delete confirm + Set Default"
+    files_changed: 5
+    specs_affected:
+      - "change-2026-04-29-m2-resume-gallery-ui (created)"
+    milestones_affected:
+      - "m2-resume-gallery-ui (→ completed)"
 
 current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-completion: 33
-status_note: "m1 ✅ backend (275 行, 9/9 smoke ✓). 03-cv-engine 起手第一个 ROOM. 下一步 m2 Gallery UI."
-last_updated: "2026-04-28"
+completion: 66
+status_note: "m1+m2 ✅ (backend + Gallery UI 跑通). 下一步 m3 = expand drawer + metadata edit + Duplicate = ROOM COMPLETE."
+last_updated: "2026-04-29"

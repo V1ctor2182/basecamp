@@ -1,12 +1,12 @@
 milestones: []
 current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-completion: 7   # avg(33, 0, 0, 0, 0) = 6.6 across 5 features (m1 of resume-index ✅)
+completion: 13  # avg(66, 0, 0, 0, 0) = 13.2 across 5 features (m1+m2 of resume-index ✅)
 children_completion:
-  "01-resume-index": 33      # 🔄 m1 backend ✅, m2/m3 pending
+  "01-resume-index": 66      # 🔄 m1 backend + m2 UI ✅, m3 待开
   "02-google-docs-sync": 0
   "03-in-ui-editor": 0
   "04-auto-select": 0
   "05-tailor-engine": 0
-status_note: "🔄 03-cv-engine 起手. 01-resume-index m1 ✅ backend. 下一步 m2 Gallery UI."
+status_note: "🔄 03-cv-engine. 01-resume-index m1+m2 ✅. 下一步 m3 metadata drawer + Duplicate = ROOM COMPLETE."
 last_updated: "2026-04-29"
