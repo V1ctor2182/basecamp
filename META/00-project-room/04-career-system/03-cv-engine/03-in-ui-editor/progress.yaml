@@ -110,7 +110,7 @@ milestones:
     depends_on: ["m1-content-versions-render-backend"]
     complexity_flags: []
     open_questions: []
-    commit_hash: null
+    commit_hash: "283cb55"
     description: |
       新路由 /career/settings/resumes/:id/edit — 全页 split-pane 编辑器。
       Drawer 加 "Edit content" 按钮跳转。
@@ -272,7 +272,7 @@ commits:
       - "change-2026-04-29-m1-content-versions-render-backend (created)"
     milestones_affected:
       - "m1-content-versions-render-backend (→ completed)"
-  - hash: "TBD"
+  - hash: "283cb55"
     date: "2026-04-29"
     message: "[04-career-system/03-cv-engine/03-in-ui-editor] m2: Full-page resume edit route — CodeMirror + iframe PDF + Save + Drawer link"
     files_changed: 5

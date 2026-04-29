@@ -123,7 +123,7 @@ indexing:
 provenance:
   source_type: commit
   confidence: 1.0
-  source_ref: "commit TBD"
+  source_ref: "commit 283cb55"
 relations:
   - "implements intent-in-ui-editor-001 (m2/3)"
   - "depends_on change-2026-04-29-m1-content-versions-render-backend"

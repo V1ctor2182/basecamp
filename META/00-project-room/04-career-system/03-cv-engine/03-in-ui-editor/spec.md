@@ -21,7 +21,7 @@ source: manual 简历的 CodeMirror 编辑器 + 实时 PDF 预览 + versions 快
   - `PUT /api/career/resumes/:id/content` (pre-write snapshot to `versions/${ISO}.md` + atomic write + FIFO cap 50)
   - `GET /api/career/resumes/:id/versions/:filename` → `{ content, ts, size }`
   - `GET /api/career/resumes/:id/render` (reads base.md + identity + metadata.renderer → composeCvHtml → htmlToPdf → stream `application/pdf`)
-- ✅ **m2-resume-edit-page** (TBD, 335 lines 实际) — full-page route `/career/settings/resumes/:id/edit`:
+- ✅ **m2-resume-edit-page** (`283cb55`, 335 lines 实际) — full-page route `/career/settings/resumes/:id/edit`:
   - `Edit.tsx` + `edit.css`: CodeMirror left, iframe PDF preview right (split-pane); Save bar; beforeunload guard
   - Drawer "Edit content" link (m3-resume-index drawer 加 button)
   - Route placement: NOT under SettingsLayout (full-screen, no sidebar)
