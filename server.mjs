@@ -11,6 +11,11 @@ import yaml from 'js-yaml';
 import { markdownToTemplateHtml, ALLOWED_TAGS } from './src/career/lib/markdownToTemplateHtml.mjs';
 import { htmlToPdf, shutdownBrowser } from './src/career/lib/htmlToPdf.mjs';
 import { composeCvHtml } from './src/career/lib/cvTemplate.mjs';
+import {
+  startScan,
+  getScanStatus,
+  ScanAlreadyRunningError,
+} from './src/career/finder/scanRunner.mjs';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const app = express();
@@ -2627,6 +2632,26 @@ app.post('/api/career/resumes/auto-select', async (req, res) => {
     }
     res.status(500).json({ error: e.message });
   }
+});
+
+// ─── Finder: scan trigger + status ─────────────────────────────────────
+app.post('/api/career/finder/scan', (_req, res) => {
+  try {
+    const { scan_id, started_at } = startScan();
+    res.status(202).json({ scan_id, started_at });
+  } catch (e) {
+    if (e instanceof ScanAlreadyRunningError) {
+      return res.status(409).json({
+        error: 'scan already running',
+        ...e.state,
+      });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/career/finder/scan/status', (_req, res) => {
+  res.json(getScanStatus());
 });
 
 const port = process.env.PORT || 8000;

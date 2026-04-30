@@ -23,6 +23,40 @@ Finder 的可插拔数据源层，每个 adapter 实现 fetch(config) → RawJob
 - [intent-source-adapters-001](specs/intent-source-adapters-001.yaml) — 6 种 Source Adapter：Greenhouse / Ashby / Lever / github-md / scrape / rss / manual
 - [constraint-source-adapters-001](specs/constraint-source-adapters-001.yaml) — 外部 API / 爬虫必须遵守：rate limit / robots.txt / 公开 UA / 禁止 LinkedIn 类自动扫
 
+## 当前进度 — Plan 完成 (2026-04-30)
+
+4 milestones, ~920 行, 全部 long-term-best 决策已锁定:
+
+- ⏳ **m1-scan-infra-greenhouse** (~330 行) — robots-aware fetcher + portalsLoader + scanRunner + Greenhouse adapter + 2 endpoints + smoke
+- ⏳ **m2-ashby-lever** (~160 行) — 2 ATS adapters (复用 m1 infra)
+- ⏳ **m3-github-md** (~150 行) — SimplifyJobs README parser (↳ 续行 / 🔒 closed)
+- ⏳ **m4-manual-and-portals-ui** (~280 行) — POST /pipeline/manual + Settings → Portals CRUD UI (ROOM COMPLETE)
+
+### Locked design (long-term-best)
+
+| Decision | Choice |
+|----------|--------|
+| `pipeline.json` shape | `{ jobs: Job[], last_scan_at, scan_summary: [{source, type, count, duration_ms, error?}] }` |
+| Scan execution | POST `/scan` 202 + scan_id, background runner, GET `/scan/status` poll |
+| Concurrent scan | `scanState.running` guard, 二次 POST → 409 |
+| Rate limit | 1s sleep between fetch (sequential, 整个 scanRunner) |
+| Robots.txt | shared `httpFetch()` — 每 domain per-scan 缓存, blocked → throw + scan_summary error |
+| User-Agent | `learn-dashboard career-system/1.0 (+https://github.com/V1ctor2182/basecamp)` |
+| Body limit | 1MB max, 10s timeout (AbortController) |
+| Error isolation | try/catch per source — 单 source 挂不影响其他 |
+| Description | `stripHtml()` → plain text |
+| comp_hint | 各 ATS 不强抽 (信号弱), null |
+| Manual adapter | URL + title (可选, 否则 cheerio 抽 `<title>`) + note; description=null defer to enrich |
+| Portals UI | nested route `/career/settings/portals`, Identity 同 pattern (load/dirty/save/before-unload) |
+| scan-history.jsonl | defer to `03-dedupe-hard-filter` (其 constraint own append-only) |
+| File layout | `src/career/finder/{httpFetch,portalsLoader,scanRunner}.mjs` + `adapters/{greenhouse,ashby,lever,githubMd,manual}.mjs` |
+
+### 下游
+
+- **`03-dedupe-hard-filter`**: 消费 `pipeline.json.jobs`, 写 scan-history + archive.jsonl
+- **`04-jd-enrich`**: 处理 `description===null` jobs (含 manual + github-md 大部分)
+- **`05-scan-scheduler`**: setInterval 调本 Room 的 POST `/scan`
+
 ---
 
-_Generated 2026-04-22 by room-init._
+_Generated 2026-04-22 by room-init. Plan refined 2026-04-30 by plan-milestones._
