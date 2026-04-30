@@ -212,7 +212,15 @@ milestones:
 
   - id: "m4-manual-and-portals-ui"
     name: "manual paste endpoint + Settings → Portals UI (ROOM COMPLETE)"
-    status: pending
+    status: completed
+    actual_lines: 580
+    actual_files:
+      - "src/career/finder/adapters/manual.mjs"
+      - "server.mjs"
+      - "src/career/settings/Portals.tsx"
+      - "src/career/settings/portals.css"
+      - "scripts/smoke-manual-adapter.mjs"
+    commit_hash: "TBD"
     estimated_files:
       - "src/career/finder/adapters/manual.mjs"
       - "server.mjs"

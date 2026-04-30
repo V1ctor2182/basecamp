@@ -1,12 +1,12 @@
 milestones: []
 current_sprint: "Sprint 5 — Finder"
 blockers: []
-completion: 20  # avg(0, 100, 0, 0, 0) = 20 across 5 features (1/5 ROOMs ✅)
+completion: 40  # avg(100, 100, 0, 0, 0) = 40 across 5 features (2/5 ROOMs ✅)
 children_completion:
-  "01-source-adapters": 0
+  "01-source-adapters": 100       # ✅ active — ROOM COMPLETE (4/4 milestones)
   "02-job-schema-normalize": 100  # ✅ active — ROOM COMPLETE
   "03-dedupe-hard-filter": 0
   "04-jd-enrich": 0
   "05-scan-scheduler": 0
-status_note: "🎉 02-job-schema-normalize COMPLETE. 05-finder 20% (1/5). 下一个: 01-source-adapters."
+status_note: "🎉 01-source-adapters COMPLETE (4/4 ms, ~1700 行). 05-finder 40% (2/5). 下一个: 03-dedupe-hard-filter."
 last_updated: "2026-04-30"

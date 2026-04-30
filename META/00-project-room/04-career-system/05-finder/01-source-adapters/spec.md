@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/05-finder/01-source-adapters`  
 **Type**: feature  
-**Lifecycle**: planning  
+**Lifecycle**: active (ROOM COMPLETE)  
 **Owner**: backend  
 **Parent**: `00-project-room/04-career-system/05-finder`  
 
@@ -23,14 +23,14 @@ Finder 的可插拔数据源层，每个 adapter 实现 fetch(config) → RawJob
 - [intent-source-adapters-001](specs/intent-source-adapters-001.yaml) — 6 种 Source Adapter：Greenhouse / Ashby / Lever / github-md / scrape / rss / manual
 - [constraint-source-adapters-001](specs/constraint-source-adapters-001.yaml) — 外部 API / 爬虫必须遵守：rate limit / robots.txt / 公开 UA / 禁止 LinkedIn 类自动扫
 
-## 当前进度 — Plan 完成 (2026-04-30)
+## 当前进度 — 🎉 ROOM COMPLETE (2026-04-30)
 
-4 milestones, ~920 行, 全部 long-term-best 决策已锁定:
+4 milestones, ~1700 行 actual:
 
-- ⏳ **m1-scan-infra-greenhouse** (~330 行) — robots-aware fetcher + portalsLoader + scanRunner + Greenhouse adapter + 2 endpoints + smoke
-- ⏳ **m2-ashby-lever** (~160 行) — 2 ATS adapters (复用 m1 infra)
-- ⏳ **m3-github-md** (~150 行) — SimplifyJobs README parser (↳ 续行 / 🔒 closed)
-- ⏳ **m4-manual-and-portals-ui** (~280 行) — POST /pipeline/manual + Settings → Portals CRUD UI (ROOM COMPLETE)
+- ✅ **m1-scan-infra-greenhouse** (`c82f5ae`, 605 行) — httpFetch (robots-cache + UA + maxBytes) + portalsLoader + scanRunner + Greenhouse adapter + 2 endpoints + smoke 12/12
+- ✅ **m2-ashby-lever** (`d848a19`, 360 行) — Ashby + Lever adapters; smoke 19/19
+- ✅ **m3-github-md** (`62e7c1b`, 405 行) — HTML `<table>` (cheerio) + markdown-pipe (regex fallback) for SimplifyJobs / speedyapply; smoke 12/12
+- ✅ **m4-manual-and-portals-ui** (`TBD`, 580 行) — manual paste endpoint + Settings → Portals CRUD UI
 
 ### Locked design (long-term-best)
 
@@ -54,9 +54,23 @@ Finder 的可插拔数据源层，每个 adapter 实现 fetch(config) → RawJob
 ### 下游
 
 - **`03-dedupe-hard-filter`**: 消费 `pipeline.json.jobs`, 写 scan-history + archive.jsonl
-- **`04-jd-enrich`**: 处理 `description===null` jobs (含 manual + github-md 大部分)
+- **`04-jd-enrich`**: 处理 `description===null` jobs (含 manual + github-md 大部分; 检查 `tags` 含 `enriched_via:manual_pending`)
 - **`05-scan-scheduler`**: setInterval 调本 Room 的 POST `/scan`
+
+### Live data 实绩 (full scan against current portals.yml)
+
+```
+3 GH ✓     Anthropic 441 + Stripe 491 + Databricks 815          = 1747 jobs
+3 Ashby ✓  OpenAI 668 + Notion 142 + Linear 23 + Vercel 0       =  833 jobs
+2 Lever ❌  Perplexity 404 + Ramp 404 (boards moved off Lever — user portals 待更新)
+3 github-md ✓:
+  - SimplifyJobs New Grad: 304 (HTML <table>)
+  - SimplifyJobs Summer 2026 Interns: 989 (HTML <table>)
+  - speedyapply SWE: 264 (markdown pipe fallback)
+                                                                = 1557 jobs
+TOTAL: 4137 jobs across 9 active boards
+```
 
 ---
 
-_Generated 2026-04-22 by room-init. Plan refined 2026-04-30 by plan-milestones._
+_Generated 2026-04-22 by room-init. Plan + ROOM COMPLETE 2026-04-30 by plan-milestones + dev._

@@ -1,0 +1,143 @@
+spec_id: "change-2026-04-30-m4-manual-and-portals-ui"
+type: change
+state: active
+intent:
+  summary: "m4: manual paste endpoint + Settings → Portals CRUD UI (ROOM 01-source-adapters COMPLETE)"
+  detail: |
+    Closes 01-source-adapters Room. manual paste = single-job entry via URL +
+    optional title/note. Portals UI = full CRUD over portals.yml in Settings →
+    Portals page (Identity-style pattern: load/dirty/save/before-unload).
+
+    Files:
+      - src/career/finder/adapters/manual.mjs (~70 lines):
+        · manualPaste({url, title?, note?}):
+          - validate URL (new URL → reject 'invalid url')
+          - if !title → fetchTitle(url) via cheerio $('title').text()
+            (best-effort; failure → null, role becomes placeholder)
+          - hostname (www. stripped) → company
+          - role: title || '(untitled — manual paste)'
+          - tags: ['enriched_via:manual_pending']  // for 04-jd-enrich
+          - description: null  // defer to 04-jd-enrich
+          - id: hashJobId(company, role, 'manual', url.toString())
+            (URL.toString normalizes — case-insensitive host, drops default port)
+
+      - server.mjs (+~70 lines):
+        · GET /api/career/finder/portals → readPortalsConfig() (Zod-validated)
+        · PUT /api/career/finder/portals → writePortalsConfig() with Zod parse
+          (400 on ZodError, atomicWriteFile to portals.yml)
+        · POST /api/career/pipeline/manual:
+          - ManualPasteSchema (Zod): url (URL, max 2000) + title? (max 500) + note? (max 2000)
+          - manualPaste() → Job
+          - read pipeline.json (or {jobs:[]} default)
+          - filter out existing job with same id (idempotent re-paste)
+          - push new job, atomicWriteFile back
+          - 201 with {job}
+          - 400 on Zod, 500 on other
+
+      - src/career/settings/Portals.tsx (~270 lines, replaces 8-line placeholder):
+        · 与 Identity.tsx 同 pattern: state / load / dirty / save / before-unload
+        · Toolbar: "Add source" button + "Run scan now" (POST /scan, 202/409 handled)
+        · Per-row table grid (130/1fr/2fr/70/32):
+          - Type dropdown (greenhouse / ashby / lever / github-md)
+          - Name input
+          - Config inputs (动态 by type):
+            * greenhouse / ashby / lever: slug
+            * github-md: owner / repo / path / branch
+          - Priority number 1-10
+          - Delete button (Trash2 icon)
+        · Validation (malformed map):
+          - empty name
+          - missing required config keys (path/branch optional for github-md)
+        · Empty state: "No sources configured. Click Add source to start."
+        · Save bar (sticky): button (disabled if !canSave || !dirty), savedAt indicator, server error
+        · changeType resets config to fresh blank for new type
+
+      - src/career/settings/portals.css (~110 lines):
+        · .c-portals-toolbar (flex row, scan msg)
+        · .c-portals-row (grid, hover, row-error red border for malformed)
+        · .c-portals-cell + .c-portals-cell-{type/name/config/priority}
+        · .c-portals-config-fields (mono font input pills)
+        · .c-portals-row-delete (subtle, red on hover)
+        · @media 720px → reflow grid-areas vertically
+
+      - scripts/smoke-manual-adapter.mjs (~80 lines):
+        · 7 assertions:
+          1. explicit title + note → JobSchema OK, tags 'enriched_via:manual_pending'
+          2. invalid url → throws 'invalid url'
+          3. missing url → throws 'url required'
+          4. www. stripped from hostname
+          5. empty title + unreachable host → role fallback '(untitled — manual paste)'
+          6. id stable for same url + title
+          7. URL.toString normalizes (HTTPS:Example.COM:443 → https://example.com/)
+
+    Locked design (long-term-best, no shortcuts):
+      - Idempotent re-paste: same id → replace existing pipeline entry (filter+push)
+      - Manual job description=null + tags 'enriched_via:manual_pending' →
+        04-jd-enrich 必须看这个 tag 决定补全 (not silent)
+      - portals.yml validation Zod-strict (rejects unknown source.type at PUT)
+      - cheerio for both github-md HTML parsing + manual title extraction
+        (single dep, multi-use)
+      - Settings → Portals lives in /career/settings/portals (already routed in m1
+        plan; component was 8-line placeholder, now full)
+      - "Run scan now" button in Portals page — Save first guard if dirty
+      - Per-source priority field surfaced (1-10) for future use by scheduler
+
+    E2E (verified via curl against transient server on PORT=4571):
+      - GET /api/career/finder/portals → 12 sources from current portals.yml ✓
+      - POST /api/career/pipeline/manual {url, title, note} → 201 + job
+        - id 12 hex, source.type='manual', tags include 'enriched_via:manual_pending' ✓
+      - POST manual same url 3 次 → pipeline.json 仅 1 条 (idempotent) ✓
+      - PUT portals invalid type 'linkedin' → 400 ✓
+      - POST manual bad url → 400 ✓
+      - smoke-manual-adapter.mjs → 7/7 PASS ✓
+      - tsc --noEmit ✓
+      - vite build ✓
+
+    ROOM COMPLETE work:
+      - room.yaml lifecycle: planning → active
+      - _tree.yaml 同步 (planning → active)
+      - 05-finder sub-epic propagation: 20% → 40% (2/5 features ✅)
+      - 04-career-system 顶层 propagation: 48% → 50%
+
+    最终 source-adapters 数据 (live full scan):
+      - 4137 jobs from 7 active boards (3 GH + 3 Ashby + 3 github-md - 1 empty + manual paste capability)
+      - 5 fetchable adapter types implemented (greenhouse/ashby/lever/github-md/manual)
+      - scrape / rss MUST 后续按需加 (intent 列出但 MVP 不在范围)
+
+    下游 unblocked:
+      - 03-dedupe-hard-filter (消费 pipeline.json.jobs, 写 scan-history + archive)
+      - 04-jd-enrich (检查 description===null + 'enriched_via:manual_pending' tag)
+      - 05-scan-scheduler (setInterval 调 POST /scan)
+      - Pipeline UI (06-evaluator/05-pipeline-ui — 显示 scan_summary + jobs)
+
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m4, backend, frontend, finder, manual, portals, settings, room-complete]
+provenance:
+  source_type: implementation
+  confidence: 1.0
+  source_ref: "TBD-after-commit"
+relations:
+  - "implements intent-source-adapters-001 (m4/4, ROOM COMPLETE)"
+  - "depends_on change-2026-04-30-m3-github-md"
+  - "respects constraint-source-adapters-001 (no LinkedIn auto-scrape; manual is the only path for forbidden ATSes)"
+  - "second 05-finder ROOM complete (2/5 features)"
+anchors:
+  - file: "src/career/finder/adapters/manual.mjs"
+    symbols:
+      - "manualPaste"
+  - file: "server.mjs"
+    symbols:
+      - "ManualPasteSchema"
+  - file: "src/career/settings/Portals.tsx"
+    symbols:
+      - "Portals"
+      - "BLANK_SOURCE"
+      - "blankConfigFor"
+      - "configKeysFor"
+created_at: "2026-04-30"
+updated_at: "2026-04-30"
