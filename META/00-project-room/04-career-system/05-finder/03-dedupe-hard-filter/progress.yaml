@@ -6,7 +6,7 @@ milestones:
     actual_files:
       - "src/career/finder/dedupe.mjs"
       - "scripts/smoke-dedupe.mjs"
-    commit_hash: "TBD"
+    commit_hash: "52a166e"
     estimated_files:
       - "src/career/finder/dedupe.mjs"
       - "scripts/smoke-dedupe.mjs"

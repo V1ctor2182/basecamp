@@ -62,7 +62,7 @@ indexing:
 provenance:
   source_type: implementation
   confidence: 1.0
-  source_ref: "TBD-after-commit"
+  source_ref: "commit 52a166e"
 relations:
   - "implements intent-dedupe-hard-filter-001 (m1/3)"
   - "respects constraint-dedupe-hard-filter-001 (id stability + append-only history)"
