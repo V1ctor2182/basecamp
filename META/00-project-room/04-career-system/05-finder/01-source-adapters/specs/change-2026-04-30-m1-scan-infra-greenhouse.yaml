@@ -127,7 +127,7 @@ indexing:
 provenance:
   source_type: implementation
   confidence: 1.0
-  source_ref: "TBD-after-commit"
+  source_ref: "commit c82f5ae"
 relations:
   - "implements intent-source-adapters-001 (m1/4)"
   - "respects constraint-source-adapters-001 (rate limit + robots + UA + error isolation)"

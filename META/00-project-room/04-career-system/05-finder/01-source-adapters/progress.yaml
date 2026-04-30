@@ -10,7 +10,7 @@ milestones:
       - "src/career/finder/adapters/greenhouse.mjs"
       - "server.mjs"
       - "scripts/smoke-greenhouse-adapter.mjs"
-    commit_hash: "TBD"
+    commit_hash: "c82f5ae"
     estimated_files:
       - "src/career/finder/httpFetch.mjs"
       - "src/career/finder/portalsLoader.mjs"
