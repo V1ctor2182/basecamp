@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/05-finder/03-dedupe-hard-filter`  
 **Type**: feature  
-**Lifecycle**: planning  
+**Lifecycle**: active (ROOM COMPLETE 2026-04-30)  
 **Owner**: backend  
 **Parent**: `00-project-room/04-career-system/05-finder`  
 
@@ -23,13 +23,19 @@ scan 流程中 step 3 + 4。(1) 去重：所有 adapter 产出 Job 后按 Job.id
 - [intent-dedupe-hard-filter-001](specs/intent-dedupe-hard-filter-001.yaml) — scan-history.jsonl 跨源去重 + 9 种 hard filter 规则（零 LLM 成本）
 - [constraint-dedupe-hard-filter-001](specs/constraint-dedupe-hard-filter-001.yaml) — 短路顺序锁定 + archive.jsonl 必写 + id 稳定性保证
 
-## 当前进度 — Plan 完成 (2026-04-30)
+## 当前进度 — 🎉 ROOM COMPLETE (2026-04-30)
 
-3 milestones, ~900 行, 全部 long-term-best 决策已锁定:
+3/3 milestones shipped, ~1205 actual lines (vs ~900 estimate). 全部 long-term-best 决策已锁定:
 
-- ⏳ **m1-dedupe-and-history** (~150 行) — `scan-history.jsonl` append-only + `dedupeJobs()` + `markIdsAsSeen()` + smoke 6
-- ⏳ **m2-hard-filter-engine** (~530 行) — 9 rules + matchUtils (contains/whole_word/regex) + COUNTRY_MAP + `archive.jsonl` 写入 + smoke ~50
-- ⏳ **m3-integration-and-dryrun** (~220 行) — scanRunner 接入 + POST `/dry-run-filter` + Preferences UI Preview button (ROOM COMPLETE)
+- ✅ **m1-dedupe-and-history** (240 行 actual) — `scan-history.jsonl` append-only + `dedupeJobs()` + `markIdsAsSeen()` + smoke 8/8 → `52a166e`
+- ✅ **m2-hard-filter-engine** (730 行 actual) — 9 rules + matchUtils (contains/whole_word/regex) + COUNTRY_MAP + `archive.jsonl` + smoke 46/46 → `1885b4d`
+- ✅ **m3-integration-and-dryrun** (235 行 actual) — scanRunner integrates dedupe→hardFilter→archive→kept-only pipeline; pure `previewHardFilter()` in `dryRun.mjs`; replaced stub at `POST /api/career/preferences/preview`; UI updated; smoke 12/12
+
+### m3 design overrides (spec → implementation)
+- Endpoint stays at existing `POST /api/career/preferences/preview` (UI was already wired) instead of new `/api/career/finder/dry-run-filter` — would have been a dead-end duplicate.
+- Response shape kept as `{ total_jobs, would_drop, would_pass, new_drops, breakdown[] }` (drop `stub`/`note`) instead of `{ total_input, total_kept, total_dropped, dropped_per_rule }` — richer, UI-stable, no schema churn.
+- Per-source `dropped_per_rule` deferred. Only top-level `totals.dropped_per_rule` on `pipeline.json`.
+- Smoke is direct module call on pure `previewHardFilter()` (new `src/career/finder/dryRun.mjs`) — matches m1/m2 smoke style.
 
 ### Locked design (long-term-best, all defaults)
 

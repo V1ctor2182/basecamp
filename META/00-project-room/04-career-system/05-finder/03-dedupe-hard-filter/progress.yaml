@@ -150,7 +150,15 @@ milestones:
 
   - id: "m3-integration-and-dryrun"
     name: "scanRunner integration + dry-run endpoint + Preferences UI badge (ROOM COMPLETE)"
-    status: pending
+    status: completed
+    actual_lines: 235
+    actual_files:
+      - "src/career/finder/scanRunner.mjs"
+      - "src/career/finder/dryRun.mjs"
+      - "server.mjs"
+      - "src/career/settings/Preferences.tsx"
+      - "scripts/smoke-dryrun-filter.mjs"
+    commit_hash: "PENDING"
     estimated_files:
       - "src/career/finder/scanRunner.mjs"
       - "server.mjs"
@@ -160,6 +168,11 @@ milestones:
     depends_on: ["m2-hard-filter-engine"]
     complexity_flags: []
     open_questions: []
+    locked_decisions_overrides:
+      - "Endpoint stays at POST /api/career/preferences/preview (replaced existing stub) instead of new /api/career/finder/dry-run-filter — UI was already wired to the existing path; new path would have been a dead-end duplicate."
+      - "Response shape: kept the existing { total_jobs, would_drop, would_pass, new_drops, breakdown[] } (drop stub/note) instead of spec's { total_input, total_kept, total_dropped, dropped_per_rule } — richer, UI-stable, no schema churn."
+      - "Per-source dropped_per_rule deferred. Only top-level totals.dropped_per_rule on pipeline.json. Per-source attribution would require tagging each Job through dedupe + filter — not worth the plumbing."
+      - "Smoke is direct module call on the pure previewHardFilter() (new src/career/finder/dryRun.mjs) instead of HTTP — matches m1/m2 smoke style."
     description: |
       闭环: 把 dedupe + hardFilter 接进 scanRunner, 加 dry-run 预览 endpoint
       让 user 能在 Preferences UI 实时看 filter 改动效果。
@@ -250,5 +263,6 @@ commits: []
 
 current_sprint: "Sprint 5 — Finder"
 blockers: []
-status_note: "Plan 完成. 3 milestones, ~900 行. 全部 long-term-best 决策已锁定."
+status_note: "🎉 ROOM COMPLETE — 3/3 milestones (m1+m2+m3 all completed). Final E2E: scanRunner now does dedupe → hardFilter → archive → kept-only pipeline; UI Preview button hits real /api/career/preferences/preview backed by previewHardFilter() pure fn. Smoke 12+8+46 = 66 assertions PASS. Build + tsc clean."
+lifecycle: active
 last_updated: "2026-04-30"

@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import yaml from 'js-yaml';
 
 import { resetRobotsCache, sleep } from './httpFetch.mjs';
 import { readPortalsConfig } from './portalsLoader.mjs';
@@ -9,10 +10,31 @@ import { greenhouseAdapter } from './adapters/greenhouse.mjs';
 import { ashbyAdapter } from './adapters/ashby.mjs';
 import { leverAdapter } from './adapters/lever.mjs';
 import { githubMdAdapter } from './adapters/githubMd.mjs';
+import { dedupeJobs, markIdsAsSeen } from './dedupe.mjs';
+import { applyHardFilterBatch, archiveDropped } from './hardFilter.mjs';
+import { RULE_ORDER } from './dryRun.mjs';
 
 const DATA_DIR = path.resolve('data');
 const CAREER_DIR = path.join(DATA_DIR, 'career');
 export const PIPELINE_FILE = path.join(CAREER_DIR, 'pipeline.json');
+const PREFERENCES_FILE = path.join(CAREER_DIR, 'preferences.yml');
+
+// Conservative reader — yaml load with empty fallback. We do NOT Zod-parse here
+// because: (a) hardFilter is already missing-field tolerant, (b) a malformed
+// preferences.yml should not kill an in-flight scan. Server.mjs has its own
+// strict reader for the API path.
+async function readPreferencesForScan() {
+  if (!existsSync(PREFERENCES_FILE)) return { hard_filters: {} };
+  try {
+    const raw = await fs.readFile(PREFERENCES_FILE, 'utf-8');
+    if (!raw.trim()) return { hard_filters: {} };
+    const obj = yaml.load(raw);
+    return obj && typeof obj === 'object' ? obj : { hard_filters: {} };
+  } catch (e) {
+    console.warn('[scanRunner] preferences.yml unparseable, scan will keep all:', e?.message);
+    return { hard_filters: {} };
+  }
+}
 
 const ADAPTERS = {
   [greenhouseAdapter.type]: greenhouseAdapter,
@@ -111,11 +133,37 @@ async function runScanCore() {
     scanState.progress.push(entry);
   }
 
+  // ── Dedupe + Hard-filter pipeline (m3 integration) ──────────────────
+  // 1. Dedupe across scans via scan-history.jsonl (Job.id keyed).
+  // 2. Apply hard_filters (9-rule short-circuit). Drops written to archive.jsonl.
+  // 3. Mark ALL new ids as seen — including drops, so next scan doesn't re-fetch
+  //    + re-archive the same dropped jobs (locked design from spec).
+  // 4. pipeline.json is kept-only; archive.jsonl is the dropped graveyard.
+  const { new: newJobs, duplicates } = await dedupeJobs(allJobs);
+  const prefs = await readPreferencesForScan();
+  const { kept, dropped } = applyHardFilterBatch(newJobs, prefs);
+  await archiveDropped(dropped);
+  await markIdsAsSeen(newJobs.map((j) => j.id).filter((id) => typeof id === 'string'));
+
+  const droppedPerRule = Object.fromEntries(RULE_ORDER.map((r) => [r, 0]));
+  for (const d of dropped) {
+    if (d.rule_id && droppedPerRule[d.rule_id] !== undefined) droppedPerRule[d.rule_id]++;
+  }
+
   await atomicWriteJson(PIPELINE_FILE, {
     last_scan_at: new Date().toISOString(),
-    jobs: allJobs,
+    jobs: kept,
     scan_summary,
+    totals: {
+      total_input: allJobs.length,
+      total_dup: duplicates.length,
+      total_new: newJobs.length,
+      total_kept: kept.length,
+      total_dropped: dropped.length,
+      dropped_per_rule: droppedPerRule,
+    },
   });
+  scanState.jobs_count = kept.length;
 }
 
 // Kicks off scan asynchronously. Returns immediately with scan id + start time.

@@ -303,7 +303,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/05-finder/03-dedupe-hard-filter"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: backend
       parent: "00-project-room/04-career-system/05-finder"
       children: []

@@ -17,6 +17,7 @@ import {
   ScanAlreadyRunningError,
   PIPELINE_FILE,
 } from './src/career/finder/scanRunner.mjs';
+import { previewHardFilter } from './src/career/finder/dryRun.mjs';
 import {
   readPortalsConfig,
   writePortalsConfig,
@@ -1542,70 +1543,36 @@ app.put('/api/career/preferences', async (req, res) => {
 });
 
 // POST /api/career/preferences/preview
-// Dry-run stub: estimates how many jobs the submitted hard_filters would drop.
-// Body: full Preferences object (client sends current form state to preview unsaved edits).
-// Returns: { total_jobs, would_drop, would_pass, new_drops, breakdown[], stub: true }
-// Real pipeline dry-run ships with 05-finder/03-dedupe-hard-filter; this stub
-// lets UI be built and tested now. Drops are estimated proportionally to the
-// number of non-empty filter entries (not real pipeline evaluation).
+// Dry-run: applies the submitted hard_filters against the current pipeline.json
+// (no rescan, no writes). Body is the form draft Preferences object so the user
+// can preview unsaved edits. Compares against saved prefs to compute new_drops.
+// Returns: { total_jobs, would_drop, would_pass, new_drops, breakdown[] }
 app.post('/api/career/preferences/preview', async (req, res) => {
   try {
-    // Validate shape but don't require exact schema match (preview accepts
-    // unsaved form state which may have partial/invalid data — malformed
-    // numbers should not crash the preview).
     const prefs = req.body;
     if (!prefs || !prefs.hard_filters) {
       return res.status(400).json({ error: 'Missing hard_filters in body' });
     }
-    const hf = prefs.hard_filters;
-    const TOTAL = 100;
 
-    // Rough heuristic: each non-empty filter contributes some drops.
-    // Intentionally overlap-aware via min() clamp.
-    const ruleDrops = [
-      { rule: 'source_filter', drops: (hf.source_filter?.blocked_sources?.length || 0) * 3 },
-      { rule: 'company_blocklist', drops: (hf.company_blocklist?.length || 0) * 2 },
-      { rule: 'title_blocklist', drops: (hf.title_blocklist?.length || 0) * 2 },
-      { rule: 'title_allowlist', drops: hf.title_allowlist?.length ? Math.max(0, 15 - hf.title_allowlist.length * 2) : 0 },
-      { rule: 'location', drops: ((hf.location?.allowed_countries?.length ? 5 : 0) + (hf.location?.disallowed_countries?.length || 0) * 3) },
-      { rule: 'seniority', drops: hf.seniority?.allowed?.length ? Math.max(0, 10 - hf.seniority.allowed.length * 2) : 0 },
-      { rule: 'posted_within_days', drops: hf.posted_within_days > 0 && hf.posted_within_days < 14 ? 8 : 0 },
-      { rule: 'comp_floor', drops: (hf.comp_floor?.base_min || hf.comp_floor?.total_min) ? 6 : 0 },
-      { rule: 'jd_text_blocklist', drops: (hf.jd_text_blocklist?.length || 0) * 2 },
-    ];
+    let jobs = [];
+    if (existsSync(PIPELINE_FILE)) {
+      try {
+        const parsed = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+        if (Array.isArray(parsed?.jobs)) jobs = parsed.jobs;
+      } catch (e) {
+        // Malformed pipeline.json should not crash preview — treat as empty.
+        console.warn('[preview] pipeline.json unparseable, treating as empty:', e?.message);
+      }
+    }
 
-    let wouldDrop = 0;
-    const breakdown = ruleDrops.map(r => {
-      const d = Math.min(r.drops, TOTAL - wouldDrop);
-      wouldDrop += d;
-      return { rule: r.rule, drops: d };
-    });
-    wouldDrop = Math.min(wouldDrop, TOTAL);
-
-    // new_drops: compare vs currently-persisted preferences
-    let newDrops = 0;
+    let savedPrefs = null;
     try {
-      const saved = await readPreferences();
-      const savedHf = saved.hard_filters || {};
-      // crude: diff counts by comparing total blocklist sizes
-      const currNonEmpty =
-        (hf.company_blocklist?.length || 0) + (hf.title_blocklist?.length || 0) +
-        (hf.source_filter?.blocked_sources?.length || 0) + (hf.jd_text_blocklist?.length || 0);
-      const savedNonEmpty =
-        (savedHf.company_blocklist?.length || 0) + (savedHf.title_blocklist?.length || 0) +
-        (savedHf.source_filter?.blocked_sources?.length || 0) + (savedHf.jd_text_blocklist?.length || 0);
-      newDrops = Math.max(0, Math.min(wouldDrop, (currNonEmpty - savedNonEmpty) * 2));
-    } catch { newDrops = 0; }
+      savedPrefs = await readPreferences();
+    } catch {
+      savedPrefs = null;
+    }
 
-    res.json({
-      total_jobs: TOTAL,
-      would_drop: wouldDrop,
-      would_pass: TOTAL - wouldDrop,
-      new_drops: newDrops,
-      breakdown,
-      stub: true,
-      note: 'Mock data. Real pipeline dry-run ships with 05-finder/03-dedupe-hard-filter.',
-    });
+    res.json(previewHardFilter(prefs, savedPrefs, jobs));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
