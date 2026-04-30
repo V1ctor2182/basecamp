@@ -52,7 +52,13 @@ milestones:
 
   - id: "m2-hard-filter-engine"
     name: "9-rule hard filter + match utils + archive.jsonl"
-    status: pending
+    status: completed
+    actual_lines: 730
+    actual_files:
+      - "src/career/finder/matchUtils.mjs"
+      - "src/career/finder/hardFilter.mjs"
+      - "scripts/smoke-hard-filter.mjs"
+    commit_hash: "TBD"
     estimated_files:
       - "src/career/finder/matchUtils.mjs"
       - "src/career/finder/hardFilter.mjs"
