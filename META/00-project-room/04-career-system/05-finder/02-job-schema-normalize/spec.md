@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/05-finder/02-job-schema-normalize`  
 **Type**: feature  
-**Lifecycle**: planning  
+**Lifecycle**: active (ROOM COMPLETE)  
 **Owner**: backend  
 **Parent**: `00-project-room/04-career-system/05-finder`  
 
@@ -16,6 +16,40 @@ Finder 所有下游（dedupe / hard filter / enrich / Evaluator / UI）共用的
 
 - [intent-job-schema-normalize-001](specs/intent-job-schema-normalize-001.yaml) — Job schema 定义 + Zod 校验 + normalize 层（所有 source adapter 统一契约）
 
+## 当前进度 — 🎉 ROOM COMPLETE (2026-04-30)
+
+单 milestone Room, 1/1 ✅:
+
+- ✅ **m1-job-schema** (commit `f718499`, 215 行) — Zod `JobSchema` + 5 helpers + smoke 17 断言全过
+
+### 交付
+
+**`src/career/lib/jobSchema.mjs`** (pure ESM, server-side):
+- `JobSchema` — 13 字段 contract (id / source / company / role / location / url / description / posted_at / scraped_at / comp_hint / tags / raw / schema_version)
+- `JobSourceSchema`, `JobCompHintSchema`, `SOURCE_TYPES` (7 enum)
+- `slugify(s)`, `hashJobId(...)`, `stripHtml(html)`, `parseLocation(raw)`, `normalizeJob(partial)`
+
+**`scripts/smoke-job-schema.mjs`**: `node scripts/smoke-job-schema.mjs` → 17/17 PASS
+
+### Locked design (long-term-best)
+
+| Decision | Choice | Why |
+|----------|--------|-----|
+| Job ID | sha256(slug(company)::slug(role)::source.type::source_native_id).slice(0,12) | 12 hex (~48 bit) 紧凑 + 1M jobs 碰撞 < 1e-6 |
+| schema_version | number 1 | 升级写显式迁移 fn |
+| comp_hint | {min?,max?,currency?(ISO 4217),period?('yr'\|'mo'\|'hr'\|'wk'),raw?}, nullable | 全部 optional 兼容部分抽取 |
+| source.type | 7 enum (含 manual, 不含 LinkedIn/Indeed) | 合规 + finder constraint 禁止自动扫 |
+| stripHtml | regex (`<[^>]+>` + 7 entity decode + collapse) | 0-dep, 描述给 LLM 容噪强 |
+| 文件位置 | `src/career/lib/*.mjs` | 与 cvTemplate / htmlToPdf / markdownToTemplateHtml 一致 |
+| node:crypto | namespace prefix + JSDoc 'server-only' | 防 frontend 误调用 |
+
+### 下游 contracts
+
+- **01-source-adapters**: 6 adapter 产出必须 `normalizeJob()` 通过
+- **03-dedupe-hard-filter**: 用 `Job.id` 跨源去重
+- **04-jd-enrich**: 检查 `description===null` 决定补全
+- **06-evaluator**: 消费 Job 全字段评分
+
 ---
 
-_Generated 2026-04-22 by room-init._
+_Generated 2026-04-22 by room-init. Plan + ROOM COMPLETE 2026-04-30 by plan-milestones + dev._
