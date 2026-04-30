@@ -114,10 +114,10 @@ Tailor-engine is gated on evaluator stage-b. Finder and applier are further down
 ```bash
 git clone git@github.com:V1ctor2182/basecamp.git
 cd basecamp
-# In Claude Code:
-/plugin marketplace add V1ctor2182/feature-room-plugin
-/plugin install feature-room
-# restart Claude Code to pick up the skills
+npm install
+# Open Claude Code in this dir, then:
+#   /onboard
+# 该 slash 命令会装 plugin、导览 repo、推荐第一个 room。
 ```
 
 **First instruction to Claude:** `dev 02-google-docs-sync m1`

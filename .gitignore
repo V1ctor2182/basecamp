@@ -84,11 +84,13 @@ data/career/.playwright/
 !data/career/feedback/README.md
 !data/career/apply-sessions/README.md
 
-# Local skill installations (npx skills add)
+# Plugin-managed skill / agent installs (feature-room-plugin etc.)
 .agents/
-.claude/
+.claude/skills/
+.claude/agents/
 skills/
 skills-lock.json
+# (.claude/settings.json and .claude/commands/ ARE tracked)
 
 # Embedded repos / local workspaces
 career-ops/

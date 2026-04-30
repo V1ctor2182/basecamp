@@ -36,7 +36,9 @@
 | `data/career/` | 配置与状态：`identity.yml`、`preferences.yml`、`resumes/`、`pipeline.json` |
 | `scripts/` | 一次性脚本（`init-career.sh`） |
 
-> Feature Room skills 通过 [V1ctor2182/feature-room-plugin](https://github.com/V1ctor2182/feature-room-plugin) plugin 引入。一次性安装：
+> **新人 onboarding**：在 Claude Code 里跑 `/onboard` — 自动安装 plugin、导览 repo、推荐起手 room。
+>
+> Feature Room skills 通过 [V1ctor2182/feature-room-plugin](https://github.com/V1ctor2182/feature-room-plugin) plugin 引入。一次性手动安装：
 > ```
 > /plugin marketplace add V1ctor2182/feature-room-plugin
 > /plugin install feature-room
