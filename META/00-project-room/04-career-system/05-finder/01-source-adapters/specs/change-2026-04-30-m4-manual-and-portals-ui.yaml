@@ -120,7 +120,7 @@ indexing:
 provenance:
   source_type: implementation
   confidence: 1.0
-  source_ref: "TBD-after-commit"
+  source_ref: "commit 20de790"
 relations:
   - "implements intent-source-adapters-001 (m4/4, ROOM COMPLETE)"
   - "depends_on change-2026-04-30-m3-github-md"

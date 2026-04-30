@@ -220,7 +220,7 @@ milestones:
       - "src/career/settings/Portals.tsx"
       - "src/career/settings/portals.css"
       - "scripts/smoke-manual-adapter.mjs"
-    commit_hash: "TBD"
+    commit_hash: "20de790"
     estimated_files:
       - "src/career/finder/adapters/manual.mjs"
       - "server.mjs"

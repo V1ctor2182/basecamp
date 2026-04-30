@@ -30,7 +30,7 @@ Finder 的可插拔数据源层，每个 adapter 实现 fetch(config) → RawJob
 - ✅ **m1-scan-infra-greenhouse** (`c82f5ae`, 605 行) — httpFetch (robots-cache + UA + maxBytes) + portalsLoader + scanRunner + Greenhouse adapter + 2 endpoints + smoke 12/12
 - ✅ **m2-ashby-lever** (`d848a19`, 360 行) — Ashby + Lever adapters; smoke 19/19
 - ✅ **m3-github-md** (`62e7c1b`, 405 行) — HTML `<table>` (cheerio) + markdown-pipe (regex fallback) for SimplifyJobs / speedyapply; smoke 12/12
-- ✅ **m4-manual-and-portals-ui** (`TBD`, 580 行) — manual paste endpoint + Settings → Portals CRUD UI
+- ✅ **m4-manual-and-portals-ui** (`20de790`, 580 行) — manual paste endpoint + Settings → Portals CRUD UI
 
 ### Locked design (long-term-best)
 
