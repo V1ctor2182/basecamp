@@ -114,8 +114,9 @@ Tailor-engine is gated on evaluator stage-b. Finder and applier are further down
 ```bash
 git clone git@github.com:V1ctor2182/basecamp.git
 cd basecamp
-bash claude-skills/setup.sh
-# symlinks .claude/skills → ../claude-skills
+# In Claude Code:
+/plugin marketplace add V1ctor2182/feature-room-plugin
+/plugin install feature-room
 # restart Claude Code to pick up the skills
 ```
 

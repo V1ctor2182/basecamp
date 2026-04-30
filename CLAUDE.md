@@ -30,12 +30,17 @@
 | 路径 | 用途 |
 |------|------|
 | `META/00-project-room/` | Feature Room 体系 — 模块拆分、specs、进度追踪 |
-| `claude-skills/` | 共享 Feature Room skills（`.claude/skills` → `claude-skills` symlink，由 `setup.sh` 安装） |
 | `src/` | React 前端 — Learn / Tracker / Career 三个 app |
 | `src/career/` | 职业系统 UI：resumes、settings、quality |
 | `server.mjs` | Express 后端 — `/api/career/*` + GitHub/Claude usage 路由 |
 | `data/career/` | 配置与状态：`identity.yml`、`preferences.yml`、`resumes/`、`pipeline.json` |
 | `scripts/` | 一次性脚本（`init-career.sh`） |
+
+> Feature Room skills 通过 [V1ctor2182/feature-room-plugin](https://github.com/V1ctor2182/feature-room-plugin) plugin 引入。一次性安装：
+> ```
+> /plugin marketplace add V1ctor2182/feature-room-plugin
+> /plugin install feature-room
+> ```
 
 ## 团队
 | 成员 | 角色 | 负责 |
@@ -53,7 +58,7 @@ When the user's request matches an available skill, ALWAYS invoke it using the S
 tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
 The skill has specialized workflows that produce better results than ad-hoc answers.
 
-### Feature Room Skills (`claude-skills/` — via `.claude/skills` symlink)
+### Feature Room Skills (via `feature-room-plugin`)
 
 | Skill | 触发词 |
 |-------|--------|
