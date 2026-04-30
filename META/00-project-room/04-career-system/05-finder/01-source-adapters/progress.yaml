@@ -1,5 +1,301 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-scan-infra-greenhouse"
+    name: "scan infra (robots-aware fetcher + portalsLoader + scanRunner) + Greenhouse adapter"
+    status: completed
+    actual_lines: 605
+    actual_files:
+      - "src/career/finder/httpFetch.mjs"
+      - "src/career/finder/portalsLoader.mjs"
+      - "src/career/finder/scanRunner.mjs"
+      - "src/career/finder/adapters/greenhouse.mjs"
+      - "server.mjs"
+      - "scripts/smoke-greenhouse-adapter.mjs"
+    commit_hash: "c82f5ae"
+    estimated_files:
+      - "src/career/finder/httpFetch.mjs"
+      - "src/career/finder/portalsLoader.mjs"
+      - "src/career/finder/scanRunner.mjs"
+      - "src/career/finder/adapters/greenhouse.mjs"
+      - "server.mjs"
+      - "scripts/smoke-greenhouse-adapter.mjs"
+    estimated_lines: 330
+    depends_on: []
+    complexity_flags: ["external_api", "first_of_kind", "design_decisions"]
+    open_questions: []
+    description: |
+      Sprint 5 第一次外部 HTTP. 建立 finder/ 目录的全部 infra (robots fetch +
+      portals loader + scan orchestrator + pipeline.json writer), 加第一个
+      adapter (Greenhouse). 后续 m2/m3/m4 adapter 仅插拔到本 infra。
+
+      Files:
+        - src/career/finder/httpFetch.mjs (~70):
+          · UA = "learn-dashboard career-system/1.0 (+https://github.com/V1ctor2182/basecamp)"
+          · robotsCache = new Map() — 每次 scan 前 reset
+          · checkRobots(url) — fetch <domain>/robots.txt 一次/domain (10s timeout)
+            parse simple Disallow lines for our UA, 默认 allow on parse fail
+          · httpFetch(url, opts={timeout:10_000, maxBytes:1_048_576})
+            - 先 checkRobots(url), blocked → throw RobotsBlockedError
+            - AbortController for timeout
+            - response.body 读到 maxBytes 截断 (defense vs huge responses)
+            - 加 UA header
+            - 返 { status, headers, text, json() }
+
+        - src/career/finder/portalsLoader.mjs (~50):
+          · SourceConfigSchema (Zod): { type: enum(SOURCE_TYPES), name, config: any, priority?: number }
+          · PortalsFileSchema = { sources: SourceConfigSchema[] }
+          · readPortalsConfig() → 读 data/career/portals.yml + Zod parse
+            (空文件 / 不存在 → 返 { sources: [] })
+
+        - src/career/finder/scanRunner.mjs (~110):
+          · ADAPTERS map (m1 仅 'greenhouse', m2/m3 注册新 type)
+          · scanState = { running: false, scan_id, started_at, progress: [] }
+          · runScan() async:
+            - if scanState.running → throw ScanAlreadyRunning
+            - reset scanState + robotsCache
+            - portals = readPortalsConfig()
+            - allJobs = [], scan_summary = []
+            - for source of portals.sources:
+                t0 = now
+                try:
+                  adapter = ADAPTERS[source.type]
+                  if !adapter → push {source, error: 'unknown type'} continue
+                  raws = await adapter.fetch(source.config)  // adapter 内 await sleep(1000)
+                  jobs = raws.map(raw => adapter.normalize(raw, source))
+                  allJobs.push(...jobs)
+                  scan_summary.push({source: source.name, type: source.type,
+                    count: jobs.length, duration_ms: now-t0})
+                catch err:
+                  scan_summary.push({source: source.name, type: source.type,
+                    count: 0, duration_ms: now-t0, error: String(err.message)})
+            - atomicWriteFile pipeline.json {jobs, last_scan_at, scan_summary}
+            - scanState.running = false
+          · getScanStatus() → snapshot of scanState
+          · await sleep(1000) helper for adapter rate limit
+
+        - src/career/finder/adapters/greenhouse.mjs (~70):
+          · async fetch({slug}):
+            url = `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`
+            await sleep(1000)
+            return (await httpFetch(url).json()).jobs ?? []
+          · normalize(raw, source):
+            const sourceUrl = `https://boards.greenhouse.io/${source.config.slug}`
+            return normalizeJob({
+              id: hashJobId(source.name, raw.title, 'greenhouse', String(raw.id)),
+              source: { type:'greenhouse', name:source.name, url:sourceUrl },
+              company: source.name,
+              role: raw.title,
+              location: parseLocation(raw.location?.name ?? ''),
+              url: raw.absolute_url,
+              description: stripHtml(raw.content ?? null),
+              posted_at: raw.updated_at ?? null,
+              comp_hint: null,
+              tags: raw.metadata?.flatMap(m => m.value_type==='string' ? [m.value]:[]) ?? [],
+              raw,
+            })
+
+        - server.mjs (+~30):
+          · POST /api/career/finder/scan → kick runScan() (no await), 返 202
+            { scan_id, started_at } 或 409 ScanAlreadyRunning
+          · GET /api/career/finder/scan/status → getScanStatus()
+
+        - scripts/smoke-greenhouse-adapter.mjs (~60):
+          · fixture: 内置 sample 3 jobs JSON
+          · assertions:
+            - normalizeGreenhouse(fixture[0], {name:'Anthropic', config:{slug:'anthropic'}})
+              → JobSchema parse OK, id 12 hex, source.type='greenhouse'
+            - description = stripHtml(content) 不含 <p>
+            - parseLocation 成数组
+          · live test (--live flag): fetch real Anthropic GH (1 call), assert >=10 jobs
+          · robots: mock fetch /robots.txt with 'User-agent: * Disallow: /v1/' → expect block
+
+      Locked design (long-term-best):
+        - pipeline.json shape: { jobs, last_scan_at, scan_summary: [{source, type, count, duration_ms, error?}] }
+        - Scan async: POST 202 + scan_id, GET /status for progress poll
+        - Rate limit: 1s between adapter fetch (sequential)
+        - Robots: shared httpFetch checks once per domain per scan (cached); blocked → throw + scan_summary error entry
+        - UA: 公开 + 项目 URL (符合 constraint #3)
+        - Concurrent scan: 409 if running
+        - 错误隔离: 单 source 挂不影响其他 (try/catch per source)
+        - Description: stripHtml(content) → plain text (Evaluator 用)
+        - comp_hint: GH 不抽 (信号弱)
+
+      验收:
+        - node scripts/smoke-greenhouse-adapter.mjs → fixture+robots block PASS
+        - node scripts/smoke-greenhouse-adapter.mjs --live → 实抓 Anthropic ≥10 jobs ✓
+        - curl POST /api/career/finder/scan → 202 + scan_id
+        - curl GET /api/career/finder/scan/status → progress 流式更新
+        - 完成后 cat data/career/pipeline.json → jobs[] + scan_summary 完整
+        - 二次 POST during scan → 409 ✓
+        - portals.yml 加不存在的 slug → 该 source 报错但其他成功 ✓
+        - tsc --noEmit + vite build clean
+
+  - id: "m2-ashby-lever"
+    name: "Ashby + Lever adapters"
+    status: completed
+    actual_lines: 360
+    actual_files:
+      - "src/career/finder/adapters/ashby.mjs"
+      - "src/career/finder/adapters/lever.mjs"
+      - "src/career/finder/scanRunner.mjs"
+      - "scripts/smoke-ats-adapters.mjs"
+    commit_hash: "d848a19"
+    estimated_files:
+      - "src/career/finder/adapters/ashby.mjs"
+      - "src/career/finder/adapters/lever.mjs"
+      - "src/career/finder/scanRunner.mjs"
+      - "scripts/smoke-ats-adapters.mjs"
+    estimated_lines: 160
+    depends_on: ["m1-scan-infra-greenhouse"]
+    complexity_flags: ["external_api"]
+    open_questions: []
+    description: |
+      复用 m1 infra. 仅插拔两个新 adapter 到 ADAPTERS map。
+
+      - adapters/ashby.mjs (~70):
+        url = `https://api.ashbyhq.com/posting-api/job-board/${slug}`
+        return (await httpFetch(url).json()).jobs ?? []
+        normalize: raw.title / raw.location / raw.descriptionHtml /
+        raw.publishedAt / raw.applyUrl
+      - adapters/lever.mjs (~70):
+        url = `https://api.lever.co/v0/postings/${slug}?mode=json`
+        await httpFetch(url).json() (top-level array)
+        normalize: raw.text / raw.categories.location / raw.descriptionPlain /
+        raw.createdAt / raw.applyUrl
+      - scanRunner: register ADAPTERS.ashby + ADAPTERS.lever
+      - smoke 重写 to parametric: 三个 ATS 各 fixture + 各 1 live (--live 跑 OpenAI Ashby + xx Lever)
+
+      验收: 整 portals.yml (4 GH + 2 Ashby + 2 Lever) 跑一次 → pipeline.json
+      jobs ≥ 100 + scan_summary 8 行全 count > 0 (live)
+
+  - id: "m3-github-md"
+    name: "github-md adapter (SimplifyJobs HTML <table> + speedyapply markdown-pipe fallback)"
+    status: completed
+    actual_lines: 405
+    actual_files:
+      - "src/career/finder/adapters/githubMd.mjs"
+      - "src/career/finder/scanRunner.mjs"
+      - "scripts/smoke-github-md.mjs"
+      - "package.json"
+      - "package-lock.json"
+    commit_hash: "62e7c1b"
+    estimated_files:
+      - "src/career/finder/adapters/githubMd.mjs"
+      - "src/career/finder/scanRunner.mjs"
+      - "scripts/smoke-github-md.mjs"
+    estimated_lines: 150
+    depends_on: ["m2-ashby-lever"]
+    complexity_flags: ["external_api"]
+    open_questions: []
+    description: |
+      高 ROI 源: SimplifyJobs / speedyapply / ouckah-Summer2025 等公开 GitHub repo
+      的 New-Grad / Internship 表格. 直接 fetch raw.githubusercontent.com markdown.
+
+      - adapters/githubMd.mjs (~100):
+        config = { repo: 'SimplifyJobs/Summer2025-Internships', path: 'README.md', branch?: 'dev' }
+        url = `https://raw.githubusercontent.com/${repo}/${branch}/${path}`
+        await httpFetch(url).text()
+        parseMarkdownTable(md) → rows[]:
+          · 找 first | Company | Role | Location | ...
+          · skip separator | --- |
+          · 每行 split by '|', trim, drop empty edges
+          · 处理 ↳ (U+21B3) 续行 = inherit company from prev row
+          · 处理 🔒 (U+1F512) lock = 已关闭, skip
+          · link 提取: '[Apply](https://...)' or '<a href=...>' regex
+        normalize: company / role / location / url (apply link) /
+        description=null (待 04-enrich) / posted_at parse '0d' '1d' relative → ISO
+        comp_hint=null tags=[]
+
+      smoke: fixture 3 markdown samples (含 ↳ + 🔒 + 标准行) + 1 live (SimplifyJobs)
+
+      验收: portals.yml 加 1 个 github-md repo → scan 后 pipeline.json
+      新增 ≥ 50 jobs from github-md, ↳ 行 company 正确继承, 🔒 行被 skip
+
+  - id: "m4-manual-and-portals-ui"
+    name: "manual paste endpoint + Settings → Portals UI (ROOM COMPLETE)"
+    status: completed
+    actual_lines: 580
+    actual_files:
+      - "src/career/finder/adapters/manual.mjs"
+      - "server.mjs"
+      - "src/career/settings/Portals.tsx"
+      - "src/career/settings/portals.css"
+      - "scripts/smoke-manual-adapter.mjs"
+    commit_hash: "20de790"
+    estimated_files:
+      - "src/career/finder/adapters/manual.mjs"
+      - "server.mjs"
+      - "src/career/settings/Portals.tsx"
+      - "src/career/settings/portals.css"
+      - "src/CareerApp.tsx"
+      - "scripts/smoke-manual-adapter.mjs"
+    estimated_lines: 280
+    depends_on: ["m3-github-md"]
+    complexity_flags: ["external_api"]
+    open_questions: []
+    description: |
+      闭环 source-adapters. manual paste = user 粘 URL → server fetch
+      HTML + cheerio 抽 <title> 作 role fallback. UI = Settings → Portals
+      CRUD (与 Identity / QA Bank 同 pattern).
+
+      - adapters/manual.mjs (~50):
+        manualPaste({ url, title?, note? }):
+          · validate url
+          · if (!title) try cheerio.load((await httpFetch(url, {maxBytes: 1_048_576})).text())
+            extract $('title').text() trim, fallback url.hostname
+          · normalize as Job:
+            id: hashJobId('manual', title||url, 'manual', url)
+            source: {type:'manual', name:'Manual paste', url}
+            company: hostname (placeholder, 待 04-enrich 改)
+            role: title (extracted or user-given)
+            location: []
+            url: input url
+            description: null
+            comp_hint: null
+            tags: ['enriched_via:manual_pending']
+            raw: { url, title, note }
+
+      - server.mjs (+~50):
+        · POST /api/career/pipeline/manual { url, title?, note? }
+          → manualPaste() → append job to pipeline.json (atomic merge)
+        · GET /api/career/finder/portals → readPortalsConfig()
+        · PUT /api/career/finder/portals { sources: [...] } → Zod parse + atomicWriteFile portals.yml
+          (与 identity.yml writer pattern 一致)
+
+      - src/career/settings/Portals.tsx (~150):
+        与 Identity.tsx 同 pattern (state / load / dirty / save):
+        · 顶部表格列出 sources: type / name / config (json) / priority
+        · Add row button + 每行 Edit + Delete
+        · type 是 dropdown (SOURCE_TYPES from jobSchema.mjs)
+        · config 字段按 type 切换 schema (greenhouse: slug; ashby: slug;
+          lever: slug; github-md: {repo, path, branch?})
+          (manual 不在 portals 里, 是 paste endpoint)
+        · Save 触发 PUT, beforeunload guard
+      - src/career/settings/portals.css (~80)
+      - CareerApp.tsx: 加 <Route path="portals" element={<Portals/>} /> 到 SettingsLayout
+
+      - smoke-manual-adapter.mjs (~50):
+        · fixture HTML with <title>Software Engineer at Acme</title> → manualPaste 正确抽取
+        · no title HTML → fallback hostname
+        · 大 body (>1MB) → 截断不挂
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml 同步
+        - spec.md ROOM COMPLETE rewrite
+        - 05-finder sub-epic propagation: 20% → 40% (2/5 features ✅)
+        - 04-career-system 顶层 propagation: 48% → ~50%
+
+      验收:
+        - 全部 portals (4 GH + 2 Ashby + 2 Lever + 1 github-md) scan ≥ 150 jobs
+        - POST /api/career/pipeline/manual { url:'https://example.com/jobs/123' }
+          → pipeline.json 多 1 条 manual job
+        - /career/settings/portals UI 加一个新 source + Save → portals.yml 写入
+        - 删除 source + Save → portals.yml 该行不见
+        - dirty + 关页面 → beforeunload 拦截
+
+commits: []
+
+current_sprint: "Sprint 5 — Finder"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "Plan 完成. 4 milestones, ~920 行. 全部 long-term-best 决策已锁定."
+last_updated: "2026-04-30"

@@ -1,0 +1,165 @@
+spec_id: "change-2026-04-30-m1-scan-infra-greenhouse"
+type: change
+state: active
+intent:
+  summary: "m1: scan infra (robots-aware fetcher + portals loader + orchestrator) + Greenhouse adapter + 2 endpoints + smoke 12/12"
+  detail: |
+    Sprint 5 第一次外部 HTTP. 建立 finder/ 全部 infra 基础, 加第一个 adapter,
+    pipeline.json 写入完整 + 2 个 HTTP endpoints。E2E live 1748 jobs 来自 3
+    Greenhouse boards (Anthropic 440 + Stripe 491 + Databricks 817)。
+
+    Files added (~605 lines actual vs ~330 estimated, 1.8x — within
+    external_api + first_of_kind + design_decisions 的 2.0-2.5x band):
+      - src/career/finder/httpFetch.mjs (~150 lines):
+        · USER_AGENT 公开 + 项目 URL (符合 constraint #3)
+        · RobotsBlockedError + HttpFetchError 错误类
+        · resetRobotsCache() — 每 scan 前调用
+        · checkRobots(url) — fetch <origin>/robots.txt 一次/domain, parse
+          User-agent: * 或我们 UA 的 Disallow rules; pathname.startsWith match
+        · httpFetch(url, {timeout, maxBytes, headers}):
+          - 先 checkRobots
+          - AbortController 10s 默认 timeout
+          - 流式读 body, maxBytes 截断, reader.cancel() 提前结束
+          - 加 UA header, 返 {status, headers, text, json()}
+        · sleep(ms) helper
+
+      - src/career/finder/portalsLoader.mjs (~50):
+        · SourceConfigSchema (Zod): {type: enum SOURCE_TYPES, name, config: record, priority?}
+        · PortalsFileSchema = {sources: SourceConfig[]} (default [])
+        · readPortalsConfig() — yaml + Zod parse, 不存在/空 → {sources: []}
+        · writePortalsConfig() — atomic tempfile + rename
+
+      - src/career/finder/scanRunner.mjs (~165):
+        · ADAPTERS map (m1 仅 'greenhouse', m2-m4 注册新 type)
+        · registerAdapter() helper for future adapter modules
+        · scanState 全局: {running, scan_id, started_at, finished_at, progress[],
+          total_sources, jobs_count, error}
+        · ScanAlreadyRunningError 错误类 (carries snapshot of state)
+        · runScanCore() — for each source (sleep 1s between):
+          - 找 adapter, 没有 → push entry with error 'unknown adapter type', 不挂
+          - try/catch fetch
+          - per-raw try/catch normalize (单 job 错误不挂 source)
+          - duration_ms 计时
+          - allJobs.push(...jobs) + scan_summary.push(entry)
+          - 最后 atomic write pipeline.json {jobs, last_scan_at, scan_summary}
+        · startScan() — guard against running, generates UUID scan_id, fire-and-forget
+          .catch + .finally to set finished_at + running=false
+          returns {scan_id, started_at} immediately
+        · getScanStatus() snapshot
+        · runScanForTest() — sync version for smoke / debug
+
+      - src/career/finder/adapters/greenhouse.mjs (~70):
+        · type: 'greenhouse'
+        · fetch({slug}): GET https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true
+          - 用 maxBytes: 20MB + timeout 30s (Anthropic ~1MB, larger boards 5MB+)
+          - return data.jobs ?? []
+        · normalize(raw, source):
+          - id: hashJobId(source.name, raw.title, 'greenhouse', String(raw.id))
+          - source: {type:'greenhouse', name, url:`https://boards.greenhouse.io/${slug}`}
+          - company: source.name
+          - role: raw.title || '(untitled)'
+          - location: parseLocation(raw.location?.name)
+          - url: raw.absolute_url
+          - description: stripHtml(raw.content)
+          - posted_at: toIsoUtc(raw.first_published || raw.updated_at) (Z form)
+          - tags: extractTags(raw.metadata) (string + string-array values)
+          - comp_hint: null (信号弱不强解)
+          - raw: 整个原 payload
+
+      - server.mjs (+~30):
+        · imports startScan / getScanStatus / ScanAlreadyRunningError
+        · POST /api/career/finder/scan → 202 {scan_id, started_at} 或 409 + state
+        · GET /api/career/finder/scan/status → 全 state snapshot
+
+      - scripts/smoke-greenhouse-adapter.mjs (~150):
+        · 10 fixture-only assertions:
+          1. UA constant
+          2. normalize → JobSchema parse OK + id 12 hex
+          3. description stripped (no tags/entities)
+          4. parseLocation 数组化
+          5. posted_at UTC Z form
+          6. tags 抽取
+          7. id 稳定 (同 raw 两次相同)
+          8. robots cache reset 不抛
+          9. RobotsBlockedError 类构造
+          10. config 缺 slug → fetch reject
+        · 2 live (--live):
+          11. Anthropic GH 实抓 ≥ 10 jobs
+          12. 5 sample raws 全 JobSchema.parse 通过
+
+    Locked design (long-term-best, all defaults committed):
+      - pipeline.json shape: {jobs, last_scan_at, scan_summary[]}
+      - Scan async: POST 202 + scan_id, GET /status poll
+      - Concurrent guard: scanState.running, 二次 POST → 409 + state
+      - Rate limit: 1s sleep between every source (sequential)
+      - Robots: shared httpFetch 一次/domain/scan 缓存
+      - UA: learn-dashboard career-system/1.0 (+github URL)
+      - Body cap: 20MB for ATS adapters (Anthropic 1MB+); 1MB default for misc
+      - Timeout: 10s default, 30s for ATS adapters
+      - posted_at 归一化 UTC Z (zod strict default)
+      - 错误隔离: per-source try/catch + per-raw normalize try/catch
+      - file layout: src/career/finder/{httpFetch,portalsLoader,scanRunner}.mjs
+        + adapters/{greenhouse}.mjs
+
+    E2E verification (live):
+      - node scripts/smoke-greenhouse-adapter.mjs → 10/10 PASS ✓
+      - node scripts/smoke-greenhouse-adapter.mjs --live → 12/12 PASS ✓
+      - runScanForTest() against real portals.yml (12 sources):
+        · 3 GH success: Anthropic 440, Stripe 491, Databricks 817 (1748 total jobs)
+        · 4 ashby + 2 lever + 3 github-md gracefully error
+          'unknown adapter type' (waiting for m2/m3)
+        · pipeline.json written, JobSchema.parse 通过全部 1748 jobs
+      - npx tsc --noEmit → 0 errors
+      - npx vite build → ✓
+
+    下游 unblocked:
+      - m2 ashby/lever 仅插拔到 ADAPTERS map
+      - m3 github-md 同上
+      - m4 manual paste + Settings → Portals UI
+
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, backend, finder, greenhouse, scan, http-fetch, robots]
+provenance:
+  source_type: implementation
+  confidence: 1.0
+  source_ref: "commit c82f5ae"
+relations:
+  - "implements intent-source-adapters-001 (m1/4)"
+  - "respects constraint-source-adapters-001 (rate limit + robots + UA + error isolation)"
+  - "depends_on change-2026-04-30-m1-job-schema (jobSchema.mjs)"
+  - "unblocks m2 ashby+lever, m3 github-md, m4 manual+UI"
+  - "produces data/career/pipeline.json (consumed by 03-dedupe-hard-filter)"
+anchors:
+  - file: "src/career/finder/httpFetch.mjs"
+    symbols:
+      - "USER_AGENT"
+      - "httpFetch"
+      - "checkRobots"
+      - "RobotsBlockedError"
+      - "HttpFetchError"
+      - "resetRobotsCache"
+      - "sleep"
+  - file: "src/career/finder/portalsLoader.mjs"
+    symbols:
+      - "PortalsFileSchema"
+      - "SourceConfigSchema"
+      - "readPortalsConfig"
+      - "writePortalsConfig"
+  - file: "src/career/finder/scanRunner.mjs"
+    symbols:
+      - "startScan"
+      - "getScanStatus"
+      - "runScanForTest"
+      - "ScanAlreadyRunningError"
+      - "registerAdapter"
+      - "PIPELINE_FILE"
+  - file: "src/career/finder/adapters/greenhouse.mjs"
+    symbols:
+      - "greenhouseAdapter"
+created_at: "2026-04-30"
+updated_at: "2026-04-30"

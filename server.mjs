@@ -11,6 +11,17 @@ import yaml from 'js-yaml';
 import { markdownToTemplateHtml, ALLOWED_TAGS } from './src/career/lib/markdownToTemplateHtml.mjs';
 import { htmlToPdf, shutdownBrowser } from './src/career/lib/htmlToPdf.mjs';
 import { composeCvHtml } from './src/career/lib/cvTemplate.mjs';
+import {
+  startScan,
+  getScanStatus,
+  ScanAlreadyRunningError,
+  PIPELINE_FILE,
+} from './src/career/finder/scanRunner.mjs';
+import {
+  readPortalsConfig,
+  writePortalsConfig,
+} from './src/career/finder/portalsLoader.mjs';
+import { manualPaste } from './src/career/finder/adapters/manual.mjs';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const app = express();
@@ -2624,6 +2635,86 @@ app.post('/api/career/resumes/auto-select', async (req, res) => {
   } catch (e) {
     if (e instanceof z.ZodError) {
       return res.status(400).json({ error: 'Invalid auto-select request', details: e.issues });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Finder: scan trigger + status ─────────────────────────────────────
+app.post('/api/career/finder/scan', (_req, res) => {
+  try {
+    const { scan_id, started_at } = startScan();
+    res.status(202).json({ scan_id, started_at });
+  } catch (e) {
+    if (e instanceof ScanAlreadyRunningError) {
+      return res.status(409).json({
+        error: 'scan already running',
+        ...e.state,
+      });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/career/finder/scan/status', (_req, res) => {
+  res.json(getScanStatus());
+});
+
+// ─── Finder: portals.yml CRUD ──────────────────────────────────────────
+app.get('/api/career/finder/portals', async (_req, res) => {
+  try {
+    const cfg = await readPortalsConfig();
+    res.json(cfg);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/career/finder/portals', async (req, res) => {
+  try {
+    await writePortalsConfig(req.body);
+    res.json({ ok: true });
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid portals config', details: e.issues });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Pipeline: manual paste ────────────────────────────────────────────
+const ManualPasteSchema = z.object({
+  url: z.string().url().max(2000),
+  title: z.string().max(500).optional(),
+  note: z.string().max(2000).optional(),
+});
+
+app.post('/api/career/pipeline/manual', async (req, res) => {
+  try {
+    const body = ManualPasteSchema.parse(req.body);
+    const job = await manualPaste(body);
+
+    // Append to pipeline.json (read-modify-write under simple lock would be
+    // ideal; here we accept last-writer-wins since manual paste is interactive
+    // and unlikely to race with a scan write).
+    let current = { jobs: [], last_scan_at: null, scan_summary: [] };
+    if (existsSync(PIPELINE_FILE)) {
+      try {
+        current = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+      } catch {
+        current = { jobs: [], last_scan_at: null, scan_summary: [] };
+      }
+    }
+    if (!Array.isArray(current.jobs)) current.jobs = [];
+    // Replace existing manual entry for same id (idempotent re-paste).
+    current.jobs = current.jobs.filter((j) => j.id !== job.id);
+    current.jobs.push(job);
+    await atomicWriteFile(PIPELINE_FILE, JSON.stringify(current, null, 2));
+
+    res.status(201).json({ job });
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid manual paste', details: e.issues });
     }
     res.status(500).json({ error: e.message });
   }

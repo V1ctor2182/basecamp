@@ -1,0 +1,106 @@
+spec_id: "change-2026-04-30-m2-ashby-lever"
+type: change
+state: active
+intent:
+  summary: "m2: Ashby + Lever adapters (复用 m1 infra) + parametric smoke 19/19"
+  detail: |
+    Add Ashby and Lever ATS adapters. Pure plug into ADAPTERS map — no
+    infra changes. Live verification: full scan 现在 6 ATS sources active
+    (3 GH + 3 Ashby) → 2581 real jobs (vs 1748 in m1).
+
+    Files added:
+      - src/career/finder/adapters/ashby.mjs (~75):
+        · type: 'ashby'
+        · fetch({slug}): GET https://api.ashbyhq.com/posting-api/job-board/{slug}
+          - maxBytes 20MB, timeout 60s (OpenAI 668 jobs ~5MB)
+          - return data.jobs ?? []
+        · normalize:
+          - id: hashJobId(name, title, 'ashby', String(raw.id))  (UUID id)
+          - source.url: https://jobs.ashbyhq.com/{slug}
+          - location: parseLocation([raw.location, ...secondaryLocations])
+            (secondaryLocations 可能 string 或 {locationName})
+          - description: stripHtml(descriptionHtml)
+          - posted_at: toIsoUtc(publishedAt)  // ISO with offset → Z
+          - tags: department/team/employmentType/workplaceType + 'Remote' if isRemote
+          - comp_hint: null (Ashby API 不暴露 comp)
+          - url: applyUrl || jobUrl
+
+      - src/career/finder/adapters/lever.mjs (~95):
+        · type: 'lever'
+        · fetch({slug}): GET https://api.lever.co/v0/postings/{slug}?mode=json
+          - top-level array (NOT {jobs})
+          - 60s timeout
+        · normalize:
+          - id: hashJobId(name, text, 'lever', String(raw.id))
+          - role: raw.text  (not raw.title!)
+          - location: parseLocation([categories.location, ...categories.allLocations])
+          - description: raw.descriptionPlain (already plain, NOT HTML)
+          - posted_at: toIsoUtc(createdAt)  // unix-ms number → Z
+          - tags: categories.{commitment,department,team} + workplaceType
+          - comp_hint: extracted from raw.salaryRange:
+            · min/max numbers
+            · currency 3-char ISO 4217
+            · interval: 'year'→yr / 'month'→mo / 'hour'→hr / 'week'→wk
+            · raw: salaryDescriptionPlain (truncated 500)
+          - url: applyUrl || hostedUrl
+
+      - src/career/finder/scanRunner.mjs (+3 lines):
+        · import + register ashbyAdapter, leverAdapter
+
+      - scripts/smoke-ats-adapters.mjs (~190 lines):
+        replaces smoke-greenhouse-adapter.mjs scope:
+        · 16 fixture assertions (3 GH + 6 Ashby + 7 Lever)
+        · 3 live (--live): GH Anthropic / Ashby OpenAI / Lever Plaid
+        · 验证 GH posted_at offset / Ashby publishedAt offset / Lever createdAt unix-ms 都归一化 Z
+        · 验证 location 合并 + dedupe 跨多字段 (Ashby primary+secondary, Lever location+allLocations)
+        · 验证 comp_hint 从 Lever salaryRange 抽取正确 (year → yr 等)
+        · 验证 missing slug 各 adapter 都 reject
+
+    Locked design (m1 patterns inherited):
+      - 60s timeout (vs m1 30s) — Ashby OpenAI 实测 fetch 较慢
+      - 不抽 comp_hint from Ashby (API 不给, 后续 04-jd-enrich 可以 LLM 抽)
+      - posted_at 归一化 Z form (统一 Date(value).toISOString())
+      - description 优先 plain text (Lever 直接给), Ashby 用 stripHtml
+      - 错误隔离 / per-job try/catch / 1s rate limit / robots — 全部沿用 m1 scanRunner
+
+    E2E verification:
+      - smoke fixture-only → 16/16 PASS ✓
+      - smoke --live → 19/19 PASS (live: GH Anthropic ≥10 + Ashby OpenAI ≥10 + Lever Plaid ≥10) ✓
+      - runScanForTest() vs real portals.yml (12 sources):
+        · 3 GH ✓: Anthropic 441 + Stripe 491 + Databricks 816 = 1748
+        · 3 Ashby ✓: OpenAI 668 + Notion 142 + Linear 23 = 833
+        · 1 Ashby empty board: Vercel 0 (graceful, not error)
+        · 2 Lever 404: Perplexity / Ramp (data 问题, 这两 boards 已迁出 Lever, 用户 portals.yml 待更新)
+        · 3 github-md → unknown adapter (m3 will fill)
+        · TOTAL: 2581 jobs, full Zod parse 通过, pipeline.json written
+      - tsc --noEmit ✓
+      - vite build ✓
+
+    下游 unblocked:
+      - m3 github-md
+      - m4 manual + Settings → Portals UI (ROOM COMPLETE)
+
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m2, backend, finder, ashby, lever, ats]
+provenance:
+  source_type: implementation
+  confidence: 1.0
+  source_ref: "commit d848a19"
+relations:
+  - "implements intent-source-adapters-001 (m2/4)"
+  - "depends_on change-2026-04-30-m1-scan-infra-greenhouse"
+  - "respects constraint-source-adapters-001 (rate limit + UA + error isolation)"
+anchors:
+  - file: "src/career/finder/adapters/ashby.mjs"
+    symbols:
+      - "ashbyAdapter"
+  - file: "src/career/finder/adapters/lever.mjs"
+    symbols:
+      - "leverAdapter"
+created_at: "2026-04-30"
+updated_at: "2026-04-30"
