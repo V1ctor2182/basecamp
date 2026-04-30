@@ -123,7 +123,7 @@ indexing:
 provenance:
   source_type: implementation
   confidence: 1.0
-  source_ref: "TBD-after-commit"
+  source_ref: "commit 62e7c1b"
 relations:
   - "implements intent-source-adapters-001 (m3/4)"
   - "depends_on change-2026-04-30-m2-ashby-lever"

@@ -177,7 +177,7 @@ milestones:
       - "scripts/smoke-github-md.mjs"
       - "package.json"
       - "package-lock.json"
-    commit_hash: "TBD"
+    commit_hash: "62e7c1b"
     estimated_files:
       - "src/career/finder/adapters/githubMd.mjs"
       - "src/career/finder/scanRunner.mjs"
