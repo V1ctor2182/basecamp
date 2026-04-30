@@ -1,0 +1,138 @@
+spec_id: "change-2026-04-30-m3-github-md"
+type: change
+state: active
+intent:
+  summary: "m3: github-md adapter — SimplifyJobs HTML <table> + speedyapply markdown-pipe fallback parser"
+  detail: |
+    第三个 source adapter (4/4 ATS+OSS source types covered after this milestone).
+    SimplifyJobs/speedyapply 等社区维护 GitHub repo 的 README 含全量 New-Grad /
+    Internship 岗位表 — 高 ROI, 单 fetch 拿数百到数千岗位。
+
+    实际数据 shape 与 plan 不同 (PR review 发现):
+      - SimplifyJobs 用 **HTML <table>** (cheerio 解析)
+      - speedyapply 用 **markdown pipe table** (regex fallback)
+      - 适配器需支持两种 (parseGithubMdTable 先试 HTML, 0 行则降级 markdown)
+
+    Files:
+      - src/career/finder/adapters/githubMd.mjs (~210):
+        · imports cheerio (新依赖)
+        · STRIP_MARKERS = ['🔥', '🎓', '🔒', '🇺🇸', '🇨🇦', '🇬🇧', '🇲🇽']
+        · CONTINUATION_MARKER = '↳'  (col 1 此符号 = 沿用上一行 company)
+        · CLOSED_MARKERS = ['🔒']    (role 含此符号 = 已关闭, skip)
+
+        · parseGithubMdTable(md):
+          - 先调 parseHtmlTable() — cheerio $('table tr') 取 ≥4 cells
+          - 0 行 → 降级 parseMarkdownPipeTable()
+          - 返 [{companyRaw, role, location, applyUrl, age, _roleHasLock}]
+
+        · parseHtmlTable(md): cheerio.load + $('table tr').each, 取 col 1-5
+          - applyUrl = pickApplyUrl($, cell4) — 优先非 simplify.jobs href
+
+        · parseMarkdownPipeTable(md):
+          - 找 `|---|---|...|` separator, separator 之后是数据行
+          - cells = trim '|' + split '|'
+          - col 1 = company, col 2 = role, col 3 = location, last = age
+          - applyUrl = 倒数第二开始扫含 <a href=> 的 cell, 抽 first non-simplify href
+          - textFromCell: regex strip <[^>]+> + decode &nbsp;
+
+        · pickFirstNonSimplifyHref(html): regex /<a\s+[^>]*href="([^"]+)"/gi
+          - 第一个非 simplify.jobs URL 优先, fallback first href
+
+        · parseAgeToIsoUtc('Nd' / 'Nh' / 'Nw' / 'Nm', now):
+          - 'd' → days, 'h' → hours, 'w' → weeks, 'm' → 30 days (粗略)
+          - 返 new Date(now - ms).toISOString()
+
+        · githubMdAdapter:
+          · type: 'github-md'
+          · fetch({owner, repo, path='README.md', branch='main'}):
+            - 尝试 [branch, 'dev', 'main', 'master'] 直到一个 200 + 解析非空
+              (SimplifyJobs 用 dev branch, 默认会试)
+            - URL: https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}
+            - 5MB body cap (README 通常 < 1MB; 用 5MB 兜底)
+            - 30s timeout
+            - 返 parseGithubMdTable(text) + _branch
+          · fetch wrapper (post-process):
+            - 遍历 rows, '↳' 沿用 prevCompany; 其他 prevCompany = company
+            - skip _roleHasLock / 无 company / 无 applyUrl
+          · normalize(raw, source):
+            - id: hashJobId(company, role, 'github-md', `${repo}::${applyUrl}`)
+            - source.url: `https://github.com/${owner}/${repo}`
+            - description: null (defer 04-jd-enrich)
+            - posted_at: parseAgeToIsoUtc(age, now)
+            - comp_hint: null (盘后期再考虑 speedyapply 的 Salary 列)
+            - tags: [] (此源不抽 tags, 后续可加)
+
+      - src/career/finder/scanRunner.mjs (+2 lines):
+        · import + register githubMdAdapter
+
+      - scripts/smoke-github-md.mjs (~190 lines):
+        · 11 fixture assertions:
+          1. parseGithubMdTable 返 5 数据行 (skip header)
+          2. row 1 normal — emoji stripped (🔥 / 🇺🇸), 非-simplify URL 优先
+          3. ↳ continuation 在 parse 阶段保留 (resolve 在 wrapper)
+          4. 🔒 lock 标记 via _roleHasLock
+          5. 缺 applyUrl 行
+          6. apply 优先级: simplify-first 时仍选 acme.com
+          7. wrapper 后: 5 行 → 3 行 (resolve continuation, drop closed/empty)
+          8. normalize → JobSchema parse, posted_at 5d ago 在 4-6d 范围
+          9. '2h' age → posted_at 在 2-3h 范围
+          10. id 稳定
+          11. fetch 缺 owner/repo reject
+        · 1 live (--live): SimplifyJobs/New-Grad-Positions ≥ 50 rows + 5 sample Zod parse
+
+      - package.json: + cheerio (1 dep)
+      - package-lock.json: 自动更新
+
+    Locked design:
+      - 双格式支持: HTML table 优先, markdown pipe 降级
+        (long-term-best — speedyapply 不愿改格式; community repo 多样)
+      - applyUrl 优先非 simplify.jobs href (utm tracking 不算 canonical)
+      - description=null (markdown 表格列里没全文 JD)
+      - posted_at 从 'Nd' age 派生 (相对时间 → now - delta)
+      - id hash key 含 repo (跨 repo 同公司同岗位会有不同 id, 这是有意的:
+        因为不同 repo 出处不同, 去重在 03-dedupe-hard-filter 用更聪明的 url+role 规则)
+      - branch fallback 列表: [user-config, 'dev', 'main', 'master']
+        (long-term-best — SimplifyJobs 用 dev; user 不应 hardcode 太多 detail)
+      - cheerio: 1 small dep, 也用于 m4 manual paste
+
+    E2E (live):
+      - smoke fixture-only → 11/11 PASS ✓
+      - smoke --live → 12/12 PASS ✓
+      - runScanForTest() 真 portals (12 sources):
+        · 3 GH ✓ (1747)
+        · 3 Ashby ✓ (833) + Vercel empty (0)
+        · 2 Lever 404 (data 问题, 用户 portals 待更新)
+        · 3 github-md ✓:
+          - SimplifyJobs New Grad: 304 (HTML table)
+          - SimplifyJobs Summer 2026: 989 (HTML table)
+          - speedyapply SWE: 264 (markdown pipe fallback) ← m3 关键能力
+        · TOTAL: 4137 jobs (vs 2581 m2, vs 1748 m1 — 增长 +1556 from m3)
+      - tsc --noEmit ✓
+      - vite build ✓
+
+    下游 unblocked:
+      - m4 manual paste + Settings → Portals UI (ROOM COMPLETE)
+
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m3, backend, finder, github-md, simplifyjobs, html-table, markdown-pipe, cheerio]
+provenance:
+  source_type: implementation
+  confidence: 1.0
+  source_ref: "TBD-after-commit"
+relations:
+  - "implements intent-source-adapters-001 (m3/4)"
+  - "depends_on change-2026-04-30-m2-ashby-lever"
+  - "respects constraint-source-adapters-001 (rate limit + UA + error isolation)"
+  - "introduces cheerio dep (also used by m4 manual paste)"
+anchors:
+  - file: "src/career/finder/adapters/githubMd.mjs"
+    symbols:
+      - "githubMdAdapter"
+      - "parseGithubMdTable"
+created_at: "2026-04-30"
+updated_at: "2026-04-30"

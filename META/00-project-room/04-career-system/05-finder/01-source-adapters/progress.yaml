@@ -168,8 +168,16 @@ milestones:
       jobs ≥ 100 + scan_summary 8 行全 count > 0 (live)
 
   - id: "m3-github-md"
-    name: "github-md adapter (SimplifyJobs README markdown table parser)"
-    status: pending
+    name: "github-md adapter (SimplifyJobs HTML <table> + speedyapply markdown-pipe fallback)"
+    status: completed
+    actual_lines: 405
+    actual_files:
+      - "src/career/finder/adapters/githubMd.mjs"
+      - "src/career/finder/scanRunner.mjs"
+      - "scripts/smoke-github-md.mjs"
+      - "package.json"
+      - "package-lock.json"
+    commit_hash: "TBD"
     estimated_files:
       - "src/career/finder/adapters/githubMd.mjs"
       - "src/career/finder/scanRunner.mjs"

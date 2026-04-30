@@ -8,6 +8,7 @@ import { readPortalsConfig } from './portalsLoader.mjs';
 import { greenhouseAdapter } from './adapters/greenhouse.mjs';
 import { ashbyAdapter } from './adapters/ashby.mjs';
 import { leverAdapter } from './adapters/lever.mjs';
+import { githubMdAdapter } from './adapters/githubMd.mjs';
 
 const DATA_DIR = path.resolve('data');
 const CAREER_DIR = path.join(DATA_DIR, 'career');
@@ -17,6 +18,7 @@ const ADAPTERS = {
   [greenhouseAdapter.type]: greenhouseAdapter,
   [ashbyAdapter.type]: ashbyAdapter,
   [leverAdapter.type]: leverAdapter,
+  [githubMdAdapter.type]: githubMdAdapter,
 };
 
 export function registerAdapter(adapter) {
