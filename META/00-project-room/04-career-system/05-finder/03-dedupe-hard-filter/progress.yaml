@@ -58,7 +58,7 @@ milestones:
       - "src/career/finder/matchUtils.mjs"
       - "src/career/finder/hardFilter.mjs"
       - "scripts/smoke-hard-filter.mjs"
-    commit_hash: "TBD"
+    commit_hash: "1885b4d"
     estimated_files:
       - "src/career/finder/matchUtils.mjs"
       - "src/career/finder/hardFilter.mjs"

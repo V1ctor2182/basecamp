@@ -117,7 +117,7 @@ indexing:
 provenance:
   source_type: implementation
   confidence: 1.0
-  source_ref: "TBD-after-commit"
+  source_ref: "commit 1885b4d"
 relations:
   - "implements intent-dedupe-hard-filter-001 (m2/3)"
   - "respects constraint-dedupe-hard-filter-001 (短路顺序锁定 + archive.jsonl 必写)"
