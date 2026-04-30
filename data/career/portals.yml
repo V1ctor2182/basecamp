@@ -1,0 +1,145 @@
+# portals.yml — 扫哪些公司 / GitHub repo
+#
+# Finder 配置源 — 定义扫描的 source adapters。
+# 每个 source 实现 fetch + normalize 到统一 Job schema。
+#
+# 使用方法：
+#   1. `npm run init:career` 会把本文件 cp 成 portals.yml（不覆盖已有）
+#   2. 按你的目标公司 / source 定制
+#   3. portals.yml commit 进 git（可复用知识）
+#
+# Schema 参考 career-architecture/03-finder.md
+
+sources:
+  # ───────────────────────────────────────
+  # ATS API 源（公司级，零 token，无反爬）
+  # ───────────────────────────────────────
+
+  - type: greenhouse
+    name: "Anthropic"
+    config: { slug: "anthropic" }
+    priority: 1
+
+  - type: greenhouse
+    name: "Stripe"
+    config: { slug: "stripe" }
+    priority: 1
+
+  - type: greenhouse
+    name: "Databricks"
+    config: { slug: "databricks" }
+    priority: 2
+
+  - type: ashby
+    name: "OpenAI"
+    config: { slug: "openai" }
+    priority: 1
+
+  - type: ashby
+    name: "Notion"
+    config: { slug: "notion" }
+    priority: 2
+
+  - type: ashby
+    name: "Linear"
+    config: { slug: "linear" }
+    priority: 2
+
+  - type: ashby
+    name: "Vercel"
+    config: { slug: "vercel" }
+    priority: 2
+
+  - type: lever
+    name: "Perplexity"
+    config: { slug: "perplexity" }
+    priority: 2
+
+  - type: lever
+    name: "Ramp"
+    config: { slug: "ramp" }
+    priority: 2
+
+  # ───────────────────────────────────────
+  # GitHub 社区 repo（实习狗 + New Grad 刚需）
+  # ───────────────────────────────────────
+
+  - type: github-md
+    name: "SimplifyJobs New Grad"
+    config:
+      owner: SimplifyJobs
+      repo: New-Grad-Positions
+      path: README.md
+      ref: dev
+    priority: 1
+
+  - type: github-md
+    name: "SimplifyJobs Summer 2026 Interns"
+    config:
+      owner: SimplifyJobs
+      repo: Summer2026-Internships
+      path: README.md
+      ref: dev
+    priority: 1
+
+  - type: github-md
+    name: "speedyapply SWE"
+    config:
+      owner: speedyapply
+      repo: "2026-SWE-College-Jobs"
+      path: README.md
+    priority: 2
+
+  # ───────────────────────────────────────
+  # 公司直爬（Playwright, 仅必要公司）
+  # ───────────────────────────────────────
+  # - type: scrape
+  #   name: "Google Careers"
+  #   config:
+  #     url: "https://www.google.com/about/careers/applications/jobs/results/?q=software%20engineer&location=United%20States"
+  #     selector:
+  #       container: "[data-job-id]"
+  #       role: ".QJPWVe"
+  #       location: ".r0wTof"
+  #       link: "a[jsname='hSRGPd']"
+  #     paginate:
+  #       next: "[aria-label='Go to next page']"
+  #   priority: 3
+
+# ───────────────────────────────────────
+# 跨源通用过滤器（Finder 用）
+# ───────────────────────────────────────
+global_filters:
+  title_must_include_any:
+    - "software engineer"
+    - "backend"
+    - "infra"
+    - "platform"
+    - "applied ai"
+    - "ml engineer"
+    - "swe"
+  title_must_exclude:
+    - "staff"
+    - "principal"
+    - "director"
+    - "manager"
+    - "embedded"
+    - "firmware"
+    - "game"
+  location_require_any:
+    - "Remote (US)"
+    - "New York"
+    - "NYC"
+    - "San Francisco"
+    - "SF"
+    - "Seattle"
+
+# ───────────────────────────────────────
+# 扫描 cadence（每 source type 独立）
+# ───────────────────────────────────────
+scan_cadence:
+  greenhouse: "72h"
+  ashby: "72h"
+  lever: "72h"
+  github-md: "24h"      # 更新快
+  scrape: "168h"        # 一周一次，反爬风险小

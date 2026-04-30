@@ -15,7 +15,24 @@
       "Bash(lsof -nP -iTCP:443 -sTCP:LISTEN)",
       "Bash(lsof -nP -iTCP:5173 -sTCP:LISTEN)",
       "Bash(lsof -nP -iTCP:4568 -sTCP:LISTEN)",
-      "Bash(awk 'END{print NR}' server.mjs)"
+      "Bash(awk 'END{print NR}' server.mjs)",
+      "Bash(md5 -q skills/dev/SKILL.md claude-skills/dev/SKILL.md)",
+      "Bash(ln -s claude-skills skills)",
+      "Bash(node -e \"import\\('./server.mjs'\\).then\\(\\(\\) => setTimeout\\(\\(\\) => process.exit\\(0\\), 300\\)\\)\")",
+      "Bash(xargs -I{} git branch -d {})",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(npx playwright *)",
+      "Bash(jobs -l)",
+      "Bash(bash scripts/init-career.sh)",
+      "Bash(node -e \"import\\('fs/promises'\\).then\\(m => console.log\\(typeof m.rm\\)\\)\")",
+      "Bash(node -e \"import\\('./server.mjs'\\).then\\(\\(\\)=>setTimeout\\(\\(\\)=>process.exit\\(0\\),300\\)\\)\")",
+      "Bash(grep -nA 4 'id: \"00-project-room/04-career-system/03-cv-engine\"\\\\b' META/00-project-room/_tree.yaml)",
+      "Bash(node -e \"console.log\\(JSON.parse\\(require\\('fs'\\).readFileSync\\('package.json'\\)\\).scripts.dev\\)\")",
+      "Bash(open /tmp/career-parallel-plan.html)",
+      "Bash(open /Users/victor/work/victor-context/learn/learn-dashboard/META/00-project-room/04-career-system/parallel-plan.html)",
+      "Bash(open /tmp/parallel-plan-rendered.html)",
+      "Bash(/bin/ls -la /Users/victor/.claude/)",
+      "Bash(node scripts/smoke-hard-filter.mjs)"
     ]
   }
 }
