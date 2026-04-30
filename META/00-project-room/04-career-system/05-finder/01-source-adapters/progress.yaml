@@ -138,7 +138,7 @@ milestones:
       - "src/career/finder/adapters/lever.mjs"
       - "src/career/finder/scanRunner.mjs"
       - "scripts/smoke-ats-adapters.mjs"
-    commit_hash: "TBD"
+    commit_hash: "d848a19"
     estimated_files:
       - "src/career/finder/adapters/ashby.mjs"
       - "src/career/finder/adapters/lever.mjs"
