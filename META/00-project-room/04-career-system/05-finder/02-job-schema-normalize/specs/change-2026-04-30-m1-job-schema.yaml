@@ -1,0 +1,105 @@
+spec_id: "change-2026-04-30-m1-job-schema"
+type: change
+state: active
+intent:
+  summary: "m1: Job Zod schema + helpers (hashJobId / stripHtml / parseLocation / normalizeJob) + smoke (ROOM COMPLETE)"
+  detail: |
+    Pure ESM module 定义 Finder 子系统所有下游 (01-source-adapters /
+    03-dedupe-hard-filter / 04-jd-enrich / 06-evaluator / Pipeline UI) 共用的
+    Job 数据契约。无外部依赖, 无 LLM, 纯 schema + 5 helpers。
+
+    Files added:
+      - src/career/lib/jobSchema.mjs (~95 lines):
+        · imports: zod + node:crypto
+        · SOURCE_TYPES = ['greenhouse','ashby','lever','github-md','scrape','rss','manual']
+          (LinkedIn/Indeed 不在 enum — 走 manual, 见 finder constraint)
+        · JobSourceSchema { type (enum), name (max 200), url (url|null) }
+        · JobCompHintSchema { min?, max?, currency?(ISO 4217 length 3),
+            period?('yr'|'mo'|'hr'|'wk'), raw?(max 500) }, nullable wrapper
+        · JobSchema {
+            id: /^[a-f0-9]{12}$/,
+            source: JobSourceSchema,
+            company (1-200), role (1-300), location (string[]),
+            url (url), description (string|null),
+            posted_at (datetime|null), scraped_at (datetime),
+            comp_hint, tags (string[]), raw (unknown),
+            schema_version: literal(1),
+          }
+        · slugify(s) — lowercase, /[^a-z0-9]+/ → '-', trim '-'
+        · hashJobId(company, role, sourceType, sourceNativeId)
+          → sha256 hex 前 12 char (case-insensitive on company/role via slugify)
+          → server-only, JSDoc 标注 (frontend 不应调用)
+        · stripHtml(html) — null/undefined → null, '' → ''
+          regex remove tags + decode 7 HTML entities + collapse whitespace
+        · parseLocation(raw) — split /[;,/|]+/, trim, dedupe (Map keyed lowercase)
+        · normalizeJob(partial) — fills tags=[], schema_version=1,
+          scraped_at=now() then JobSchema.parse
+
+      - scripts/smoke-job-schema.mjs (~120 lines):
+        · 17 assertions via node:assert/strict
+        · 覆盖: valid parse / 缺字段 / unknown enum / null 字段 / currency 长度 /
+          hash 稳定性 + 大小写归一 / parseLocation 多分隔符 dedupe / 空输入 /
+          stripHtml entity decode / null safety / normalizeJob 默认值 /
+          posted_at ISO 校验 / id 格式校验 / slugify normalize / SOURCE_TYPES enum
+
+    Locked design (long-term-best, 默认推荐 from plan):
+      - Job ID hash: sha256(slug(company)::slug(role)::source.type::source_native_id).slice(0,12)
+        12 hex char (~48 bit) 1M jobs 碰撞概率 < 1e-6, 紧凑可读
+      - schema_version: number 1 (递增, 升级写迁移 fn)
+      - comp_hint shape: 全部 optional, 顶层 nullable; period 4 enum
+      - source.type 7 enum: 显式无 LinkedIn/Indeed (合规 + finder constraint 禁止自动扫)
+      - stripHtml: regex 0-dep (容噪 OK, 描述给 LLM 用)
+      - 文件位置: src/career/lib/*.mjs (与 cvTemplate / htmlToPdf / markdownToTemplateHtml 一致)
+      - import: node:crypto prefix (明示 server-only)
+
+    Verification:
+      - node scripts/smoke-job-schema.mjs → 17/17 PASS, exit 0 ✓
+      - npx tsc --noEmit → 0 errors ✓
+      - npx vite build → ✓ (8 chunk warnings 与本 milestone 无关)
+
+    ROOM COMPLETE work:
+      - 单 milestone Room → m1 完成即 ROOM COMPLETE
+      - room.yaml lifecycle: planning → active
+      - _tree.yaml 同步 (在 followup commit 处理或单独)
+      - spec.md 已在 plan 阶段更新, 后续 ROOM-COMPLETE 段会再加
+      - 05-finder sub-epic propagation: 0% → 20% (1/5 features ✅)
+      - 04-career-system 顶层 propagation: 45% → ~46%
+
+    下游影响:
+      - 01-source-adapters: 6 adapter 产出必须 normalizeJob() 通过
+      - 03-dedupe-hard-filter: 用 Job.id 跨源去重
+      - 04-jd-enrich: 检查 description===null 决定补全
+      - 06-evaluator: 消费 Job 全字段评分
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, backend, schema, zod, contract, finder, room-complete]
+provenance:
+  source_type: implementation
+  confidence: 1.0
+  source_ref: "TBD-after-commit"
+relations:
+  - "implements intent-job-schema-normalize-001 (m1/1, ROOM COMPLETE)"
+  - "unblocks 05-finder/01-source-adapters"
+  - "unblocks 05-finder/03-dedupe-hard-filter"
+  - "unblocks 05-finder/04-jd-enrich"
+  - "first 05-finder feature shipped"
+anchors:
+  - file: "src/career/lib/jobSchema.mjs"
+    symbols:
+      - "JobSchema"
+      - "JobSourceSchema"
+      - "JobCompHintSchema"
+      - "SOURCE_TYPES"
+      - "slugify"
+      - "hashJobId"
+      - "stripHtml"
+      - "parseLocation"
+      - "normalizeJob"
+  - file: "scripts/smoke-job-schema.mjs"
+    symbols: []
+created_at: "2026-04-30"
+updated_at: "2026-04-30"

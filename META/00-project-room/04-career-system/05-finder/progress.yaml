@@ -1,5 +1,12 @@
 milestones: []
-current_sprint: null
+current_sprint: "Sprint 5 — Finder"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 20  # avg(0, 100, 0, 0, 0) = 20 across 5 features (1/5 ROOMs ✅)
+children_completion:
+  "01-source-adapters": 0
+  "02-job-schema-normalize": 100  # ✅ active — ROOM COMPLETE
+  "03-dedupe-hard-filter": 0
+  "04-jd-enrich": 0
+  "05-scan-scheduler": 0
+status_note: "🎉 02-job-schema-normalize COMPLETE. 05-finder 20% (1/5). 下一个: 01-source-adapters."
+last_updated: "2026-04-30"

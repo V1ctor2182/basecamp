@@ -1,5 +1,131 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-job-schema"
+    name: "Job Zod schema + helpers (hashJobId / stripHtml / parseLocation / normalizeJob) + smoke (ROOM COMPLETE)"
+    status: completed
+    actual_lines: 215
+    actual_files:
+      - "src/career/lib/jobSchema.mjs"
+      - "scripts/smoke-job-schema.mjs"
+    estimated_files:
+      - "src/career/lib/jobSchema.mjs"
+      - "scripts/smoke-job-schema.mjs"
+    estimated_lines: 220
+    depends_on: []
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Finder 所有下游 (01-source-adapters / 03-dedupe / 04-enrich / Evaluator /
+      Pipeline UI) 共用的 Job 数据契约。Pure ESM module, 与 src/career/lib/
+      cvTemplate.mjs / htmlToPdf.mjs / markdownToTemplateHtml.mjs 一致风格,
+      server.mjs + Vite frontend 都可 import。
+
+      Locked design (default 推荐, long-term-best):
+        - Job ID: sha256(`${slug(company)}::${slug(role)}::${source.type}::${source_native_id}`).slice(0, 12)
+          12 hex char (~48 bit) 1M jobs 碰撞概率 < 1e-6, 可读 + 紧凑
+        - schema_version: number (起始 1), 升级写显式迁移 fn
+        - comp_hint shape: { min?, max?, currency?, period? ('yr'|'mo'|'hr'|'wk'), raw? } 全部 optional, 顶层 nullable
+        - source.type enum: ['greenhouse', 'ashby', 'lever', 'github-md', 'scrape', 'rss', 'manual']
+          (LinkedIn/Indeed 走 manual — 见 finder constraint 禁止自动扫)
+        - stripHtml: regex (`<[^>]+>` + entity decode), 0 deps, 描述给 LLM 容噪能力强
+
+      实现 (src/career/lib/jobSchema.mjs ~140 行):
+        - import { z } + import crypto (createHash)
+        - SOURCE_TYPES = ['greenhouse', 'ashby', 'lever', 'github-md', 'scrape', 'rss', 'manual']
+        - JobSourceSchema = z.object({
+            type: z.enum(SOURCE_TYPES),
+            name: z.string().max(200),       // 'Anthropic Greenhouse' / 'github.com/SimplifyJobs/...'
+            url: z.string().url().nullable(),
+          })
+        - JobCompHintSchema = z.object({
+            min: z.number().nonnegative().optional(),
+            max: z.number().nonnegative().optional(),
+            currency: z.string().length(3).optional(),  // ISO 4217: USD/EUR/GBP
+            period: z.enum(['yr', 'mo', 'hr', 'wk']).optional(),
+            raw: z.string().max(500).optional(),
+          }).nullable()
+        - JobSchema = z.object({
+            id: z.string().regex(/^[a-f0-9]{12}$/),     // hashJobId 输出
+            source: JobSourceSchema,
+            company: z.string().min(1).max(200),
+            role: z.string().min(1).max(300),
+            location: z.array(z.string().min(1)),       // 可空数组 (Remote 无指定地点)
+            url: z.string().url(),                       // canonical apply URL
+            description: z.string().nullable(),         // null = 待 enrich (04-jd-enrich)
+            posted_at: z.string().datetime().nullable(),
+            scraped_at: z.string().datetime(),
+            comp_hint: JobCompHintSchema,
+            tags: z.array(z.string()),                  // ['Remote', 'Senior', ...] adapter 抽
+            raw: z.unknown(),                            // 留底原 payload, 不校验
+            schema_version: z.literal(1),
+          })
+        - export Job type via z.infer
+
+        - export function slugify(s: string)
+          // lowercase, /[^a-z0-9]+/g → '-', trim leading/trailing '-'
+        - export function hashJobId(company, role, sourceType, sourceNativeId)
+          // const key = `${slugify(company)}::${slugify(role)}::${sourceType}::${sourceNativeId}`
+          // return createHash('sha256').update(key).digest('hex').slice(0, 12)
+        - export function stripHtml(html)
+          // return null if !html
+          // remove <[^>]+>, decode &amp;|&lt;|&gt;|&quot;|&#39;|&nbsp;
+          // collapse \s+ → ' ', trim
+        - export function parseLocation(raw)
+          // if !raw → []
+          // split /[;,/|]+/, trim, filter Boolean, dedupe (Map keyed by toLowerCase)
+        - export function normalizeJob(partial)
+          // fills defaults: tags=[], schema_version=1, scraped_at=new Date().toISOString()
+          // returns JobSchema.parse(filled)  — 抛 ZodError, adapter 调用方负责 catch + log
+
+      Smoke (scripts/smoke-job-schema.mjs ~80 行):
+        - import assert/strict + 全部 export
+        - 10+ 断言:
+          1. valid Job parse OK
+          2. 缺 company → ZodError
+          3. unknown source.type ('linkedin') → ZodError
+          4. description=null OK
+          5. comp_hint=null OK
+          6. comp_hint={currency:'USDD'} → ZodError (length 3)
+          7. hashJobId 同输入两次 → 一致 + length 12 + /^[a-f0-9]{12}$/
+          8. hashJobId 大小写归一: ('Anthropic',...) === ('anthropic',...)
+          9. parseLocation('NYC; New York / nyc') → ['NYC','New York'] (dedupe 大小写)
+          10. parseLocation('') → []
+          11. stripHtml('<p>Hello&amp; <br/>world</p>') → 'Hello& world'
+          12. stripHtml(null) → null
+          13. normalizeJob 填默认 (tags=[], schema_version=1, scraped_at present)
+          14. posted_at='not-iso' → ZodError
+        - 每个 console.log('PASS:', name) / 失败 throw + exit 1
+
+      验收:
+        - node scripts/smoke-job-schema.mjs → 全部 PASS, exit 0
+        - npx tsc --noEmit (无 .ts 改动, 但确认 import 兼容)
+        - npx vite build (确认 frontend bundling 不抱怨)
+
+      ROOM COMPLETE work (单 milestone Room):
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml 同步
+        - spec.md 重写 ROOM-COMPLETE 总结
+        - 05-finder sub-epic propagation: 0% → 20% (1/5)
+        - 04-career-system 顶层 propagation: 45% → ~46%
+
+      下游影响:
+        - 01-source-adapters: 6 adapter 产出必须 normalizeJob() 通过
+        - 03-dedupe-hard-filter: 用 Job.id 跨源去重
+        - 04-jd-enrich: 检查 description===null 决定补全
+        - 06-evaluator: 消费 Job 全字段评分
+
+commits:
+  - hash: "TBD"
+    date: "2026-04-30"
+    message: "[04-career-system/05-finder/02-job-schema-normalize] m1: Job Zod schema + 5 helpers + smoke 17/17 (ROOM COMPLETE)"
+    files_changed: 5
+    specs_affected:
+      - "change-2026-04-30-m1-job-schema (created)"
+      - "room.yaml (lifecycle: planning → active)"
+    milestones_affected:
+      - "m1-job-schema (→ completed, ROOM COMPLETE)"
+
+current_sprint: "Sprint 5 — Finder"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 100
+status_note: "🎉 ROOM 02-job-schema-normalize COMPLETE (1/1). 05-finder 20% (1/5). 下一个: 01-source-adapters."
+last_updated: "2026-04-30"
