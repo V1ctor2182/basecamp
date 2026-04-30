@@ -131,7 +131,14 @@ milestones:
 
   - id: "m2-ashby-lever"
     name: "Ashby + Lever adapters"
-    status: pending
+    status: completed
+    actual_lines: 360
+    actual_files:
+      - "src/career/finder/adapters/ashby.mjs"
+      - "src/career/finder/adapters/lever.mjs"
+      - "src/career/finder/scanRunner.mjs"
+      - "scripts/smoke-ats-adapters.mjs"
+    commit_hash: "TBD"
     estimated_files:
       - "src/career/finder/adapters/ashby.mjs"
       - "src/career/finder/adapters/lever.mjs"

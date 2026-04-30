@@ -6,6 +6,8 @@ import { randomUUID } from 'node:crypto';
 import { resetRobotsCache, sleep } from './httpFetch.mjs';
 import { readPortalsConfig } from './portalsLoader.mjs';
 import { greenhouseAdapter } from './adapters/greenhouse.mjs';
+import { ashbyAdapter } from './adapters/ashby.mjs';
+import { leverAdapter } from './adapters/lever.mjs';
 
 const DATA_DIR = path.resolve('data');
 const CAREER_DIR = path.join(DATA_DIR, 'career');
@@ -13,6 +15,8 @@ export const PIPELINE_FILE = path.join(CAREER_DIR, 'pipeline.json');
 
 const ADAPTERS = {
   [greenhouseAdapter.type]: greenhouseAdapter,
+  [ashbyAdapter.type]: ashbyAdapter,
+  [leverAdapter.type]: leverAdapter,
 };
 
 export function registerAdapter(adapter) {
