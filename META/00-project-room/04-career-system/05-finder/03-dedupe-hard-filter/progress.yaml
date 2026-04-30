@@ -158,7 +158,7 @@ milestones:
       - "server.mjs"
       - "src/career/settings/Preferences.tsx"
       - "scripts/smoke-dryrun-filter.mjs"
-    commit_hash: "PENDING"
+    commit_hash: "4aa4a0a"
     estimated_files:
       - "src/career/finder/scanRunner.mjs"
       - "server.mjs"
