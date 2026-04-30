@@ -20,7 +20,7 @@ Finder 所有下游（dedupe / hard filter / enrich / Evaluator / UI）共用的
 
 单 milestone Room, 1/1 ✅:
 
-- ✅ **m1-job-schema** (commit TBD, 215 行) — Zod `JobSchema` + 5 helpers + smoke 17 断言全过
+- ✅ **m1-job-schema** (commit `f718499`, 215 行) — Zod `JobSchema` + 5 helpers + smoke 17 断言全过
 
 ### 交付
 

@@ -13,6 +13,7 @@ milestones:
     depends_on: []
     complexity_flags: ["design_decisions"]
     open_questions: []
+    commit_hash: "f718499"
     description: |
       Finder 所有下游 (01-source-adapters / 03-dedupe / 04-enrich / Evaluator /
       Pipeline UI) 共用的 Job 数据契约。Pure ESM module, 与 src/career/lib/
@@ -114,7 +115,7 @@ milestones:
         - 06-evaluator: 消费 Job 全字段评分
 
 commits:
-  - hash: "TBD"
+  - hash: "f718499"
     date: "2026-04-30"
     message: "[04-career-system/05-finder/02-job-schema-normalize] m1: Job Zod schema + 5 helpers + smoke 17/17 (ROOM COMPLETE)"
     files_changed: 5

@@ -80,7 +80,7 @@ indexing:
 provenance:
   source_type: implementation
   confidence: 1.0
-  source_ref: "TBD-after-commit"
+  source_ref: "commit f718499"
 relations:
   - "implements intent-job-schema-normalize-001 (m1/1, ROOM COMPLETE)"
   - "unblocks 05-finder/01-source-adapters"
