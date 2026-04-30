@@ -1,0 +1,79 @@
+spec_id: "change-2026-04-30-m1-dedupe-and-history"
+type: change
+state: active
+intent:
+  summary: "m1: dedupe + scan-history.jsonl — append-only Set<id> ledger + dedupeJobs() + markIdsAsSeen() + smoke 8/8"
+  detail: |
+    Pure ESM module + smoke. scan-history.jsonl 跨 scan 持久 Job.id 集合, 让
+    后续 m3 scanRunner 接入后能跨 scan 跳过已见。绝不 rotate (append-only forever).
+
+    Files:
+      - src/career/finder/dedupe.mjs (~85 行):
+        · SCAN_HISTORY_FILE = data/career/scan-history.jsonl
+        · loadSeenSet(file?) — createInterface 流式读, 单行损坏 console.warn + skip
+          返 Set<string>; 文件不存在 → empty Set
+        · dedupeJobs(jobs):
+          - 内部调 loadSeenSet
+          - partition into { new, duplicates, seenCount }
+          - job 无 id → warn + 视作 new (post-normalize 不应发生)
+          - 不写 file (caller 决定何时 markIdsAsSeen, dry-run 不该写)
+        · markIdsAsSeen(ids[], file?):
+          - 单 ts (ISO) 标记 batch
+          - fs.appendFile (atomic for jsonl append on single host)
+          - mkdir CAREER_DIR if needed
+
+      - scripts/smoke-dedupe.mjs (~155 行) — 8 assertions:
+        1. SCAN_HISTORY_FILE 路径正确
+        2. 不存在文件 → empty Set
+        3. markIdsAsSeen + loadSeenSet roundtrip (3 ids)
+        4. all-fresh on empty file → all new
+        5. fresh + duplicate mix → 正确 partition
+        6. malformed line (mixed valid + garbage + blank) → skip + warn, 不 crash
+        7. 10K rows load < 200ms (实测 ~10ms)
+        8. job 缺 id → warn + 视作 new
+        所有测试用 os.tmpdir() 隔离, 不污染 data/career/scan-history.jsonl
+
+    Locked design (long-term-best, all defaults):
+      - append-only forever, 永不 rotate (1M rows ~50MB cheap)
+      - 解析容错: 单行损坏不挂全局
+      - markIdsAsSeen 与 dedupeJobs 分离 (dry-run dedupe 不应写)
+      - file 参数支持 (smoke 隔离用 tmpfile)
+      - record shape {id, seen_at: ISO}, ts batch-shared per markIdsAsSeen call
+
+    E2E:
+      - node scripts/smoke-dedupe.mjs → 8/8 PASS ✓
+      - 10K rows load 实测 < 50ms ✓
+      - tsc --noEmit ✓
+      - vite build ✓
+
+    下游 unblocked:
+      - m2 hard-filter engine (scanRunner 整合时一起接入)
+      - m3 integration (wire into runScanCore: fetch → dedupeJobs → hardFilter →
+        markIdsAsSeen(allIncludingDropped) + write pipeline.json)
+      - 05-scan-scheduler safe to call POST /scan repeatedly (dedupe 保证)
+
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m1, backend, finder, dedupe, scan-history]
+provenance:
+  source_type: implementation
+  confidence: 1.0
+  source_ref: "commit 52a166e"
+relations:
+  - "implements intent-dedupe-hard-filter-001 (m1/3)"
+  - "respects constraint-dedupe-hard-filter-001 (id stability + append-only history)"
+  - "depends_on change-2026-04-30-m1-job-schema (Job.id format)"
+  - "unblocks m2 hard-filter and m3 integration"
+anchors:
+  - file: "src/career/finder/dedupe.mjs"
+    symbols:
+      - "loadSeenSet"
+      - "dedupeJobs"
+      - "markIdsAsSeen"
+      - "SCAN_HISTORY_FILE"
+created_at: "2026-04-30"
+updated_at: "2026-04-30"

@@ -1,5 +1,268 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-dedupe-and-history"
+    name: "dedupe + scan-history.jsonl (load Set + filter new + append IDs)"
+    status: completed
+    actual_lines: 240
+    actual_files:
+      - "src/career/finder/dedupe.mjs"
+      - "scripts/smoke-dedupe.mjs"
+    commit_hash: "52a166e"
+    estimated_files:
+      - "src/career/finder/dedupe.mjs"
+      - "scripts/smoke-dedupe.mjs"
+    estimated_lines: 150
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    description: |
+      简单纯模块. scan-history.jsonl 跟踪所有见过的 Job.id, 跨 scan 持久。
+      绝不 rotate (append-only 永久; 1M 行 ~50MB; 远超实际需要)。
+
+      实现 (src/career/finder/dedupe.mjs ~80 行):
+        - SCAN_HISTORY_FILE = path.join(CAREER_DIR, 'scan-history.jsonl')
+        - async loadSeenSet():
+          - if not exists → return new Set()
+          - read line-by-line (createInterface), parse JSON each line
+          - skip blank / unparseable lines (warn console)
+          - return Set<id>
+        - dedupeJobs(jobs):
+          - seen = await loadSeenSet()
+          - newJobs = [], dups = []
+          - for j of jobs: seen.has(j.id) ? dups.push(j) : newJobs.push(j)
+          - return { new: newJobs, duplicates: dups, seenCount: seen.size }
+        - markIdsAsSeen(ids: string[]):
+          - 只 append 新行, 不重写
+          - lines: ids.map(id => JSON.stringify({id, seen_at: nowIso()}) + '\n')
+          - fs.appendFile (atomic enough for append-only jsonl)
+
+      Smoke (scripts/smoke-dedupe.mjs ~70 行) — 6 assertions:
+        1. 不存在文件 → loadSeenSet 返空 Set
+        2. 100 fresh jobs → all new, dups=[]
+        3. 50 fresh + 50 重复 (相同 id) → new=50, duplicates=50
+        4. markIdsAsSeen 后 dedupeJobs 同输入 → 全 dup
+        5. 大文件 (10K rows) → load < 200ms
+        6. malformed line (mixed valid + 1 garbage line) → 不 crash, 跳过 garbage
+
+      Locked design:
+        - append-only jsonl, 永不 rotate
+        - 解析容错: 单行损坏不挂全局
+        - markIdsAsSeen 与 dedupeJobs 分离 (dry-run 调用 dedupe 不应写)
+
+      验收: smoke 6/6 PASS; tsc + vite build clean
+
+  - id: "m2-hard-filter-engine"
+    name: "9-rule hard filter + match utils + archive.jsonl"
+    status: completed
+    actual_lines: 730
+    actual_files:
+      - "src/career/finder/matchUtils.mjs"
+      - "src/career/finder/hardFilter.mjs"
+      - "scripts/smoke-hard-filter.mjs"
+    commit_hash: "1885b4d"
+    estimated_files:
+      - "src/career/finder/matchUtils.mjs"
+      - "src/career/finder/hardFilter.mjs"
+      - "scripts/smoke-hard-filter.mjs"
+    estimated_lines: 530
+    depends_on: ["m1-dedupe-and-history"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Hard filter 引擎. 9 规则按固定顺序短路, 每 drop 写 archive.jsonl
+      (含 full job snapshot, 不只 id, debug 友好)。所有 ambiguity → keep
+      (conservative drop)。
+
+      Files:
+        - src/career/finder/matchUtils.mjs (~80 行):
+          · escapeRegex(s) — 转义用户输入用作 regex
+          · compileMatcher(keywords[], mode='contains', caseSensitive=false):
+            - 'contains': flat substring match (lowercased if !cs)
+            - 'whole_word': /\\b{escape(kw)}\\b/i regex array
+            - 'regex': try { new RegExp(kw, flags) } catch { warn + skip this kw }
+            - returns (text: string) => matchedKeyword | null
+          · compileMatcher with [] → returns () => null (no-op)
+          · 用户传 mode 通过 prefs.hard_filters._modes (新选项, 全 default 'contains'
+            目前只 contains 启用; whole_word/regex 未来在 UI 加)
+            实际本 milestone 全用 contains; 把基础设施留好
+
+        - src/career/finder/hardFilter.mjs (~250 行):
+          · COUNTRY_MAP: { 'United States': new Set(['CA','NY','TX',...50 states]),
+            'Canada': new Set(['ON','BC','QC','AB',...]) }
+          · SENIORITY_RE = /\\b(Intern|Junior|IC[1-7]|Senior|Staff|Principal|Lead|Director)\\b/i
+          · extractSeniority(role) → string | null
+          · locationMatchesCountry(loc, country) — substring 'Remote' bypass + state map check
+          · checkRule(job, prefs):
+            // 短路顺序固定:
+            1. source_filter: blocked_sources includes job.source.type → drop
+            2. company_blocklist: contains match on job.company → drop
+            3. title_blocklist: contains match on job.role → drop
+            4. title_allowlist: 非空 AND no match → drop (空数组 skip 整规则)
+            5. location: 若 allowed_cities/countries 都空 → skip; 否则:
+               - any job.location 含 'Remote' → keep (bypass)
+               - any loc 在 allowed_cities (substring ci) → keep
+               - any loc 通过 COUNTRY_MAP 推断在 allowed_countries → keep
+               - disallowed_countries 命中 → drop
+               - 全不命中 → drop
+            6. seniority: extracted=null → keep; extracted in allowed → keep; else drop
+            7. posted_within_days:
+               - threshold=0 → skip
+               - posted_at=null → keep (conservative)
+               - 计算 days = (now - posted_at) / 86400000
+               - days > threshold → drop
+            8. comp_floor:
+               - prefs.comp_floor.base_min undefined → skip 规则
+               - job.comp_hint=null → keep (大部分 job 没 comp_hint; conservative)
+               - currency mismatch → keep (不知道汇率, conservative)
+               - max(comp_hint.min ?? 0, comp_hint.max ?? 0) < base_min → drop
+            9. jd_text_blocklist: description=null → keep; contains match → drop
+
+          · applyHardFilter(job, prefs) → { kept: bool, rule_id, matched_value }
+          · applyHardFilterBatch(jobs, prefs) → { kept: Job[], dropped: [{job, rule_id, matched_value}] }
+          · archiveDropped(droppedList) — append jsonl atomic:
+            { ts, job: {id, company, role, source: {type, name}, url, location},
+              rule_id, matched_value }
+
+        - scripts/smoke-hard-filter.mjs (~170 行) ~50 assertions:
+          · matchUtils:
+            - compileMatcher empty → no-op
+            - contains case-insensitive
+            - whole_word \\b boundaries
+            - bad regex pattern → warn + skip
+          · 每规则 (1-9) 各 4-5 assertions:
+            - 命中 drop + matched_value 正确
+            - 不命中 keep
+            - missing data → conservative keep
+            - empty rule → no-op skip
+          · archiveDropped 写后 readFile 解析 → roundtrip
+          · 顺序短路: source 命中后不该测 company (rule_id='source_filter')
+
+      Locked design (long-term-best):
+        - Conservative drop: ambiguity → keep
+        - Bad regex: warn + skip 该 keyword (不挂 scan)
+        - Match utils 为未来 whole_word/regex 留 mode 基础设施 (本 m2 仅 contains 启用)
+        - Country inference: US 50 states + CA 13 provinces map (95% coverage)
+        - "Remote" 字符串 bypass location filter
+        - archive.jsonl 含 full job snapshot (debug 友好)
+        - jd_text_blocklist 在 description=null 时 skip (defer post-enrich)
+        - comp_floor 只 drop 在确知薪资 < floor 时 (currency mismatch 也 keep)
+
+      验收: smoke ~50/50 PASS; tsc + vite build clean
+
+  - id: "m3-integration-and-dryrun"
+    name: "scanRunner integration + dry-run endpoint + Preferences UI badge (ROOM COMPLETE)"
+    status: completed
+    actual_lines: 235
+    actual_files:
+      - "src/career/finder/scanRunner.mjs"
+      - "src/career/finder/dryRun.mjs"
+      - "server.mjs"
+      - "src/career/settings/Preferences.tsx"
+      - "scripts/smoke-dryrun-filter.mjs"
+    commit_hash: "4aa4a0a"
+    estimated_files:
+      - "src/career/finder/scanRunner.mjs"
+      - "server.mjs"
+      - "src/career/settings/Preferences.tsx"
+      - "scripts/smoke-dryrun-filter.mjs"
+    estimated_lines: 220
+    depends_on: ["m2-hard-filter-engine"]
+    complexity_flags: []
+    open_questions: []
+    locked_decisions_overrides:
+      - "Endpoint stays at POST /api/career/preferences/preview (replaced existing stub) instead of new /api/career/finder/dry-run-filter — UI was already wired to the existing path; new path would have been a dead-end duplicate."
+      - "Response shape: kept the existing { total_jobs, would_drop, would_pass, new_drops, breakdown[] } (drop stub/note) instead of spec's { total_input, total_kept, total_dropped, dropped_per_rule } — richer, UI-stable, no schema churn."
+      - "Per-source dropped_per_rule deferred. Only top-level totals.dropped_per_rule on pipeline.json. Per-source attribution would require tagging each Job through dedupe + filter — not worth the plumbing."
+      - "Smoke is direct module call on the pure previewHardFilter() (new src/career/finder/dryRun.mjs) instead of HTTP — matches m1/m2 smoke style."
+    description: |
+      闭环: 把 dedupe + hardFilter 接进 scanRunner, 加 dry-run 预览 endpoint
+      让 user 能在 Preferences UI 实时看 filter 改动效果。
+
+      实现:
+        - scanRunner.mjs (+~30 行):
+          · imports dedupeJobs, markIdsAsSeen, applyHardFilterBatch, archiveDropped
+          · runScanCore() flow extension (after fetch all sources):
+            1. allJobs = adapters fetched
+            2. const { new: newJobs, duplicates } = await dedupeJobs(allJobs)
+            3. const prefs = await readPreferences()
+            4. const { kept, dropped } = applyHardFilterBatch(newJobs, prefs)
+            5. await archiveDropped(dropped) — append jsonl
+            6. await markIdsAsSeen([...newJobs.map(j=>j.id)])  // 包括 dropped 也算 seen
+            7. atomicWrite pipeline.json with kept (NOT all)
+          · scan_summary entry extends:
+            { source, type, count, duration_ms, error?,
+              new_after_dedupe: number,
+              kept_after_filter: number,
+              dropped_per_rule: { source_filter: 0, company_blocklist: 5, ... }
+            }
+            (per-source breakdown — 累加跨 source 在 sub-summary 行)
+          · scan_summary 顶层加 totals { total_input, total_dup, total_kept, total_dropped }
+
+        - server.mjs (+~80 行):
+          · POST /api/career/finder/dry-run-filter:
+            - body: { prefs?: PreferencesInput } (optional override; default = saved)
+            - 读 pipeline.json (existing data, 不 re-scan)
+            - readPreferences (or use body.prefs if given, Zod parse with HardFiltersSchema)
+            - applyHardFilterBatch(currentJobs, prefs) — NO writes
+            - 返 {
+                total_input: jobs.length,
+                total_kept: kept.length,
+                total_dropped: dropped.length,
+                dropped_per_rule: { source_filter, company_blocklist, title_blocklist,
+                  title_allowlist, location, seniority, posted_within_days,
+                  comp_floor, jd_text_blocklist }
+              }
+            - 400 on Zod / 500 on other
+
+        - src/career/settings/Preferences.tsx (+~80 行):
+          · 在 hard_filters section 顶部加 "Preview filter on current pipeline" button
+          · onClick: POST /api/career/finder/dry-run-filter with current form data
+            (let user preview before save — uses form prefs, not saved)
+          · 显示 result card:
+            "Would keep {kept}/{total_input} jobs · {dropped} dropped:"
+            <ul>
+              <li>source_filter: 5</li>
+              <li>company_blocklist: 12</li>
+              ...
+            </ul>
+          · 错误 → small red text
+          · button disabled if pipeline.json 空 (跑 scan 前没有数据 dry-run)
+
+        - scripts/smoke-dryrun-filter.mjs (~30 行):
+          · POST 给 mock pipeline + custom prefs → 验 counts 正确
+          · 空 pipeline → total_input=0, dropped_per_rule 全 0
+          · 缺失 prefs override → 用 saved prefs
+
+      Locked design:
+        - dry-run 单独 endpoint (语义清晰, 不写 file, prefs 可临时 override)
+        - dedupe 写 scan-history 包括 dropped (避免下次 re-scan 又 fetch 同 dropped jobs)
+        - pipeline.json 只含 kept (live shortlist; archive 在 archive.jsonl)
+        - scan_summary 加 dropped_per_rule 给 UI 显示
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml 同步
+        - spec.md ROOM COMPLETE rewrite
+        - 05-finder propagation: 40% → 60% (3/5 features ✅)
+        - 04-career-system 顶层 propagation: 50% → 52%
+
+      验收:
+        - smoke-dryrun-filter.mjs PASS
+        - E2E full scan: 4137 jobs (m1+m2+m3 from source-adapters) →
+          dedupe (first run = 0 dup) → hardFilter → 写 archive.jsonl + pipeline.json
+        - 第二次 scan 立即 → 应该全部 dup (scan-history works) → pipeline.json 不变
+        - /career/settings/preferences UI: Preview button 工作, 显示 per-rule counts
+        - PUT preferences with stricter blocklist + Preview → counts 增加
+        - tsc + vite build ✓
+
+      下游 unblocked:
+        - 04-jd-enrich (处理 description=null jobs in pipeline.json)
+        - 05-scan-scheduler (setInterval safe to call POST /scan, dedupe 避免重复)
+        - 06-evaluator (consume kept-only pipeline.json)
+
+commits: []
+
+current_sprint: "Sprint 5 — Finder"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "🎉 ROOM COMPLETE — 3/3 milestones (m1+m2+m3 all completed). Final E2E: scanRunner now does dedupe → hardFilter → archive → kept-only pipeline; UI Preview button hits real /api/career/preferences/preview backed by previewHardFilter() pure fn. Smoke 12+8+46 = 66 assertions PASS. Build + tsc clean."
+lifecycle: active
+last_updated: "2026-04-30"

@@ -80,8 +80,6 @@ type PreviewResult = {
   would_pass: number
   new_drops: number
   breakdown: { rule: string; drops: number }[]
-  stub: boolean
-  note?: string
 }
 
 function BLANK(): Preferences {
@@ -732,22 +730,17 @@ export default function Preferences() {
         {/* Preview dry-run bar */}
         <div className="af-preview-bar">
           <div className="af-preview-header">
-            <span className="af-preview-title">Preview on recent 100 jobs</span>
+            <span className="af-preview-title">Preview on current pipeline</span>
             <button type="button" className="af-btn-secondary"
               disabled={previewing}
               onClick={runPreview}>
               {previewing ? 'Running…' : 'Run Preview'}
             </button>
           </div>
-          {previewing && <div className="af-preview-loading">Evaluating hard_filters against 100 sample jobs…</div>}
+          {previewing && <div className="af-preview-loading">Evaluating hard_filters against current pipeline.json…</div>}
           {previewError && <div className="af-preview-error">Error: {previewError}</div>}
           {preview && (
             <>
-              {preview.stub && (
-                <div className="af-preview-stub-warning">
-                  ⚠️ Mock data — real pipeline dry-run ships with 05-finder/03-dedupe-hard-filter
-                </div>
-              )}
               <div className="af-preview-result">
                 <div className="af-preview-stat">
                   <span className="af-preview-stat-value">{preview.total_jobs}</span>

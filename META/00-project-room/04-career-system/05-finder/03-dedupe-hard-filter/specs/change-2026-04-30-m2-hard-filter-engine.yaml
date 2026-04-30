@@ -1,0 +1,140 @@
+spec_id: "change-2026-04-30-m2-hard-filter-engine"
+type: change
+state: active
+intent:
+  summary: "m2: hard-filter engine — 9 rules + match utils + archive.jsonl (smoke 46/46, 4138 jobs filtered in 196ms)"
+  detail: |
+    Pure ESM modules. 9 rules固定短路顺序按 spec, conservative drop (ambiguity →
+    keep). Live verified against current 4138-job pipeline.json: 518 kept / 3620
+    dropped (12.5% kept rate; per-rule breakdown sensible).
+
+    Files:
+      - src/career/finder/matchUtils.mjs (~95 行):
+        · escapeRegex(s) — 转义用户输入用作 regex
+        · compileMatcher(keywords[], mode='contains', caseSensitive=false):
+          - 3 modes: 'contains' / 'whole_word' (\\b) / 'regex' (raw)
+          - empty/non-array → no-op (always null)
+          - bad regex → console.warn + skip 该 keyword (不挂)
+          - unknown mode → fall back to contains + warn
+          - 返回 (text) => matched_keyword | null
+        · 'contains' 模式优化: 预 lowercase keywords, 单遍扫描
+        · 'whole_word' 用 escapeRegex 包 \\b 边界
+
+      - src/career/finder/hardFilter.mjs (~260 行):
+        · ARCHIVE_FILE = data/career/archive.jsonl
+        · COUNTRY_BY_REGION:
+          - United States: 50 states + DC + USA/U.S./U.S.A.
+          - Canada: 13 provinces + CAN
+        · COUNTRY_ALIASES: usa/us/u.s. → United States, canada → Canada
+        · SENIORITY_RE = \\b(Intern|Internship|Junior|Jr\\.?|IC[1-7]|Senior|Sr\\.?|Staff|Principal|Lead|Director|VP|Head)\\b
+        · extractSeniority(role) → null | normalized title-case (Sr.→Senior, Jr.→Junior)
+
+        · applyHardFilter(job, prefs) → { kept, rule_id, matched_value }
+          按 9 规则固定短路:
+          1. source_filter: blocked_sources includes job.source.type (ci) → drop
+          2. company_blocklist: contains-match job.company (ci)
+          3. title_blocklist: contains-match job.role (ci)
+          4. title_allowlist: 非空 + 不命中 → drop (空数组 skip)
+          5. location:
+             - disallowed_countries 命中 (含 state map) → drop
+             - 'Remote' bypasses (location-independent role)
+             - 否则 allowed_cities OR allowed_countries (含 state map + alias) 命中 → keep
+             - 全空 location 数组 → keep (conservative, no info → don't drop)
+             - 空 prefs.location → no-op
+          6. seniority: extracted in role text + not in allowed → drop
+             (extracted=null OR allowed=[] → keep, conservative)
+          7. posted_within_days: > threshold → drop
+             (threshold=0 OR posted_at=null → no-op/keep)
+          8. comp_floor: max(comp_hint.min, comp_hint.max) < base_min, currency 匹配 → drop
+             (comp_hint=null OR currency mismatch OR base_min undefined → keep)
+          9. jd_text_blocklist: contains-match job.description (ci)
+             (description=null → keep, defer post-enrich)
+
+        · applyHardFilterBatch(jobs, prefs) → { kept: Job[], dropped: [{job, rule_id, matched_value}] }
+        · archiveDropped(droppedList, file?):
+          - append-only jsonl
+          - record: {ts, job: {id, company, role, source: {type, name}, url, location}, rule_id, matched_value}
+          - empty list → 0 lines, no-op
+
+      - scripts/smoke-hard-filter.mjs (~370 行) 46 assertions:
+        · matchUtils 7 (empty / contains ci/cs / whole_word / regex / bad regex / unknown mode)
+        · extractSeniority 4 (Senior / Sr. / IC4 / null)
+        · 9 rules × 2-7 each:
+          - rule-1 source_filter: 命中/不命中
+          - rule-2 company_blocklist: 命中/不命中
+          - rule-3 title_blocklist: 命中/不命中
+          - rule-4 title_allowlist: 非空+不命中/命中/空 no-op
+          - rule-5 location: 7 cases (US state map ✓ / 跨国 drop / Remote bypass / disallowed kills / 空 conservative / city substring / 全空 no-op)
+          - rule-6 seniority: 命中/drop/null conservative/[] no-op
+          - rule-7 posted_within_days: 内/外/null/0
+          - rule-8 comp_floor: drop/keep/null/currency mismatch/0 no-op
+          - rule-9 jd_text_blocklist: 命中/null defer
+        · 短路顺序: source_filter 先于 company
+        · batch: 4 jobs → kept 2, dropped 2
+        · archive: roundtrip JSONL append + ts/job/rule_id correct
+        · archive empty: 0 lines
+
+    Locked design (long-term-best, all defaults):
+      - Conservative drop philosophy (ambiguity → keep)
+      - 9 rules 固定短路顺序 (cheap → expensive)
+      - Match modes 基础设施留好 (whole_word/regex), 当前规则全用 contains-ci
+      - Bad regex pattern → warn + skip 该 keyword (不 crash scan)
+      - Country inference: 50 US states + DC + 13 CA provinces (95% NA coverage)
+      - "Remote" string in location array → bypass location filter
+      - Country aliases: USA/US/U.S./Canada → canonical
+      - Seniority: regex extract from role; unknown → keep
+      - comp_floor: currency mismatch → keep (无汇率推断)
+      - jd_text_blocklist 在 description=null 时 skip (defer post-enrich)
+      - posted_within_days=0 → no-op (per portals.yml convention)
+      - archive.jsonl 含 full snapshot (id+company+role+source+url+location), 不只 id
+
+    E2E:
+      - smoke 46/46 PASS ✓
+      - applyHardFilterBatch on real 4138-job pipeline.json with current preferences.yml:
+        · 196ms total (≈21 jobs/ms)
+        · 518 kept / 3620 dropped
+        · per-rule:
+          location: 2062 (大部分国际岗 drop)
+          seniority: 1047 (Junior/Intern/Director 不在 allowed)
+          posted_within_days: 455 (>60d 旧帖)
+          title_blocklist: 49 (Embedded / Firmware / Game)
+          company_blocklist: 7 (Palantir 匹配)
+        · 抽 3 dropped sanity: Anthropic Dublin/London/Dublin (location rule, 正确)
+      - tsc --noEmit ✓
+      - vite build ✓
+
+    下游 unblocked:
+      - m3 scanRunner integration (wire applyHardFilterBatch + archiveDropped + dedupe)
+      - m3 dry-run endpoint (calls applyHardFilterBatch on existing pipeline.json, no writes)
+
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m2, backend, finder, hard-filter, rules-engine, archive]
+provenance:
+  source_type: implementation
+  confidence: 1.0
+  source_ref: "commit 1885b4d"
+relations:
+  - "implements intent-dedupe-hard-filter-001 (m2/3)"
+  - "respects constraint-dedupe-hard-filter-001 (短路顺序锁定 + archive.jsonl 必写)"
+  - "depends_on change-2026-04-30-m1-dedupe-and-history"
+  - "consumes HardFiltersSchema from server.mjs (02-profile/02-preferences)"
+  - "unblocks m3 scanRunner integration + dry-run endpoint"
+anchors:
+  - file: "src/career/finder/matchUtils.mjs"
+    symbols:
+      - "compileMatcher"
+  - file: "src/career/finder/hardFilter.mjs"
+    symbols:
+      - "applyHardFilter"
+      - "applyHardFilterBatch"
+      - "archiveDropped"
+      - "extractSeniority"
+      - "ARCHIVE_FILE"
+      - "COUNTRY_BY_REGION"
+created_at: "2026-04-30"
+updated_at: "2026-04-30"
