@@ -1,7 +1,13 @@
 milestones:
   - id: "m1-schema-and-ats-refetch"
     name: "Job schema needs_manual_enrich + ATS-by-URL refetch (6 ATS types, workday detect-only)"
-    status: pending
+    status: completed
+    actual_lines: 530
+    actual_files:
+      - "src/career/lib/jobSchema.mjs"
+      - "src/career/finder/atsByUrl.mjs"
+      - "scripts/smoke-ats-by-url.mjs"
+    commit_hash: "PENDING"
     estimated_files:
       - "src/career/lib/jobSchema.mjs"
       - "src/career/finder/atsByUrl.mjs"

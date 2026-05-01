@@ -41,6 +41,10 @@ export const JobSchema = z.object({
   tags: z.array(z.string()),
   raw: z.unknown(),
   schema_version: z.literal(1),
+  // Set true when 04-jd-enrich's 4-tier fallback fails to fill `description`
+  // (no ATS API match, Playwright scrape failed/timed out). UI surfaces these
+  // jobs in /career/shortlist/needs-manual for the user to paste JD manually.
+  needs_manual_enrich: z.boolean().default(false),
 });
 
 export function slugify(s) {
