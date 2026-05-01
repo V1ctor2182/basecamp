@@ -274,6 +274,16 @@
   border-radius: 6px;
 }
 
+.c-resumes-modal-note {
+  margin-top: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #0550ae;
+  background: rgba(9, 105, 218, 0.08);
+  border: 1px solid rgba(9, 105, 218, 0.18);
+  border-radius: 6px;
+}
+
 .c-resumes-radio-group {
   display: flex;
   gap: 16px;
@@ -322,6 +332,21 @@
   padding-top: 12px;
   margin-top: 12px;
   border-top: 1px solid #d0d7de;
+}
+
+.c-resume-sync-note {
+  margin-top: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #1a7f37;
+  background: rgba(26, 127, 55, 0.08);
+  border: 1px solid rgba(26, 127, 55, 0.18);
+  border-radius: 6px;
+}
+
+.c-resume-sync-note code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .c-resume-drawer .af-section {

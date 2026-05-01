@@ -1,12 +1,12 @@
 milestones: []
 current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-completion: 60  # avg(100, 0, 100, 100, 0) = 60 across 5 features (3/5 ROOMs ✅)
+completion: 80  # avg(100, 100, 100, 100, 0) = 80 across 5 features (4/5 ROOMs ✅)
 children_completion:
   "01-resume-index": 100     # ✅ active
-  "02-google-docs-sync": 0
+  "02-google-docs-sync": 100 # ✅ active — ROOM COMPLETE
   "03-in-ui-editor": 100     # ✅ active
   "04-auto-select": 100      # ✅ active — ROOM COMPLETE
   "05-tailor-engine": 0
-status_note: "🎉 04-auto-select COMPLETE. 03-cv-engine 60% (3/5 ROOMs ✅). 下一个: 02-google-docs-sync 或 05-tailor-engine."
-last_updated: "2026-04-29"
+status_note: "🎉 02-google-docs-sync COMPLETE. 03-cv-engine 80% (4/5 ROOMs ✅). 下一个: 05-tailor-engine（依赖 evaluator stage-b）."
+last_updated: "2026-04-30"

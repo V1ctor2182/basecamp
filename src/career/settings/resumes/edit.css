@@ -70,6 +70,17 @@
   margin: 12px 0 0;
 }
 
+.c-resume-edit-readonly {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #0969da;
+  background: rgba(9, 105, 218, 0.08);
+  border: 1px solid rgba(9, 105, 218, 0.18);
+  border-radius: 6px;
+}
+
 .c-resume-edit-split {
   display: grid;
   grid-template-columns: 1fr 1fr;

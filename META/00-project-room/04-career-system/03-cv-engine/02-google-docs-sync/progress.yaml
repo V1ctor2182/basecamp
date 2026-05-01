@@ -1,5 +1,130 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-google-oauth-bootstrap"
+    name: "Google OAuth bootstrap + token store + helper module + smoke"
+    status: completed
+    actual_lines: 255
+    actual_files:
+      - "src/career/lib/googleDocs.mjs"
+      - "server.mjs"
+      - "scripts/smoke-google-docs-sync.mjs"
+    estimated_files:
+      - "src/career/lib/googleDocs.mjs"
+      - "server.mjs"
+      - "scripts/smoke-google-docs-sync.mjs"
+    estimated_lines: 220
+    depends_on: []
+    complexity_flags: ["external_api", "oauth", "design_decisions"]
+    open_questions: []
+    commit_hash: "TBD"
+    description: |
+      新增 Google Docs 专用 helper module + OAuth 启动/回调/refresh token
+      存储链路。client credentials 支持环境变量
+      GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET，或 data/config.json 里的
+      googleClientId / googleClientSecret（该文件本身 gitignored）。
+
+      交付:
+        - src/career/lib/googleDocs.mjs
+          · normalizeGoogleDocId() 支持 bare ID / docs URL
+          · buildGoogleOAuthUrl() 固定 access_type=offline + prompt=consent
+          · exchangeGoogleAuthCode() / refreshGoogleAccessToken()
+          · exportGoogleDocAsMarkdown() → Drive files.export(text/markdown)
+        - server.mjs
+          · GET /api/career/google/oauth/start → redirect 到 Google OAuth
+          · GET /api/career/google/oauth/callback → code exchange + persist
+            data/career/.oauth.json refresh token
+          · in-memory state TTL 防 CSRF / 过期回调
+          · invalid_grant 时清 token，提示重新授权
+        - scripts/smoke-google-docs-sync.mjs
+          · 6 个 helper smoke (ID parse / auth URL / token exchange /
+            invalid_grant / export markdown)
+
+      Locked design:
+        - refresh token 存 data/career/.oauth.json（已在 .gitignore）
+        - redirect URI 默认 http://localhost:${PORT}/api/.../callback，可用
+          CAREER_GOOGLE_REDIRECT_BASE_URL override
+        - Drive scope 用 readonly，避免写权限
+        - prompt=consent 保证首次/重连时 refresh token 可拿到
+
+  - id: "m2-resume-sync-endpoint"
+    name: "POST /api/career/resumes/:id/sync + pre-sync snapshot + last_synced_at persist"
+    status: completed
+    actual_lines: 145
+    actual_files:
+      - "server.mjs"
+    estimated_files:
+      - "server.mjs"
+    estimated_lines: 140
+    depends_on: ["m1-google-oauth-bootstrap"]
+    complexity_flags: ["external_api"]
+    open_questions: []
+    commit_hash: "TBD"
+    description: |
+      核心同步 endpoint 落地。source=google_doc 的 resume 现在可以:
+      (1) 拿 refresh token 刷 access token
+      (2) 调 Drive files.export(text/markdown)
+      (3) save 前 snapshot 当前 base.md
+      (4) 覆盖 base.md
+      (5) 更新 index.yml 中的 gdoc_id / last_synced_at
+
+      交付:
+        - POST /api/career/resumes/:id/sync
+          body: { gdoc_id?: string }  // 支持 first-sync 直接传 Google Doc URL/ID
+          returns: { ok, snapshot, resume, synced_at }
+        - 复用 content room 的 versions snapshot 逻辑，提取成共享 helper
+        - auth missing / invalid_grant → 409 + auth_required + authorize_path
+        - exported markdown 仍遵守 500KB 上限
+
+      验收:
+        - Google 未授权 → 409 + authorize_path ✓
+        - 传 docs URL 能 normalize 成 gdoc_id ✓
+        - Sync 后 versions/ 留下旧内容快照，index.yml 更新 last_synced_at ✓
+
+  - id: "m3-sync-ui-and-readonly-guard"
+    name: "Resumes UI Sync Now + first-sync prompt + google_doc read-only guard (ROOM COMPLETE)"
+    status: completed
+    actual_lines: 185
+    actual_files:
+      - "src/career/settings/Resumes.tsx"
+      - "src/career/settings/resumes.css"
+      - "src/career/settings/resumes/Edit.tsx"
+      - "src/career/settings/resumes/edit.css"
+      - "server.mjs"
+    estimated_files:
+      - "src/career/settings/Resumes.tsx"
+      - "src/career/settings/resumes.css"
+      - "src/career/settings/resumes/Edit.tsx"
+      - "src/career/settings/resumes/edit.css"
+    estimated_lines: 160
+    depends_on: ["m2-resume-sync-endpoint"]
+    complexity_flags: []
+    open_questions: []
+    commit_hash: "TBD"
+    description: |
+      前端闭环 + source-of-truth guard:
+        - Resumes drawer for google_doc entries:
+          · "Sync Now" button
+          · first sync prompts for Google Doc URL/ID if missing
+          · auth_required response auto-opens OAuth tab
+          · success/info note banner at page top
+        - Manual resumes 保留 "Edit content" 按钮
+        - google_doc resumes:
+          · drawer 里显示 "Managed by Google Doc" disabled button
+          · edit route 顶部显示 read-only notice
+          · PUT /api/career/resumes/:id/content backend 409 reject
+
+      结果:
+        - source=google_doc 的 resume 从 UX 上不再与 in-app editor 冲突
+        - source=manual 的 editor 流程完全不受影响
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle planning → active
+        - spec.md ROOM-COMPLETE rewrite
+        - _tree.yaml 同步
+        - 03-cv-engine progress: 60% → 80% (4/5)
+
+commits: []
+current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 100
+status_note: "🎉 ROOM 02-google-docs-sync COMPLETE (3/3). 03-cv-engine 80% (4/5 ROOMs ✅). 下一个: 05-tailor-engine."
+last_updated: "2026-04-30"
