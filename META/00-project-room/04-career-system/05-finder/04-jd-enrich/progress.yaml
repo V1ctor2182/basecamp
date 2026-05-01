@@ -1,5 +1,269 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-schema-and-ats-refetch"
+    name: "Job schema needs_manual_enrich + ATS-by-URL refetch (6 ATS types, workday detect-only)"
+    status: pending
+    estimated_files:
+      - "src/career/lib/jobSchema.mjs"
+      - "src/career/finder/atsByUrl.mjs"
+      - "scripts/smoke-ats-by-url.mjs"
+    estimated_lines: 280
+    depends_on: []
+    complexity_flags: ["external_api", "design_decisions"]
+    open_questions: []
+    description: |
+      Job schema 加 needs_manual_enrich: boolean (default false) + URL → ATS provider
+      detection + content refetch helper. 跨 6 个 ATS:
+        greenhouse: boards.greenhouse.io/<slug>/jobs/<id> → /v1/boards/<slug>/jobs/<id>?content=true
+        ashby:      jobs.ashbyhq.com/<slug>/<id>          → /api/posting?id=<id>
+        lever:      jobs.lever.co/<slug>/<id>             → /v0/postings/<slug>/<id>?content=true
+        recruitee:  <slug>.recruitee.com/o/<id>           → /api/offers/<id> (public)
+        smartrec.:  jobs.smartrecruiters.com/<slug>/<id>  → posting-api.smartrecruiters.com/v1/postings/<id>
+        workday:    *.myworkdayjobs.com/<...>             → DETECT-ONLY (token auth too fragile),
+                    return { skip: true } so orchestrator falls through to Playwright
+
+      Files:
+        - src/career/lib/jobSchema.mjs (+~20 lines):
+          · Add needs_manual_enrich: z.boolean().default(false) to JobSchema
+          · normalizeJob() defaults to false if not set
+          · backward-compat (existing jobs without field load as false)
+
+        - src/career/finder/atsByUrl.mjs (~180 lines):
+          · detectAtsType(url) → { type, slug, id } | null
+          · 6 URL regex patterns capturing slug + id
+          · refetchAtsContent(detection) → { description: string|null, error?: string }
+          · greenhouse/ashby/lever reuse existing httpFetch + stripHtml
+          · recruitee/smartrecruiters call public REST endpoints → stripHtml
+          · workday returns { skip: true } (no fetch attempt)
+          · all 5 fetchers wrap try/catch with 15s timeout, return null on error
+
+        - scripts/smoke-ats-by-url.mjs (~80 lines):
+          · 12 URL detection assertions (each ATS valid + invalid + edge cases)
+          · 5 content refetch tests with mocked httpFetch (per-provider response shape)
+          · workday URL → { skip: true } without network call
+
+      Locked design (long-term-best):
+        - URL detection regex-based, no HEAD-request sniffing (cheap, deterministic)
+        - workday detect-only: better skip than fragile token logic
+        - Bad URL / malformed response → null, never throw (orchestrator decides fallback)
+        - description=null preserved (caller decides if needs_manual_enrich)
+        - Same `needs_manual_enrich` field name everywhere (schema + helpers + UI)
+
+      验收: smoke 17/17 PASS; tsc + vite build clean
+
+  - id: "m2-playwright-pool-and-scraper"
+    name: "Shared Playwright pool (refactor) + pageScraper for JD text extraction"
+    status: pending
+    estimated_files:
+      - "src/career/lib/playwrightPool.mjs"
+      - "src/career/lib/htmlToPdf.mjs"
+      - "src/career/lib/pageScraper.mjs"
+      - "scripts/smoke-page-scraper.mjs"
+    estimated_lines: 220
+    depends_on: ["m1-schema-and-ats-refetch"]
+    complexity_flags: ["external_api", "error_handling_heavy"]
+    open_questions: []
+    description: |
+      Extract lazy-launch + 30s-idle-close browser lifecycle from htmlToPdf.mjs into
+      a shared module so pageScraper + htmlToPdf share ONE chromium process (single
+      .launch(), single zombie-recovery, single shutdown). Then build the JD scraper.
+
+      Files:
+        - src/career/lib/playwrightPool.mjs (NEW, ~80 lines):
+          · getBrowser() — lazy launch, coalesce concurrent first-callers
+          · scheduleIdleClose() — 30s idle reset
+          · shutdownBrowser() — exported for SIGTERM/SIGINT in server.mjs
+          · disconnected listener drops cached handle so next call relaunches
+
+        - src/career/lib/htmlToPdf.mjs (REFACTOR, -~30 / +~5 lines):
+          · Replace internal _browser/_idleTimer/_launching/getBrowser/
+            scheduleIdleClose/closeBrowser with imports from playwrightPool
+          · htmlToPdf() now `await getBrowser()` + `scheduleIdleClose()` only
+          · Re-export shutdownBrowser for backward-compat with server.mjs handlers
+
+        - src/career/lib/pageScraper.mjs (NEW, ~80 lines):
+          · scrapeJdText(url, { timeout=15000 }) → string | throws EnrichTimeout/EnrichError
+          · page.goto(url, { waitUntil: 'domcontentloaded', timeout })
+          · 5s additional timeout for content extraction
+          · page.evaluate() heuristic main-content selectors (priority order):
+              article, main, [role="main"], #content, .job-description,
+              .posting-content, body
+          · Strip nav, footer, script, style nodes by removing before innerText
+          · Trim + collapse whitespace, return text or throw
+          · always page.close() in finally; scheduleIdleClose() afterwards
+
+        - scripts/smoke-page-scraper.mjs (~80 lines):
+          · Smoke uses page.setContent(<fixture HTML>) — NO real network
+          · Tests: article tag preferred / main fallback / strips nav+footer /
+            empty body throws / timeout throws EnrichTimeout / unicode preserved /
+            500-char threshold semantics
+
+      Locked design:
+        - One chromium process for whole career system (htmlToPdf + pageScraper)
+        - Shared 30s idle close — busy career features keep browser warm
+        - Hard timeout 15s per page (constraint-jd-enrich-001 #3)
+        - Selector priority: most-specific structural tags before falling to body
+        - Strip nav/footer/script/style at DOM level, not regex
+        - Throw distinct error classes so orchestrator can log per-tier
+
+      验收: smoke 7/7 PASS; tsc + vite build clean; htmlToPdf smokes regression-clean
+
+  - id: "m3-orchestrator-and-integration"
+    name: "jdEnrich orchestrator (4-tier fallback) + scanRunner integration + POST /enrich endpoint"
+    status: pending
+    estimated_files:
+      - "src/career/finder/jdEnrich.mjs"
+      - "src/career/finder/scanRunner.mjs"
+      - "server.mjs"
+      - "scripts/smoke-jd-enrich.mjs"
+    estimated_lines: 280
+    depends_on: ["m1-schema-and-ats-refetch", "m2-playwright-pool-and-scraper"]
+    complexity_flags: ["error_handling_heavy"]
+    open_questions: []
+    description: |
+      Wire it all together: 4-tier fallback orchestrator, integrate into runScanCore
+      AFTER hard_filter but BEFORE atomicWriteJson(pipeline.json) so kept jobs land
+      with fresh JDs in pipeline.json (preserves m3-review crash-safety order).
+      Plus a manual retry endpoint for already-pipelined jobs (OQ-1=c).
+
+      Files:
+        - src/career/finder/jdEnrich.mjs (~150 lines):
+          · enrichJob(job) → job (mutated in-place; never throws):
+              tier 1: skip if typeof description === 'string' && length > 500
+              tier 2: detectAtsType(job.url) → if not workday-skip, refetchAtsContent
+              tier 3: scrapeJdText(job.url) — Playwright with 15s timeout
+              tier 4: set job.needs_manual_enrich = true, leave description=null
+          · enrichBatch(jobs, { concurrency=3 }) → { enriched, needs_manual, skipped }:
+              p-limit-style 3-parallel runner (chromium-friendly, OQ-5=a)
+              counts per outcome for scan_summary totals
+              swallows individual job errors (tier 4 catches all)
+          · log.warn per failure with tier attribution
+
+        - src/career/finder/scanRunner.mjs (+~30 lines):
+          · import enrichBatch
+          · After applyHardFilterBatch, BEFORE atomicWriteJson:
+              const { enriched, needs_manual, skipped } =
+                await enrichBatch(kept, { concurrency: 3 })
+          · pipeline.json totals extends:
+              { ..., enriched_count, needs_manual_count, skipped_already_enriched_count }
+          · Per-job 20s ceiling (15s nav + 5s buffer); enrichBatch should not block
+            scan more than ~10min on 30 jobs (conservative)
+
+        - server.mjs (+~50 lines):
+          · POST /api/career/finder/enrich (OQ-1=c manual retry):
+              · No body required
+              · Reads current pipeline.json kept jobs
+              · Filters to those still needing enrich (description=null OR needs_manual_enrich=true)
+              · enrichBatch with concurrency=3
+              · atomicWriteFile pipeline.json with refreshed jobs
+              · Returns { total: N, enriched_now: K, still_needs_manual: M }
+              · 409 if a scan is currently running (collision risk on pipeline.json)
+
+        - scripts/smoke-jd-enrich.mjs (~120 lines):
+          · MOCK ats-by-url + page-scraper at module level
+          · 4-tier fallback: each tier hit + verified flag state
+          · enrichBatch concurrency: 6 jobs × Playwright 100ms each → expect ~3 batches × 100ms
+          · already-enriched (length > 500) skipped, no fetch attempted
+          · workday URL → falls through tier 2, hits tier 3 (Playwright)
+          · all-tiers-fail → needs_manual_enrich=true, description=null preserved
+          · totals counts match outcomes
+
+      Locked design:
+        - Order in scanRunner: filter → enrich kept → write pipeline.json → archive drops → mark seen
+          (kept jobs land in pipeline.json with fresh JD; crash-safety preserved)
+        - p-limit 3 parallel (OQ-5=a): chromium-friendly, ~12-15 jobs/min
+        - Per-job 20s ceiling — bounded scan time
+        - Tier 4 NEVER throws — always sets needs_manual_enrich = true + description=null
+        - POST /enrich endpoint independent of scan, useful for retry without rescan
+
+      验收:
+        - smoke 13/13 PASS
+        - integration: synthetic 6-job pipeline (2 already-enriched, 1 greenhouse-url,
+          1 generic-url playwright-success, 1 timeout, 1 all-fail) → totals
+          {enriched:2, skipped:2, needs_manual:2}; pipeline.json updated; archive.jsonl
+          unchanged
+        - tsc + vite build clean
+
+  - id: "m4-manual-paste-and-shortlist-ui"
+    name: "PATCH /:id/description + needs-manual Shortlist UI (ROOM COMPLETE)"
+    status: pending
+    estimated_files:
+      - "server.mjs"
+      - "src/career/shortlist/NeedsManualEnrich.tsx"
+      - "src/career/shortlist/needsManualEnrich.css"
+      - "src/career/AppCareer.tsx"
+      - "scripts/smoke-manual-paste.mjs"
+    estimated_lines: 280
+    depends_on: ["m3-orchestrator-and-integration"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Final integration: server-side PATCH + dedicated UI (OQ-4=b) to paste JD for
+      jobs stuck on tier 4 (needs_manual_enrich=true). UI lives at
+      /career/shortlist/needs-manual route.
+
+      Files:
+        - server.mjs (+~60 lines):
+          · GET /api/career/finder/needs-manual:
+              · reads pipeline.json
+              · filters jobs where needs_manual_enrich === true
+              · returns array of { id, company, role, url, location, posted_at }
+          · PATCH /api/career/pipeline/job/:id/description:
+              · body: { description: string (10..50000 chars) }
+              · zod validate; return 400 on invalid
+              · read pipeline.json; find job by id (404 if not found)
+              · update job.description = body.description; job.needs_manual_enrich = false
+              · atomicWriteFile pipeline.json
+              · returns { ok: true, job }
+              · 409 if a scan is currently running (avoid race on pipeline.json)
+
+        - src/career/shortlist/NeedsManualEnrich.tsx (~180 lines):
+          · Route component at /career/shortlist/needs-manual
+          · On mount: GET /needs-manual → list of jobs
+          · Each row: company / role / location / posted_at / "Open URL" link
+          · Expandable paste area per row: <textarea> + "Save JD" button
+          · Save: PATCH /:id/description → on success, remove row from list
+          · Optimistic update with rollback on 4xx
+          · Empty state: "🎉 No jobs need manual JD" if list empty
+          · Loading + error states
+          · Counter badge in header: "N pending"
+
+        - src/career/AppCareer.tsx (+~10 lines):
+          · Add /shortlist/needs-manual route + nav link
+          · Use lucide ClipboardPaste icon
+
+        - src/career/shortlist/needsManualEnrich.css (~40 lines):
+          · Card layout matching Resumes.tsx visual language
+          · Save-button states (idle/saving/saved/error)
+
+        - scripts/smoke-manual-paste.mjs (~30 lines):
+          · POST mock pipeline → pipeline.json
+          · GET /needs-manual returns expected count
+          · PATCH valid description → 200 + needs_manual_enrich cleared
+          · PATCH non-existent id → 404
+          · PATCH zod-invalid body → 400
+          · PATCH while scan flag set → 409
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml synced
+        - spec.md ROOM COMPLETE rewrite with locked design + downstream contracts
+        - 05-finder propagation: 60% → 80% (4/5 features ✅)
+        - 04-career-system propagation: 53% → 56%
+
+      验收:
+        - smoke-manual-paste 5/5 PASS
+        - All prior smokes (m1+m2+m3) green; no regression
+        - E2E full scan → enrich → 3 jobs land needs_manual → UI shows them →
+          paste 1 description → reload UI → 2 left → reload pipeline.json → confirms
+          description on saved job is the pasted text + needs_manual_enrich=false
+        - tsc + vite build clean
+
+      下游 unblocked:
+        - 06-evaluator (ALL kept jobs in pipeline.json have description ≥ 90% non-null)
+
+commits: []
+
+current_sprint: "Sprint 5 — Finder"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "Plan 完成 (2026-04-30). 4 milestones, ~1060 行. OQ-1=c (auto+endpoint), OQ-2=a (shared pool), OQ-3=b (6 ATS), OQ-4=b (dedicated UI), OQ-5=a (concurrency 3). 全部 long-term-best 决策已锁定."
+last_updated: "2026-04-30"
