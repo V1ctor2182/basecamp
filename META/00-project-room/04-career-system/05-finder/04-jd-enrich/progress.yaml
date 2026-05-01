@@ -7,7 +7,7 @@ milestones:
       - "src/career/lib/jobSchema.mjs"
       - "src/career/finder/atsByUrl.mjs"
       - "scripts/smoke-ats-by-url.mjs"
-    commit_hash: "PENDING"
+    commit_hash: "a576183"
     estimated_files:
       - "src/career/lib/jobSchema.mjs"
       - "src/career/finder/atsByUrl.mjs"
