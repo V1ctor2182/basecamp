@@ -121,11 +121,22 @@ await test('seniority-1. Senior detected', () => {
 await test('seniority-2. Sr. → Senior', () => {
   assert.equal(extractSeniority('Sr. Backend Engineer'), 'Senior');
 });
-await test('seniority-3. IC4 detected', () => {
-  assert.equal(extractSeniority('Backend Engineer (IC4)'), 'Ic4');
+await test('seniority-3. IC4 detected (canonical IC4, not Ic4)', () => {
+  assert.equal(extractSeniority('Backend Engineer (IC4)'), 'IC4');
 });
 await test('seniority-4. None found → null', () => {
   assert.equal(extractSeniority('Backend Engineer'), null);
+});
+await test('seniority-5. VP canonical (VP, not Vp)', () => {
+  assert.equal(extractSeniority('VP, Engineering'), 'VP');
+});
+await test('seniority-6. Multi-token: Senior Staff Engineer with allowed=[Staff] keeps', () => {
+  // Was a HIGH bug pre-fix: extractSeniority returned only 'Senior' so [Staff]
+  // dropped a Staff role. Now extractSeniorities returns both → any-match keeps.
+  const job = makeJob({ role: 'Senior Staff Engineer' });
+  const prefs = { hard_filters: { seniority: { allowed: ['Staff'] } } };
+  const r = applyHardFilter(job, prefs);
+  assert.equal(r.kept, true);
 });
 
 // ─── Rule 1: source_filter ─────────────────────────────────────────────
@@ -227,6 +238,29 @@ await test('rule-5.f allowed_cities substring match', () => {
 });
 await test('rule-5.g all empty → no-op (keep)', () => {
   assert.equal(applyHardFilter(makeJob({ location: ['London, UK'] }), BASE_PREFS).kept, true);
+});
+
+// Regression: pre-fix, the alias-substring loop made "us" match anywhere
+// inside a location string. "Sydney, Australia" contains "us" inside "australia",
+// which falsely triggered United States allowed/disallowed rules.
+await test('rule-5.h allowed=United States does NOT match Australia (no us-alias substring)', () => {
+  const prefs = { hard_filters: { ...BASE_PREFS.hard_filters,
+    location: { allowed_countries: ['United States'], allowed_cities: [], disallowed_countries: [] } } };
+  const r = applyHardFilter(makeJob({ location: ['Sydney, Australia'] }), prefs);
+  assert.equal(r.kept, false);
+  assert.equal(r.rule_id, 'location');
+});
+await test('rule-5.i disallowed=United States does NOT falsely drop Austria via us-substring', () => {
+  const prefs = { hard_filters: { ...BASE_PREFS.hard_filters,
+    location: { allowed_countries: [], allowed_cities: [], disallowed_countries: ['United States'] } } };
+  assert.equal(applyHardFilter(makeJob({ location: ['Vienna, Austria'] }), prefs).kept, true);
+});
+await test('rule-5.j US alias still resolves via canonical → state map (San Francisco, CA)', () => {
+  // User typed "US" (alias) — should map to United States via COUNTRY_ALIASES,
+  // then the region map matches state codes like "CA". Must keep the SF job.
+  const prefs = { hard_filters: { ...BASE_PREFS.hard_filters,
+    location: { allowed_countries: ['US'], allowed_cities: [], disallowed_countries: [] } } };
+  assert.equal(applyHardFilter(makeJob({ location: ['San Francisco, CA'] }), prefs).kept, true);
 });
 
 // ─── Rule 6: seniority ─────────────────────────────────────────────────

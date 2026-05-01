@@ -78,7 +78,6 @@ type PreviewResult = {
   total_jobs: number
   would_drop: number
   would_pass: number
-  new_drops: number
   breakdown: { rule: string; drops: number }[]
 }
 
@@ -753,10 +752,6 @@ export default function Preferences() {
                 <div className="af-preview-stat">
                   <span className="af-preview-stat-value" style={{ color: '#1a7f37' }}>{preview.would_pass}</span>
                   <span className="af-preview-stat-label">Would pass</span>
-                </div>
-                <div className="af-preview-stat">
-                  <span className="af-preview-stat-value">{preview.new_drops}</span>
-                  <span className="af-preview-stat-label">New drops vs saved</span>
                 </div>
               </div>
               <details className="af-preview-breakdown">

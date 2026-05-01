@@ -31,23 +31,22 @@ function countByRule(dropped) {
 }
 
 // Returns the shape the Preferences UI expects:
-//   { total_jobs, would_drop, would_pass, new_drops, breakdown: [{rule, drops}] }
-// `savedPrefs` may be null/undefined — in that case `new_drops` = `would_drop`
-// (treat absent saved-prefs baseline as "no filter applied previously").
-export function previewHardFilter(prefs, savedPrefs, jobs) {
+//   { total_jobs, would_drop, would_pass, breakdown: [{rule, drops}] }
+//
+// We dropped the `new_drops` field intentionally: pipeline.json is kept-only
+// (saved prefs already filtered it at scan time), so any "drops vs saved
+// baseline" computation against this input is structurally identical to
+// `would_drop` and only added confusion. The 3 stats above answer the actual
+// question — "if I save these prefs, how many of my currently-kept jobs would
+// be dropped".
+//
+// `savedPrefs` is accepted for forward compatibility but currently unused.
+export function previewHardFilter(prefs, _savedPrefs, jobs) {
   const list = Array.isArray(jobs) ? jobs : [];
   const totalJobs = list.length;
 
   const { dropped: droppedCurrent } = applyHardFilterBatch(list, prefs ?? {});
   const wouldDrop = droppedCurrent.length;
-
-  let newDrops;
-  if (savedPrefs && typeof savedPrefs === 'object') {
-    const { dropped: droppedSaved } = applyHardFilterBatch(list, savedPrefs);
-    newDrops = Math.max(0, wouldDrop - droppedSaved.length);
-  } else {
-    newDrops = wouldDrop;
-  }
 
   const counts = countByRule(droppedCurrent);
   const breakdown = RULE_ORDER.map((rule) => ({ rule, drops: counts[rule] }));
@@ -56,7 +55,6 @@ export function previewHardFilter(prefs, savedPrefs, jobs) {
     total_jobs: totalJobs,
     would_drop: wouldDrop,
     would_pass: totalJobs - wouldDrop,
-    new_drops: newDrops,
     breakdown,
   };
 }
