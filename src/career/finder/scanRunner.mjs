@@ -134,16 +134,26 @@ async function runScanCore() {
   }
 
   // ── Dedupe + Hard-filter pipeline (m3 integration) ──────────────────
-  // 1. Dedupe across scans via scan-history.jsonl (Job.id keyed).
-  // 2. Apply hard_filters (9-rule short-circuit). Drops written to archive.jsonl.
-  // 3. Mark ALL new ids as seen — including drops, so next scan doesn't re-fetch
-  //    + re-archive the same dropped jobs (locked design from spec).
-  // 4. pipeline.json is kept-only; archive.jsonl is the dropped graveyard.
+  // Order is crash-safety-driven: pipeline.json (the kept-jobs source of truth)
+  // must land BEFORE we record IDs as seen. Otherwise a crash between
+  // markIdsAsSeen and pipeline write would permanently lose kept jobs (next
+  // scan dedupes them away because their ids are in scan-history forever).
+  //
+  //   1. dedupe → partition (new, duplicates)
+  //   2. apply hard_filters (9-rule short-circuit) → (kept, dropped)
+  //   3. atomicWriteJson(pipeline.json, kept-only + totals)  ← durable first
+  //   4. archiveDropped(dropped) jsonl                       ← dropped graveyard
+  //   5. markIdsAsSeen(all new ids, kept ∪ dropped)          ← only after #3+#4
+  //
+  // Failure modes:
+  //   · crash after #3, before #4: drops re-fetched and re-archived next scan
+  //     (idempotent — same id, same drop, fine).
+  //   · crash after #4, before #5: drops re-fetched and re-archived (same as
+  //     above) AND kept jobs re-fetched and surface again — no data loss.
+  //   · crash before #3: no writes; next scan starts fresh.
   const { new: newJobs, duplicates } = await dedupeJobs(allJobs);
   const prefs = await readPreferencesForScan();
   const { kept, dropped } = applyHardFilterBatch(newJobs, prefs);
-  await archiveDropped(dropped);
-  await markIdsAsSeen(newJobs.map((j) => j.id).filter((id) => typeof id === 'string'));
 
   const droppedPerRule = Object.fromEntries(RULE_ORDER.map((r) => [r, 0]));
   for (const d of dropped) {
@@ -163,6 +173,8 @@ async function runScanCore() {
       dropped_per_rule: droppedPerRule,
     },
   });
+  await archiveDropped(dropped);
+  await markIdsAsSeen(newJobs.map((j) => j.id).filter((id) => typeof id === 'string'));
   scanState.jobs_count = kept.length;
 }
 

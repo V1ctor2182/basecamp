@@ -41,10 +41,16 @@ export async function loadSeenSet(file = SCAN_HISTORY_FILE) {
 }
 
 // Partition jobs into { new, duplicates } using an in-memory Set load. Pure —
-// does not write. Use markIdsAsSeen() to commit IDs after the scan persists
-// pipeline.json + archive.jsonl.
-export async function dedupeJobs(jobs) {
-  const seen = await loadSeenSet();
+// does not write. The seen-set grows in-loop so two jobs with the same id
+// inside one batch (cross-source overlap, source emitting duplicates) collapse:
+// the first wins as `new`, the rest are `duplicates`.
+//
+// Use markIdsAsSeen() to commit IDs to scan-history AFTER pipeline.json is
+// persisted (so a crash mid-flight doesn't permanently lose kept jobs by
+// marking their ids seen without ever surfacing them in pipeline.json).
+export async function dedupeJobs(jobs, file = SCAN_HISTORY_FILE) {
+  const seen = await loadSeenSet(file);
+  const initialSize = seen.size;
   const newJobs = [];
   const duplicates = [];
   for (const j of jobs) {
@@ -54,27 +60,30 @@ export async function dedupeJobs(jobs) {
       newJobs.push(j);
       continue;
     }
-    if (seen.has(j.id)) duplicates.push(j);
-    else newJobs.push(j);
+    if (seen.has(j.id)) {
+      duplicates.push(j);
+    } else {
+      newJobs.push(j);
+      seen.add(j.id); // collapse intra-batch duplicates on same id
+    }
   }
-  return { new: newJobs, duplicates, seenCount: seen.size };
+  return { new: newJobs, duplicates, seenCount: initialSize };
 }
 
 // Append-only commit. Caller passes the IDs of jobs that should be marked seen
-// for FUTURE scans. We append a JSONL line per id; duplicates within ids are
-// not deduplicated here (caller should pass unique). Atomic enough for an
-// append-only log on a single machine.
+// for FUTURE scans. We append one JSONL record per ID via an individual
+// fs.appendFile call to keep each write under PIPE_BUF (atomic on POSIX).
+// Crash mid-batch leaves a prefix of the IDs in scan-history; that's safe for
+// dedupe (idempotent on retry — already-seen ids stay marked).
 export async function markIdsAsSeen(ids, file = SCAN_HISTORY_FILE) {
   if (!Array.isArray(ids) || ids.length === 0) return 0;
-  if (!existsSync(CAREER_DIR)) {
-    await fs.mkdir(CAREER_DIR, { recursive: true });
+  const dir = path.dirname(file);
+  if (!existsSync(dir)) {
+    await fs.mkdir(dir, { recursive: true });
   }
-  const ts = new Date().toISOString();
-  const lines = ids
-    .filter((id) => typeof id === 'string' && id.length > 0)
-    .map((id) => JSON.stringify({ id, seen_at: ts }) + '\n')
-    .join('');
-  if (!lines) return 0;
-  await fs.appendFile(file, lines);
-  return lines.split('\n').length - 1;
+  const validIds = ids.filter((id) => typeof id === 'string' && id.length > 0);
+  for (const id of validIds) {
+    await fs.appendFile(file, JSON.stringify({ id, seen_at: new Date().toISOString() }) + '\n');
+  }
+  return validIds.length;
 }

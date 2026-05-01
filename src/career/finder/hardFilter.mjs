@@ -42,6 +42,11 @@ const COUNTRY_BY_REGION = {
 };
 
 // Synonyms for country names users might type — lowercase comparison.
+// Aliases are matched as full canonical-name substrings (handled by the
+// `locationContains(loc, country)` path) plus the region map (US states /
+// CA provinces, word-bounded). We deliberately do NOT loop these aliases
+// against `loc.includes(alias)` — short aliases like "us" would substring-
+// match unrelated locations such as "Sydney, Australia" → false positive.
 const COUNTRY_ALIASES = {
   'united states': 'United States',
   'usa': 'United States',
@@ -51,18 +56,35 @@ const COUNTRY_ALIASES = {
   'canada': 'Canada',
 };
 
-const SENIORITY_RE = /\b(Intern|Internship|Junior|Jr\.?|IC[1-7]|Senior|Sr\.?|Staff|Principal|Lead|Director|VP|Head)\b/i;
+const SENIORITY_RE = /\b(Intern|Internship|Junior|Jr\.?|IC[1-7]|Senior|Sr\.?|Staff|Principal|Lead|Director|VP|Head)\b/gi;
 
+// Canonical normalization for matched seniority tokens. Comparison against
+// allowed lists is case-insensitive, but archive.jsonl shows matched_value
+// verbatim, so we keep human-readable canonical forms (VP, IC4, Senior).
+function canonicalizeSeniority(token) {
+  if (/^Jr\.?$/i.test(token)) return 'Junior';
+  if (/^Sr\.?$/i.test(token)) return 'Senior';
+  if (/^IC[1-7]$/i.test(token)) return token.toUpperCase();
+  if (/^VP$/i.test(token)) return 'VP';
+  if (/^Internship$/i.test(token)) return 'Internship';
+  return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+}
+
+// Returns ALL seniority tokens found in `role`, canonicalized. Used by the
+// seniority hard-rule to honor "Senior Staff Engineer" when allowed=[Staff]
+// (any one match is enough — conservative drop semantics).
+export function extractSeniorities(role) {
+  if (typeof role !== 'string' || !role) return [];
+  const out = [];
+  for (const m of role.matchAll(SENIORITY_RE)) out.push(canonicalizeSeniority(m[1]));
+  return out;
+}
+
+// Backward-compat single-token API — returns the FIRST canonical seniority
+// or null. Kept because m2 smoke uses it; new code should use extractSeniorities.
 export function extractSeniority(role) {
-  if (typeof role !== 'string' || !role) return null;
-  const m = role.match(SENIORITY_RE);
-  if (!m) return null;
-  let v = m[1];
-  // Normalize abbreviations.
-  if (/^Jr\.?$/i.test(v)) v = 'Junior';
-  else if (/^Sr\.?$/i.test(v)) v = 'Senior';
-  // Title-case for canonical output.
-  return v.charAt(0).toUpperCase() + v.slice(1).toLowerCase();
+  const all = extractSeniorities(role);
+  return all.length > 0 ? all[0] : null;
 }
 
 function locationContains(loc, needle) {
@@ -89,18 +111,16 @@ function locationMatchesAnyAllowedCity(jobLocations, allowedCities) {
   return null;
 }
 
+// Country match: canonical-name substring OR region map (word-bounded
+// US states / CA provinces). Short aliases like "us" are intentionally NOT
+// fed back as substring matches — they would falsely match "Sydney, Australia"
+// (austria contains "us"). Users typing "US" land on the canonical via
+// COUNTRY_ALIASES → canonical, then hit the region map for state codes.
 function locationMatchesAnyAllowedCountry(jobLocations, allowedCountries) {
-  // canonical country name OR alias OR region map (US states / CA provinces).
   for (const loc of jobLocations) {
     for (const country of allowedCountries) {
       const canonical = COUNTRY_ALIASES[country.toLowerCase()] ?? country;
-      // Direct substring (e.g. "London, UK" doesn't match "United States")
-      if (locationContains(loc, country)) return country;
-      // Country alias substring
-      for (const [alias, canon] of Object.entries(COUNTRY_ALIASES)) {
-        if (canon === canonical && locationContains(loc, alias)) return country;
-      }
-      // Region map (US states / CA provinces)
+      if (locationContains(loc, canonical)) return country;
       if (locationHasRegionInCountry(loc, canonical)) return country;
     }
   }
@@ -111,14 +131,19 @@ function locationMatchesDisallowedCountry(jobLocations, disallowed) {
   for (const country of disallowed) {
     for (const loc of jobLocations) {
       const canonical = COUNTRY_ALIASES[country.toLowerCase()] ?? country;
-      if (locationContains(loc, country)) return country;
-      for (const [alias, canon] of Object.entries(COUNTRY_ALIASES)) {
-        if (canon === canonical && locationContains(loc, alias)) return country;
-      }
+      if (locationContains(loc, canonical)) return country;
       if (locationHasRegionInCountry(loc, canonical)) return country;
     }
   }
   return null;
+}
+
+// Coerce arbitrary input to an array — anything that isn't already an array
+// becomes []. The preview endpoint hands us unsaved form drafts (any shape),
+// so every list-typed field is run through this gate to avoid `.map` /
+// `.length` crashes on string / number / null inputs.
+function asArr(v) {
+  return Array.isArray(v) ? v : [];
 }
 
 // Returns { kept: bool, rule_id, matched_value } for a single Job.
@@ -126,29 +151,30 @@ export function applyHardFilter(job, prefs) {
   const hf = prefs?.hard_filters ?? {};
 
   // 1. source_filter
-  const blockedSources = hf.source_filter?.blocked_sources ?? [];
+  const blockedSources = asArr(hf.source_filter?.blocked_sources);
   if (blockedSources.length > 0 && job.source?.type) {
-    if (blockedSources.map((s) => s.toLowerCase()).includes(job.source.type.toLowerCase())) {
+    const blockedLower = blockedSources.map((s) => String(s).toLowerCase());
+    if (blockedLower.includes(String(job.source.type).toLowerCase())) {
       return { kept: false, rule_id: 'source_filter', matched_value: job.source.type };
     }
   }
 
   // 2. company_blocklist
-  const companyBlock = compileMatcher(hf.company_blocklist ?? [], 'contains', false);
+  const companyBlock = compileMatcher(asArr(hf.company_blocklist), 'contains', false);
   {
     const m = companyBlock(job.company);
     if (m) return { kept: false, rule_id: 'company_blocklist', matched_value: m };
   }
 
   // 3. title_blocklist
-  const titleBlock = compileMatcher(hf.title_blocklist ?? [], 'contains', false);
+  const titleBlock = compileMatcher(asArr(hf.title_blocklist), 'contains', false);
   {
     const m = titleBlock(job.role);
     if (m) return { kept: false, rule_id: 'title_blocklist', matched_value: m };
   }
 
   // 4. title_allowlist (drop if non-empty AND no match)
-  const allowList = hf.title_allowlist ?? [];
+  const allowList = asArr(hf.title_allowlist);
   if (allowList.length > 0) {
     const allow = compileMatcher(allowList, 'contains', false);
     const m = allow(job.role);
@@ -156,9 +182,9 @@ export function applyHardFilter(job, prefs) {
   }
 
   // 5. location
-  const allowedCities = hf.location?.allowed_cities ?? [];
-  const allowedCountries = hf.location?.allowed_countries ?? [];
-  const disallowedCountries = hf.location?.disallowed_countries ?? [];
+  const allowedCities = asArr(hf.location?.allowed_cities);
+  const allowedCountries = asArr(hf.location?.allowed_countries);
+  const disallowedCountries = asArr(hf.location?.disallowed_countries);
   const locs = Array.isArray(job.location) ? job.location.filter((l) => typeof l === 'string') : [];
 
   if (allowedCities.length > 0 || allowedCountries.length > 0 || disallowedCountries.length > 0) {
@@ -189,17 +215,19 @@ export function applyHardFilter(job, prefs) {
     }
   }
 
-  // 6. seniority
-  const allowedSeniority = hf.seniority?.allowed ?? [];
+  // 6. seniority — accept the job if ANY extracted token is in `allowed`
+  // ("Senior Staff Engineer" with allowed=[Staff] keeps; conservative).
+  const allowedSeniority = Array.isArray(hf.seniority?.allowed) ? hf.seniority.allowed : [];
   if (allowedSeniority.length > 0) {
-    const extracted = extractSeniority(job.role);
-    if (extracted) {
-      const allowedLower = allowedSeniority.map((s) => s.toLowerCase());
-      if (!allowedLower.includes(extracted.toLowerCase())) {
-        return { kept: false, rule_id: 'seniority', matched_value: extracted };
+    const extracted = extractSeniorities(job.role);
+    if (extracted.length > 0) {
+      const allowedLower = new Set(allowedSeniority.map((s) => String(s).toLowerCase()));
+      const anyAllowed = extracted.some((tok) => allowedLower.has(tok.toLowerCase()));
+      if (!anyAllowed) {
+        return { kept: false, rule_id: 'seniority', matched_value: extracted.join(', ') };
       }
     }
-    // extracted=null → keep (conservative, unknown seniority).
+    // No tokens extracted → keep (conservative, unknown seniority).
   }
 
   // 7. posted_within_days
@@ -237,7 +265,7 @@ export function applyHardFilter(job, prefs) {
   }
 
   // 9. jd_text_blocklist
-  const jdBlock = compileMatcher(hf.jd_text_blocklist ?? [], 'contains', false);
+  const jdBlock = compileMatcher(asArr(hf.jd_text_blocklist), 'contains', false);
   if (typeof job.description === 'string') {
     const m = jdBlock(job.description);
     if (m) return { kept: false, rule_id: 'jd_text_blocklist', matched_value: m };
@@ -257,18 +285,22 @@ export function applyHardFilterBatch(jobs, prefs) {
   return { kept, dropped };
 }
 
-// Atomic enough — append-only jsonl. Each archived job carries enough context
-// to debug *why* it was dropped without re-loading anything.
+// Append-only jsonl. Each archived job carries enough context to debug *why*
+// it was dropped without re-loading anything. Each record is appended in its
+// own fs.appendFile call to keep individual writes under PIPE_BUF (atomic on
+// POSIX) — multi-MB single-call appends can be torn by crashes / concurrent
+// readers. Per-record ts also makes "when was this dropped" precise.
 export async function archiveDropped(droppedList, file = ARCHIVE_FILE) {
   if (!Array.isArray(droppedList) || droppedList.length === 0) return 0;
-  if (!existsSync(CAREER_DIR)) {
-    await fs.mkdir(CAREER_DIR, { recursive: true });
+  const dir = path.dirname(file);
+  if (!existsSync(dir)) {
+    await fs.mkdir(dir, { recursive: true });
   }
-  const ts = new Date().toISOString();
-  const lines = droppedList
-    .map(({ job, rule_id, matched_value }) =>
+  let written = 0;
+  for (const { job, rule_id, matched_value } of droppedList) {
+    const line =
       JSON.stringify({
-        ts,
+        ts: new Date().toISOString(),
         job: {
           id: job.id,
           company: job.company,
@@ -276,12 +308,13 @@ export async function archiveDropped(droppedList, file = ARCHIVE_FILE) {
           source: { type: job.source?.type, name: job.source?.name },
           url: job.url,
           location: job.location,
+          scraped_at: job.scraped_at ?? null,
         },
         rule_id,
         matched_value,
-      })
-    )
-    .join('\n') + '\n';
-  await fs.appendFile(file, lines);
-  return droppedList.length;
+      }) + '\n';
+    await fs.appendFile(file, line);
+    written++;
+  }
+  return written;
 }

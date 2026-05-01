@@ -77,32 +77,35 @@ await test('3. markIdsAsSeen + loadSeenSet roundtrip', async () => {
   });
 });
 
-await test('4. dedupeJobs all-fresh on empty file → all new', async () => {
-  await withTempFile(async (_tmp) => {
-    // Stub loadSeenSet by passing custom file via env? Simpler: manipulate
-    // module's behavior using the public API. dedupeJobs reads default file —
-    // skip this isolation by writing then dedupe-ing against same file.
+await test('4. dedupeJobs all-fresh on empty file → all new (via file= param)', async () => {
+  await withTempFile(async (tmp) => {
     const jobs = [makeJob('a'), makeJob('b'), makeJob('c')];
-    // We can't redirect dedupeJobs default file — assert against loadSeenSet
-    // directly + manual partition logic.
-    const set = await loadSeenSet('/tmp/nonexistent-file-xyz123');
-    const fresh = jobs.filter((j) => !set.has(j.id));
-    assert.equal(fresh.length, 3);
+    const r = await dedupeJobs(jobs, tmp);
+    assert.equal(r.new.length, 3);
+    assert.equal(r.duplicates.length, 0);
+    assert.equal(r.seenCount, 0);
   });
 });
 
-await test('5. fresh + duplicate mix correctly partitioned', async () => {
+await test('5. fresh + duplicate mix correctly partitioned (real dedupeJobs)', async () => {
   await withTempFile(async (tmp) => {
     await markIdsAsSeen(['old-1', 'old-2'], tmp);
-    const seen = await loadSeenSet(tmp);
     const jobs = [makeJob('old-1'), makeJob('new-1'), makeJob('old-2'), makeJob('new-2')];
-    const newJobs = [];
-    const dups = [];
-    for (const j of jobs) (seen.has(j.id) ? dups : newJobs).push(j);
-    assert.equal(newJobs.length, 2);
-    assert.equal(dups.length, 2);
-    assert.deepEqual(newJobs.map((j) => j.id), ['new-1', 'new-2']);
-    assert.deepEqual(dups.map((j) => j.id), ['old-1', 'old-2']);
+    const r = await dedupeJobs(jobs, tmp);
+    assert.deepEqual(r.new.map((j) => j.id), ['new-1', 'new-2']);
+    assert.deepEqual(r.duplicates.map((j) => j.id), ['old-1', 'old-2']);
+    assert.equal(r.seenCount, 2);
+  });
+});
+
+await test('5b. intra-batch duplicates collapse: same id twice in one fetch → first is new, rest are dups', async () => {
+  await withTempFile(async (tmp) => {
+    const jobs = [makeJob('a'), makeJob('a'), makeJob('b'), makeJob('a')];
+    const r = await dedupeJobs(jobs, tmp);
+    assert.equal(r.new.length, 2);
+    assert.equal(r.duplicates.length, 2);
+    assert.deepEqual(r.new.map((j) => j.id), ['a', 'b']);
+    assert.deepEqual(r.duplicates.map((j) => j.id), ['a', 'a']);
   });
 });
 
@@ -143,22 +146,20 @@ await test('7. large file (10K rows) loads under 200ms', async () => {
   });
 });
 
-await test('8. job missing id is treated as new (with warn)', async () => {
-  const jobs = [makeJob('a'), { ...makeJob('b'), id: undefined }];
-  const set = await loadSeenSet('/tmp/nonexistent-xyz');
-  const origWarn = console.warn;
-  let warned = 0;
-  console.warn = () => { warned++; };
-  try {
-    const newJobs = [];
-    for (const j of jobs) {
-      if (typeof j?.id !== 'string') { warned++; newJobs.push(j); }
-      else if (!set.has(j.id)) newJobs.push(j);
+await test('8. job missing id is treated as new (with warn) — real dedupeJobs', async () => {
+  await withTempFile(async (tmp) => {
+    const jobs = [makeJob('a'), { ...makeJob('b'), id: undefined }];
+    const origWarn = console.warn;
+    let warned = 0;
+    console.warn = () => { warned++; };
+    try {
+      const r = await dedupeJobs(jobs, tmp);
+      assert.equal(r.new.length, 2);
+      assert.ok(warned >= 1, 'expected console.warn for missing id');
+    } finally {
+      console.warn = origWarn;
     }
-    assert.equal(newJobs.length, 2);
-  } finally {
-    console.warn = origWarn;
-  }
+  });
 });
 
 console.log(`\n✅ All ${passed} smoke tests passed.`);

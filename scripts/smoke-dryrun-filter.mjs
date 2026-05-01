@@ -39,10 +39,14 @@ test('empty jobs[] → all zeros + breakdown has 9 rules in fixed order', () => 
   assert.equal(r.total_jobs, 0);
   assert.equal(r.would_drop, 0);
   assert.equal(r.would_pass, 0);
-  assert.equal(r.new_drops, 0);
   assert.equal(r.breakdown.length, 9);
   assert.deepEqual(r.breakdown.map((b) => b.rule), RULE_ORDER);
   for (const b of r.breakdown) assert.equal(b.drops, 0);
+});
+
+test('response shape has no new_drops field (removed — semantically dead against kept-only pipeline)', () => {
+  const r = previewHardFilter({ hard_filters: {} }, { hard_filters: {} }, []);
+  assert.equal('new_drops' in r, false);
 });
 
 test('null/undefined jobs treated as empty', () => {
@@ -155,44 +159,36 @@ test('jd_text_blocklist with description=null → keep (defer post-enrich)', () 
   assert.equal(r.would_drop, 0);
 });
 
-// ── new_drops baseline diff ───────────────────────────────────────────
-test('new_drops = drops(current) - drops(saved), clamped >= 0', () => {
+// ── savedPrefs argument is accepted but ignored (kept-only pipeline) ─
+test('savedPrefs is accepted but does not change result (forward-compat slot)', () => {
   const jobs = [
     makeJob({ id: 'a', company: 'Palantir' }),
     makeJob({ id: 'b', company: 'Oracle' }),
-    makeJob({ id: 'c', company: 'Anthropic' }),
   ];
-  const saved = { hard_filters: { company_blocklist: ['Palantir'] } };
   const current = { hard_filters: { company_blocklist: ['Palantir', 'Oracle'] } };
-  const r = previewHardFilter(current, saved, jobs);
-  assert.equal(r.would_drop, 2);
-  assert.equal(r.new_drops, 1); // Oracle is the new addition
+  const withSaved = previewHardFilter(current, { hard_filters: { company_blocklist: ['Palantir'] } }, jobs);
+  const withoutSaved = previewHardFilter(current, null, jobs);
+  assert.equal(withSaved.would_drop, withoutSaved.would_drop);
+  assert.equal(withSaved.would_pass, withoutSaved.would_pass);
 });
 
-test('new_drops clamped to 0 when current is laxer than saved', () => {
-  const jobs = [
-    makeJob({ id: 'a', company: 'Palantir' }),
-    makeJob({ id: 'b', company: 'Oracle' }),
-  ];
-  const saved = { hard_filters: { company_blocklist: ['Palantir', 'Oracle'] } };
-  const current = { hard_filters: { company_blocklist: ['Palantir'] } };
-  const r = previewHardFilter(current, saved, jobs);
-  assert.equal(r.would_drop, 1);
-  assert.equal(r.new_drops, 0);
-});
-
-test('savedPrefs=null → new_drops equals would_drop', () => {
-  const jobs = [
-    makeJob({ id: 'a', company: 'Palantir' }),
-    makeJob({ id: 'b', company: 'Anthropic' }),
-  ];
+// Robustness: malformed prefs body shapes (form drafts) shouldn't crash.
+test('non-array blocked_sources (string) → asArr coerces to no-op, no crash', () => {
+  const jobs = [makeJob({ source: { type: 'linkedin', name: 'LinkedIn' } })];
   const r = previewHardFilter(
-    { hard_filters: { company_blocklist: ['Palantir'] } },
+    { hard_filters: { source_filter: { blocked_sources: 'linkedin' } } },
     null,
     jobs
   );
-  assert.equal(r.would_drop, 1);
-  assert.equal(r.new_drops, 1);
+  assert.equal(r.total_jobs, 1);
+  assert.equal(r.would_drop, 0);
+});
+
+test('hard_filters is a non-object value → no-op, all kept', () => {
+  const jobs = [makeJob(), makeJob({ id: 'b' })];
+  const r = previewHardFilter({ hard_filters: 'lol' }, null, jobs);
+  assert.equal(r.total_jobs, 2);
+  assert.equal(r.would_drop, 0);
 });
 
 // ── breakdown is order-stable across previews ─────────────────────────
