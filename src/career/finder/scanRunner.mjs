@@ -13,6 +13,7 @@ import { githubMdAdapter } from './adapters/githubMd.mjs';
 import { dedupeJobs, markIdsAsSeen } from './dedupe.mjs';
 import { applyHardFilterBatch, archiveDropped } from './hardFilter.mjs';
 import { RULE_ORDER } from './dryRun.mjs';
+import { enrichBatch } from './jdEnrich.mjs';
 
 const DATA_DIR = path.resolve('data');
 const CAREER_DIR = path.join(DATA_DIR, 'career');
@@ -68,8 +69,42 @@ let scanState = {
   error: null,
 };
 
+// Tracks long-running side-channels that mutate pipeline.json outside of
+// runScanCore (e.g. POST /api/career/finder/enrich). Both scan-start and
+// these endpoints check both flags before claiming the lock — otherwise a
+// long-running enrich could overwrite a scan's fresh pipeline.json with a
+// stale snapshot, silently losing kept jobs.
+let pipelineMutex = {
+  enriching: false,
+  enrich_started_at: null,
+};
+
+export function isPipelineBusy() {
+  return scanState.running || pipelineMutex.enriching;
+}
+
+export function acquirePipelineEnrichLock() {
+  if (scanState.running) {
+    return { ok: false, reason: 'scan_running' };
+  }
+  if (pipelineMutex.enriching) {
+    return { ok: false, reason: 'enrich_running' };
+  }
+  pipelineMutex = { enriching: true, enrich_started_at: new Date().toISOString() };
+  return { ok: true };
+}
+
+export function releasePipelineEnrichLock() {
+  pipelineMutex = { enriching: false, enrich_started_at: null };
+}
+
 export function getScanStatus() {
-  return { ...scanState, progress: [...scanState.progress] };
+  return {
+    ...scanState,
+    progress: [...scanState.progress],
+    enriching: pipelineMutex.enriching,
+    enrich_started_at: pipelineMutex.enrich_started_at,
+  };
 }
 
 async function atomicWriteJson(file, data) {
@@ -160,6 +195,12 @@ async function runScanCore() {
     if (d.rule_id && droppedPerRule[d.rule_id] !== undefined) droppedPerRule[d.rule_id]++;
   }
 
+  // Tier-3 JD enrichment runs BEFORE pipeline.json write so kept jobs land
+  // with fresh descriptions. enrichBatch mutates each kept job in place
+  // (description / needs_manual_enrich) and never throws; tier 4 catches
+  // every per-job failure mode.
+  const enrich = await enrichBatch(kept, { concurrency: 3 });
+
   await atomicWriteJson(PIPELINE_FILE, {
     last_scan_at: new Date().toISOString(),
     jobs: kept,
@@ -171,6 +212,11 @@ async function runScanCore() {
       total_kept: kept.length,
       total_dropped: dropped.length,
       dropped_per_rule: droppedPerRule,
+      enriched_count: enrich.enriched,
+      ats_hits: enrich.ats_hits,
+      scrape_hits: enrich.scrape_hits,
+      needs_manual_count: enrich.needs_manual,
+      skipped_already_enriched_count: enrich.skipped,
     },
   });
   await archiveDropped(dropped);
@@ -179,9 +225,11 @@ async function runScanCore() {
 }
 
 // Kicks off scan asynchronously. Returns immediately with scan id + start time.
-// Throws ScanAlreadyRunningError if a scan is already in flight.
+// Throws ScanAlreadyRunningError if a scan is already in flight, OR if a
+// background enrich is in flight (would race the scan's pipeline.json write
+// with a stale snapshot).
 export function startScan() {
-  if (scanState.running) {
+  if (scanState.running || pipelineMutex.enriching) {
     throw new ScanAlreadyRunningError(getScanStatus());
   }
   resetRobotsCache();

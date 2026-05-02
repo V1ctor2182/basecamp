@@ -5,6 +5,7 @@ import CareerNav from './career/CareerNav'
 import Overview from './career/Overview'
 import Pipeline from './career/Pipeline'
 import Shortlist from './career/Shortlist'
+import NeedsManualEnrich from './career/shortlist/NeedsManualEnrich'
 import Applied from './career/Applied'
 import Prep from './career/Prep'
 import Reports from './career/Reports'
@@ -72,6 +73,7 @@ export default function CareerApp() {
           <Route path="overview" element={<Overview />} />
           <Route path="pipeline" element={<Pipeline />} />
           <Route path="shortlist" element={<Shortlist />} />
+          <Route path="shortlist/needs-manual" element={<NeedsManualEnrich />} />
           <Route path="applied" element={<Applied />} />
           <Route path="prep" element={<Prep />} />
           <Route path="prep/:company" element={<Prep />} />
