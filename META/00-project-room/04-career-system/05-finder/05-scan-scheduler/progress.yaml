@@ -164,7 +164,7 @@ milestones:
       - "src/career/finder/SchedulerPanel.tsx"
       - "src/career/finder/schedulerPanel.css"
       - "scripts/smoke-scheduler-endpoints.mjs"
-    commit_hash: "PENDING"
+    commit_hash: "3b5ae72"
     review_findings:
       - "[BUG] Pre-existing 409-spread overwrite — POST /scan and POST /scan/source returned 409 with error=null because {error: '...', ...e.state} spread overwrote our message with e.state.error (null). Fixed: spread state first, then error: 'scan already running'."
     estimated_files:
