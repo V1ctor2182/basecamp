@@ -2714,6 +2714,89 @@ app.post('/api/career/finder/enrich', async (_req, res) => {
   }
 });
 
+// ─── Finder: needs-manual list (UI feeds off this) ─────────────────────
+// Returns the subset of pipeline.json kept jobs that the 4-tier enrich
+// flagged as needing manual JD paste. UI under /career/shortlist/needs-manual
+// renders these with a paste textarea per row.
+app.get('/api/career/finder/needs-manual', async (_req, res) => {
+  try {
+    if (!existsSync(PIPELINE_FILE)) return res.json({ jobs: [] });
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+    // Project to a smaller view shape for the UI — full Job has raw and other
+    // bulky fields the list doesn't need.
+    const out = jobs
+      .filter((j) => j && j.needs_manual_enrich === true)
+      .map((j) => ({
+        id: j.id,
+        company: j.company,
+        role: j.role,
+        url: j.url,
+        location: j.location,
+        posted_at: j.posted_at ?? null,
+        source: j.source ?? null,
+      }));
+    res.json({ jobs: out });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Pipeline: PATCH a single job's description (manual JD paste) ──────
+// Used by the needs-manual UI when the user pastes JD text for a job that
+// the enricher couldn't fetch automatically. 409s if a scan or enrich is
+// running so the write doesn't race their pipeline.json snapshot.
+const JobDescriptionPatchSchema = z.object({
+  description: z.string().min(10).max(50_000),
+});
+
+app.patch('/api/career/pipeline/job/:id/description', async (req, res) => {
+  const status = getScanStatus();
+  if (status.running || status.enriching) {
+    return res.status(409).json({
+      error: status.running
+        ? 'scan in progress; PATCH would race the scan write'
+        : 'enrich in progress; PATCH would race the enrich write',
+    });
+  }
+  try {
+    const body = JobDescriptionPatchSchema.parse(req.body);
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.status(404).json({ error: 'pipeline.json does not exist' });
+    }
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+    const job = jobs.find((j) => j && j.id === req.params.id);
+    if (!job) return res.status(404).json({ error: 'job not found' });
+    job.description = body.description;
+    job.needs_manual_enrich = false;
+    await atomicWriteFile(PIPELINE_FILE, JSON.stringify(pipeline, null, 2));
+    res.json({
+      ok: true,
+      job: {
+        id: job.id,
+        description: job.description,
+        needs_manual_enrich: job.needs_manual_enrich,
+      },
+    });
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid description', details: e.issues });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Pipeline: manual paste ────────────────────────────────────────────
 const ManualPasteSchema = z.object({
   url: z.string().url().max(2000),

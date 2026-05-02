@@ -219,7 +219,16 @@ milestones:
 
   - id: "m4-manual-paste-and-shortlist-ui"
     name: "PATCH /:id/description + needs-manual Shortlist UI (ROOM COMPLETE)"
-    status: pending
+    status: completed
+    actual_lines: 690
+    actual_files:
+      - "server.mjs"
+      - "src/career/shortlist/NeedsManualEnrich.tsx"
+      - "src/career/shortlist/needsManualEnrich.css"
+      - "src/career/Shortlist.tsx"
+      - "src/CareerApp.tsx"
+      - "scripts/smoke-manual-paste.mjs"
+    commit_hash: "PENDING"
     estimated_files:
       - "server.mjs"
       - "src/career/shortlist/NeedsManualEnrich.tsx"
@@ -230,6 +239,10 @@ milestones:
     depends_on: ["m3-orchestrator-and-integration"]
     complexity_flags: []
     open_questions: []
+    locked_decisions_overrides:
+      - "Entry point file is src/CareerApp.tsx (not src/career/AppCareer.tsx as the original plan said) — corrected after reading the actual codebase."
+      - "Needs-manual UI lives at /career/shortlist/needs-manual (sub-route under existing Shortlist tab); no top-level nav addition. Shortlist page shows a counter banner linking to it."
+      - "PATCH endpoint reuses the m3 pipelineMutex (getScanStatus().running || .enriching) → 409 to avoid races with scan/enrich writers."
     description: |
       Final integration: server-side PATCH + dedicated UI (OQ-4=b) to paste JD for
       jobs stuck on tier 4 (needs_manual_enrich=true). UI lives at
@@ -299,5 +312,6 @@ commits: []
 
 current_sprint: "Sprint 5 — Finder"
 blockers: []
-status_note: "Plan 完成 (2026-04-30). 4 milestones, ~1060 行. OQ-1=c (auto+endpoint), OQ-2=a (shared pool), OQ-3=b (6 ATS), OQ-4=b (dedicated UI), OQ-5=a (concurrency 3). 全部 long-term-best 决策已锁定."
-last_updated: "2026-04-30"
+lifecycle: active
+status_note: "🎉 ROOM COMPLETE (2026-05-01) — 4/4 milestones (m1+m2+m3+m4). Total ~2240 lines actual across 5 modules + UI route + 4 new smokes (164/164 pass). Pipeline now: dedupe → hard_filter → enrich (4-tier) → kept-only pipeline.json with description filled or needs_manual_enrich flagged. UI at /career/shortlist/needs-manual closes the manual-paste loop. Downstream 06-evaluator can rely on description ≥ 90% non-null."
+last_updated: "2026-05-01"

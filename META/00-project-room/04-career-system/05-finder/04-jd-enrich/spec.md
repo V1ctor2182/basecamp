@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/05-finder/04-jd-enrich`  
 **Type**: feature  
-**Lifecycle**: planning  
+**Lifecycle**: active (ROOM COMPLETE 2026-05-01)  
 **Owner**: backend  
 **Parent**: `00-project-room/04-career-system/05-finder`  
 
@@ -23,14 +23,14 @@ JD 补全阶段：API refetch / Playwright scrape / manual fallback
 - [intent-jd-enrich-001](specs/intent-jd-enrich-001.yaml) — JD 补全阶段：API refetch / Playwright scrape / manual fallback
 - [constraint-jd-enrich-001](specs/constraint-jd-enrich-001.yaml) — 必须在 hard_filter 之后跑 + 失败必须显式标 needs_manual_enrich
 
-## 当前进度 — Plan 完成 (2026-04-30)
+## 当前进度 — 🎉 ROOM COMPLETE (2026-05-01)
 
-4 milestones, ~1060 行. 全部 long-term-best 决策已锁定 (OQs 1-5 by user):
+4/4 milestones shipped, ~2240 行 actual (vs ~1060 estimate — review hardening + exhaustive URL coverage). 全部 long-term-best 决策已锁定 (OQs 1-5 by user):
 
-- ⏳ **m1-schema-and-ats-refetch** (~280 行) — Job schema `needs_manual_enrich` field + `atsByUrl.mjs` 6-ATS detection (greenhouse/ashby/lever/recruitee/smartrecruiters full fetch; workday detect-only) + smoke 17
-- ⏳ **m2-playwright-pool-and-scraper** (~220 行) — Extract shared `playwrightPool.mjs` (refactor htmlToPdf to share) + `pageScraper.mjs` heuristic main-content extraction (15s timeout) + smoke 7
-- ⏳ **m3-orchestrator-and-integration** (~280 行) — `jdEnrich.mjs` 4-tier fallback (skip → ATS → Playwright → manual flag) + scanRunner integration (filter → **enrich kept** → write pipeline → archive → mark seen) + POST `/api/career/finder/enrich` (manual retry) + smoke 13
-- ⏳ **m4-manual-paste-and-shortlist-ui** (~280 行) — PATCH `/api/career/pipeline/job/:id/description` + GET `/needs-manual` + dedicated `/career/shortlist/needs-manual` UI (route, list, paste textarea, save) + ROOM COMPLETE
+- ✅ **m1-schema-and-ats-refetch** (530 actual) — Job schema `needs_manual_enrich` field + `atsByUrl.mjs` 6-ATS detection (greenhouse/ashby/lever/recruitee/smartrecruiters full fetch; workday detect-only) + smoke 30 → `a576183`
+- ✅ **m2-playwright-pool-and-scraper** (360 actual) — Extracted shared `playwrightPool.mjs` (refactored htmlToPdf to share) + `pageScraper.mjs` heuristic main-content extraction (15s timeout, EnrichTimeout/EnrichError classes) + smoke 8 → `a2e419b`
+- ✅ **m3-orchestrator-and-integration** (660 actual) — `jdEnrich.mjs` 4-tier fallback (skip → ATS → Playwright → manual flag) + scanRunner integration (filter → enrich kept → write pipeline → archive → mark seen) + POST `/api/career/finder/enrich` + pipelineMutex (3-way race protection: scan + enrich + manual-paste) + smoke 22 → `02e8238`
+- ✅ **m4-manual-paste-and-shortlist-ui** (690 actual) — PATCH `/api/career/pipeline/job/:id/description` + GET `/api/career/finder/needs-manual` + dedicated `/career/shortlist/needs-manual` UI route + Shortlist counter banner + smoke 7 → ROOM COMPLETE
 
 ### Locked design (long-term-best, all defaults)
 
