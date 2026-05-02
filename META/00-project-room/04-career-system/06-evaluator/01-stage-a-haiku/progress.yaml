@@ -1,5 +1,165 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-anthropic-client-and-prompt"
+    name: "@anthropic-ai/sdk install + getClient() + Stage A prompt module + parser"
+    status: pending
+    estimated_files:
+      - "package.json"
+      - "src/career/lib/anthropicClient.mjs"
+      - "src/career/evaluator/stageAPrompt.mjs"
+      - "scripts/smoke-stage-a-prompt.mjs"
+    estimated_lines: 250
+    depends_on: []
+    complexity_flags: ["external_api", "first_of_kind", "prompt_engineering"]
+    open_questions: []
+    description: |
+      First project use of LLM. Install @anthropic-ai/sdk, build the lazy
+      getClient() factory + the Stage A prompt builder + the response parser.
+      No real API calls in this milestone — m2 consumes them in the worker pool.
+
+      Files:
+        - package.json: +1 dep `@anthropic-ai/sdk`
+        - src/career/lib/anthropicClient.mjs (NEW ~70 lines):
+          · getClient(): lazy init from process.env.ANTHROPIC_API_KEY; throws
+            ConfigError if missing
+          · Module-level _client cache (one Anthropic instance per process)
+          · MOCK_ANTHROPIC=1 env returns canned mock client (smoke-friendly)
+        - src/career/evaluator/stageAPrompt.mjs (NEW ~140 lines):
+          · buildStageAPrompt(job, prefs, simplifiedCv) → { system, messages }
+            with cache_control: ephemeral on system block (CV + prefs
+            stable per batch → ~90% input token savings on call 2..N)
+          · parseStageAResponse(text) → {score: 1.0-5.0, reason: string}
+            tolerant of JSON / "Score 3.5/5" / numeric-prefix formats
+          · Score clamped to [1.0, 5.0], rounded to 1 decimal
+        - scripts/smoke-stage-a-prompt.mjs (~80 lines, 10 assertions)
+
+      Locked design (OQ lock-ins): SDK (OQ-1=a), API key env (OQ-2=a), prompt
+      caching (OQ-4=a), MOCK_ANTHROPIC for smoke (OQ-10=a).
+
+      验收: smoke 10/10 PASS; tsc + vite build clean.
+
+  - id: "m2-stage-a-runner-and-cost"
+    name: "evaluateJobsStageA worker-pool + cost recording + retry"
+    status: pending
+    estimated_files:
+      - "src/career/evaluator/stageARunner.mjs"
+      - "scripts/smoke-stage-a-runner.mjs"
+    estimated_lines: 250
+    depends_on: ["m1-anthropic-client-and-prompt"]
+    complexity_flags: ["external_api", "error_handling_heavy"]
+    open_questions: []
+    description: |
+      Worker-pool runner. Mirrors jdEnrich.enrichBatch shape (concurrency=3,
+      DI seam, never throws out — per-job errors absorbed). Records cost per
+      call to llm-costs.jsonl via direct fs append.
+
+      Files:
+        - src/career/evaluator/stageARunner.mjs (NEW ~180 lines):
+          · evaluateJobsStageA(jobs, prefs, opts) → counters
+            { evaluated, archived, errors, total_cost_usd, results: [...] }
+          · Worker-pool concurrency=3. DI seam: opts._client, opts._recordCost
+          · Per-job: shouldEvaluate (skip if already done) → buildPrompt →
+            callWithRetry (2 retries on 5xx/429 with exp backoff 500ms/2s;
+            fast-fail 4xx) → parseResponse → compute cost from token usage →
+            recordCost → determine status (score < skip_below → archived)
+          · Per-job try/catch absorbs errors → status:'error', batch continues
+        - scripts/smoke-stage-a-runner.mjs (~150 lines, 10 assertions): DI mocks
+
+      Locked design: concurrency 3 (OQ-5), retry 2x on 5xx/429 only (OQ-9),
+      cost per-call (OQ-8), threshold from prefs.thresholds.skip_below.
+
+      验收: smoke 10/10 PASS.
+
+  - id: "m3-endpoint-and-schema"
+    name: "POST /api/career/evaluate/stage-a + Job.evaluation schema migration"
+    status: pending
+    estimated_files:
+      - "src/career/lib/jobSchema.mjs"
+      - "server.mjs"
+      - "scripts/smoke-stage-a-endpoint.mjs"
+    estimated_lines: 200
+    depends_on: ["m2-stage-a-runner-and-cost"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      HTTP surface. Schema migration adds Job.evaluation; endpoint reads
+      pipeline.json, runs the m2 runner, atomic-writes results. Reuses
+      pipelineMutex 4-way race protection from earlier rooms.
+
+      Files:
+        - src/career/lib/jobSchema.mjs (+~25 lines):
+          · EvaluationStageASchema = z.object({
+              score, reason, model, evaluated_at, cost_usd, status
+              ('evaluated'|'archived'|'error'), error?
+            }).nullable().default(null)
+          · evaluation: z.object({stage_a, /* stage_b reserved */})
+            .nullable().default(null) added to JobSchema
+          · Existing pipeline.json jobs without field → null on read
+
+        - server.mjs (+~110 lines):
+          · POST /api/career/evaluate/stage-a:
+            - body: { jobIds?: string[] | null }
+            - Acquire pipelineMutex (409 with reason on contention)
+            - Filter: jobIds-supplied OR all pending (evaluation?.stage_a==null)
+            - Read base.md (or default-resume from resumes/index.yml) for CV
+            - evaluateJobsStageA(candidates, prefs)
+            - Mutate candidate.evaluation = { stage_a: result }
+            - atomicWriteFile pipeline.json
+            - Return { total, evaluated, archived, errors, total_cost_usd }
+            - releasePipelineEnrichLock in finally
+
+        - scripts/smoke-stage-a-endpoint.mjs (~110 lines, 6 assertions):
+          server-spawn with MOCK_ANTHROPIC=1; idempotent re-run, jobIds
+          filter, 409 race, 400 zod
+
+      Locked design: in-place evaluation (OQ-3), empty/null = all pending
+      (OQ-7), nullable schema (OQ-6), 4-way mutex (scan/enrich/manual-paste/
+      PATCH/+ now /evaluate).
+
+      验收: smoke 6/6 PASS.
+
+  - id: "m4-pipeline-ui-and-room-complete"
+    name: "Pipeline tab Stage A panel + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "src/career/Pipeline.tsx"
+      - "src/career/evaluator/StageABatch.tsx"
+      - "src/career/evaluator/stageABatch.css"
+      - "scripts/smoke-stage-a-ui.mjs"
+    estimated_lines: 250
+    depends_on: ["m3-endpoint-and-schema"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Pipeline tab gets a "Run Stage A on N pending" button + per-row score
+      badges + archived row dimming. Force Sonnet button placeholder
+      (deferred to 02-stage-b-sonnet).
+
+      Files:
+        - src/career/evaluator/StageABatch.tsx (NEW ~170 lines):
+          · GET pipeline.json on mount; auto-refresh after each batch run
+          · Pending count badge; "Run Stage A" button
+          · Optimistic "Running…" → toast on 200/409 with summary
+          · Job rows: company/role/score-badge/reason-tooltip/Force-Sonnet
+            placeholder
+        - src/career/evaluator/stageABatch.css (NEW ~80 lines): score badge
+          color-coding (4.0+ green, 3.5-4.0 amber, <3.5 gray)
+        - src/career/Pipeline.tsx (+~30): mount <StageABatch /> below
+          <SchedulerPanel />
+
+      ROOM COMPLETE work:
+        - lifecycle: planning → active
+        - _tree.yaml synced
+        - 06-evaluator parent progress: 0% → 20% (1/5 ROOMs ✅)
+        - 04-career-system: 60% → 62%
+
+      下游 unblocked:
+        - 02-stage-b-sonnet (consumes evaluation.stage_a.score >= threshold
+          to pick which jobs deserve deep eval)
+        - 05-pipeline-ui (extends Pipeline tab UI further)
+
+commits: []
+
+current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "Plan 完成 (2026-05-02). 4 milestones, ~950 行. OQs all locked at recommended: @anthropic-ai/sdk (OQ-1), ANTHROPIC_API_KEY env (OQ-2), in-place pipeline.json eval (OQ-3), prompt caching ephemeral (OQ-4), concurrency 3 (OQ-5), nullable schema migration (OQ-6), empty=all-pending (OQ-7), per-call cost record (OQ-8), 2 retries 5xx/429 (OQ-9), MOCK_ANTHROPIC env (OQ-10)."
+last_updated: "2026-05-02"
