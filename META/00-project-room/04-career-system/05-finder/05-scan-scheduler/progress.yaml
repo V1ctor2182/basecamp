@@ -1,7 +1,26 @@
 milestones:
   - id: "m1-per-type-runner-and-cadence-state"
     name: "Per-type runScanCore filter + scan-cadence-state.json persistence"
-    status: pending
+    status: completed
+    actual_lines: 580
+    actual_files:
+      - "src/career/finder/scanRunner.mjs"
+      - "src/career/finder/cadenceState.mjs"
+      - "src/career/finder/portalsLoader.mjs"
+      - "scripts/smoke-cadence-state.mjs"
+    commit_hash: "PENDING"
+    review_findings:
+      - "[CRITICAL] writePortalsConfig wiped scan_cadence on partial PUT body → fixed: read-modify-merge if scan_cadence absent"
+      - "[CRITICAL] filtered scan with all-failing adapters wiped existing type's jobs → fixed: per-source replacement (only drop existing jobs whose source.name was successfully re-fetched)"
+      - "[HIGH] success outcome written despite per-source errors → fixed: per-type outcome ('ok' | 'partial' | 'error') + last_error surfaced"
+      - "[HIGH] totals from this run only mismatched mergedJobs → fixed: split into totals.per_run + totals.aggregate"
+      - "[HIGH] updateForTypes lost-update race → fixed: module-level promise queue serializer"
+      - "[MEDIUM] parseCadence accepted '0h' silently disabling type → fixed: throw on n=0"
+      - "[MEDIUM] isDue future last_run_at never expired → fixed: treat as due"
+      - "[MEDIUM] tmp filename collision in same ms → fixed: randomUUID slice"
+      - "[MEDIUM] unknown types polluted cadence-state → fixed: validate against portals.sources, drop unknowns with warn"
+      - "[MEDIUM] scan_summary stale entries semantics → deferred to m3 (where SchedulerPanel surfaces them)"
+      - "[LOW] filtered_types in two places → noted (in-memory scanState vs on-disk totals.per_run)"
     estimated_files:
       - "src/career/finder/scanRunner.mjs"
       - "src/career/finder/cadenceState.mjs"
@@ -10,6 +29,11 @@ milestones:
     depends_on: []
     complexity_flags: ["design_decisions"]
     open_questions: []
+    locked_decisions_overrides:
+      - "OQ-9 (added during m1 dev): per-type pipeline.json semantics → type-scoped MERGE not full replace; otherwise filtered scans would silently delete other types' jobs."
+      - "Per-source replacement (not per-type): only drop existing jobs whose source.name was successfully re-fetched THIS RUN. Failed-source jobs preserved. Closes both reviewers' all-failing-adapter-wipes-slice critical."
+      - "totals split: per_run (this scan's slice) + aggregate (counts from mergedJobs). UI badges read aggregate; per-run breakdown shown for the just-completed scan."
+      - "writePortalsConfig RMW-merges scan_cadence on partial bodies (UI compat: m4-Portals UI shipped before m1 of 05-scan-scheduler doesn't include scan_cadence in PUT)."
     description: |
       Refactor runScanCore to accept an optional `types` filter so the scheduler
       can scan one source type independently (existing all-types path stays
