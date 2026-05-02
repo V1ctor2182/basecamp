@@ -22,6 +22,7 @@ import {
 import { previewHardFilter } from './src/career/finder/dryRun.mjs';
 import { enrichBatch } from './src/career/finder/jdEnrich.mjs';
 import { shouldEnrich } from './src/career/finder/atsByUrl.mjs';
+import { startScheduler, stopScheduler } from './src/career/finder/scheduler.mjs';
 import {
   readPortalsConfig,
   writePortalsConfig,
@@ -1916,13 +1917,38 @@ app.post('/api/career/render/_test-html-to-pdf', async (req, res) => {
   }
 });
 
+// Career scan scheduler — fires startScan({types: due}) every 60s based on
+// portals.yml::scan_cadence. Gated by DISABLE_SCAN_SCHEDULER=1 (set during
+// dev / tests when you don't want background scans). The scheduler's first
+// tick fires 60s after this registration, so initial server boot is quiet.
+//
+// Match exactly "1" — a truthiness check would disable on any non-empty
+// value including "0" / "false", which silently breaks deployments that
+// expect those to mean "don't disable".
+if (process.env.DISABLE_SCAN_SCHEDULER !== '1') {
+  startScheduler();
+  console.log('Scan scheduler enabled (master tick every 60s).');
+}
+
 // Clean shutdown: kill chromium subprocess on Ctrl+C / docker stop / nodemon
 // restart. Without this, Playwright leaves zombie browsers eating RAM.
+// Also stops the scan scheduler so no NEW ticks fire after this point.
+//
+// Trade-off: in-flight scans / enrichments are NOT drained. stopScheduler
+// only clears the interval timer; runScanCore's fire-and-forget body keeps
+// running after this returns. shutdownBrowser then closes chromium, which
+// crashes any pages mid-scrape (acceptable per jdEnrich tier-4 catch).
+// process.exit(0) hard-aborts whatever's still running. This means a scan
+// that was atomic-renaming pipeline.json or scan-cadence-state.json at
+// SIGTERM time may leave .tmp.{pid}.* files behind — readers tolerate the
+// missing target on next boot. We accept this over the complexity of an
+// in-flight-drain protocol.
 let _shuttingDown = false;
 async function gracefulShutdown(signal) {
   if (_shuttingDown) return;
   _shuttingDown = true;
   console.log(`Received ${signal}, shutting down chromium...`);
+  stopScheduler();
   await shutdownBrowser();
   process.exit(0);
 }

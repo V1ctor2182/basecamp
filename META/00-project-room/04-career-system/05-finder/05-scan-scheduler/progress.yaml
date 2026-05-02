@@ -78,7 +78,19 @@ milestones:
 
   - id: "m2-scheduler-bootstrap-and-tick"
     name: "src/career/finder/scheduler.mjs + server.mjs bootstrap + SIGTERM teardown"
-    status: pending
+    status: completed
+    actual_lines: 580
+    actual_files:
+      - "src/career/finder/scheduler.mjs"
+      - "server.mjs"
+      - "scripts/smoke-scheduler.mjs"
+    commit_hash: "PENDING"
+    review_findings:
+      - "[MEDIUM] Idempotent startScheduler returned mismatched tick + interval deps → fixed: cache _activeTick on first call, return on second"
+      - "[MEDIUM] DISABLE_SCAN_SCHEDULER truthiness check disabled on '=0'/'=false' → fixed: gate on === '1' exact match (codex)"
+      - "[MEDIUM] gracefulShutdown SIGTERM doesn't drain in-flight scans → documented trade-off in comment"
+      - "[LOW] tickMs=0 silent fallback → fixed: warn on invalid tickMs"
+      - "[LOW] dueTypes ordering, smoke #7 console.warn ordering, emoji in summary → deferred (cosmetic)"
     estimated_files:
       - "src/career/finder/scheduler.mjs"
       - "server.mjs"
