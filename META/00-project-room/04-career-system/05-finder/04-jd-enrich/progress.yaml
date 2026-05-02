@@ -65,7 +65,7 @@ milestones:
       - "src/career/lib/htmlToPdf.mjs"
       - "src/career/lib/pageScraper.mjs"
       - "scripts/smoke-page-scraper.mjs"
-    commit_hash: "PENDING"
+    commit_hash: "a2e419b"
     review_findings:
       - "[CRITICAL] smoke /__hang fragile across Chromium versions → fixed: write headers, never end body"
       - "[HIGH] idle timer could keep loop alive after SIGTERM → fixed: _idleTimer.unref()"
