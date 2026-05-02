@@ -127,7 +127,23 @@ milestones:
 
   - id: "m3-orchestrator-and-integration"
     name: "jdEnrich orchestrator (4-tier fallback) + scanRunner integration + POST /enrich endpoint"
-    status: pending
+    status: completed
+    actual_lines: 660
+    actual_files:
+      - "src/career/finder/jdEnrich.mjs"
+      - "src/career/finder/scanRunner.mjs"
+      - "server.mjs"
+      - "scripts/smoke-jd-enrich.mjs"
+    commit_hash: "PENDING"
+    review_findings:
+      - "[CRITICAL] POST /enrich race with scan-start could silently overwrite scan's fresh pipeline.json → fixed: pipelineMutex + acquirePipelineEnrichLock; startScan also checks lock"
+      - "[HIGH] tier 2/3 success did not clear stale needs_manual_enrich=true → fixed: set false on every successful description write"
+      - "[HIGH] _deps partial object replaced DEFAULT_DEPS wholesale → fixed: mergeDeps helper merges over defaults"
+      - "[MEDIUM] /enrich candidate filter inconsistent with scanRunner (codex finding) → fixed: use shouldEnrich"
+      - "[MEDIUM] manual-paste race with scan/enrich → fixed: 409 if running/enriching"
+      - "[MEDIUM] smoke timing tests flaky on loaded CI → fixed: in-flight counter pattern, no wallclock"
+      - "[MEDIUM] missing test invariants → added 7 tests (counter sum, mutation surface, retry-clears-flag, partial deps, single-job concurrency)"
+      - "[LOW] switch missing default → fixed: warns + tallies as needs_manual"
     estimated_files:
       - "src/career/finder/jdEnrich.mjs"
       - "src/career/finder/scanRunner.mjs"

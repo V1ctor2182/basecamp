@@ -16,8 +16,12 @@ import {
   getScanStatus,
   ScanAlreadyRunningError,
   PIPELINE_FILE,
+  acquirePipelineEnrichLock,
+  releasePipelineEnrichLock,
 } from './src/career/finder/scanRunner.mjs';
 import { previewHardFilter } from './src/career/finder/dryRun.mjs';
+import { enrichBatch } from './src/career/finder/jdEnrich.mjs';
+import { shouldEnrich } from './src/career/finder/atsByUrl.mjs';
 import {
   readPortalsConfig,
   writePortalsConfig,
@@ -2649,6 +2653,67 @@ app.put('/api/career/finder/portals', async (req, res) => {
   }
 });
 
+// ─── Finder: manual JD enrich retry ────────────────────────────────────
+// Re-runs the 4-tier enrich (skip → ATS → Playwright → manual flag) against
+// the current pipeline.json's kept jobs. Used after a scan to retry the
+// jobs that landed with needs_manual_enrich=true, or to enrich freshly
+// added manual-paste jobs that have description=null. Returns counters.
+// Refuses (409) if a scan is in flight to avoid pipeline.json races.
+app.post('/api/career/finder/enrich', async (_req, res) => {
+  // Acquire the pipeline-enrich lock BEFORE any I/O. The lock blocks
+  // startScan() too, so a scan can't land a fresh pipeline.json mid-enrich
+  // and have it overwritten by our stale snapshot at the end.
+  const lock = acquirePipelineEnrichLock();
+  if (!lock.ok) {
+    return res.status(409).json({
+      error: lock.reason === 'scan_running'
+        ? 'scan in progress; enrich would race the scan write'
+        : 'another enrich is already running',
+    });
+  }
+  try {
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.json({
+        total: 0,
+        enriched_now: 0,
+        still_needs_manual: 0,
+        ats_hits: 0,
+        scrape_hits: 0,
+      });
+    }
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+    // Mirror scanRunner's enrichBatch behavior: any job that shouldEnrich
+    // (description ≤ 500 chars) OR explicitly flagged needs_manual_enrich.
+    // Pre-m3 pipeline entries with a short ATS snippet would otherwise be
+    // skipped forever by /enrich while a fresh scan would re-enrich them.
+    const candidates = jobs.filter(
+      (j) => j && (j.needs_manual_enrich === true || shouldEnrich(j))
+    );
+    const counters = await enrichBatch(candidates, { concurrency: 3 });
+    // candidates entries are the same references as pipeline.jobs entries —
+    // mutation already landed; just write the whole pipeline back.
+    pipeline.jobs = jobs;
+    await atomicWriteFile(PIPELINE_FILE, JSON.stringify(pipeline, null, 2));
+    res.json({
+      total: candidates.length,
+      enriched_now: counters.enriched,
+      still_needs_manual: counters.needs_manual,
+      ats_hits: counters.ats_hits,
+      scrape_hits: counters.scrape_hits,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  } finally {
+    releasePipelineEnrichLock();
+  }
+});
+
 // ─── Pipeline: manual paste ────────────────────────────────────────────
 const ManualPasteSchema = z.object({
   url: z.string().url().max(2000),
@@ -2657,13 +2722,24 @@ const ManualPasteSchema = z.object({
 });
 
 app.post('/api/career/pipeline/manual', async (req, res) => {
+  // Manual paste is a pipeline.json writer. If a scan or enrich is running,
+  // its multi-second-to-multi-minute window could overwrite the manual write,
+  // silently dropping the just-pasted job. 409 keeps semantics consistent
+  // with /scan and /enrich.
+  const status = getScanStatus();
+  if (status.running || status.enriching) {
+    return res.status(409).json({
+      error: status.running
+        ? 'scan in progress; manual paste would race the scan write'
+        : 'enrich in progress; manual paste would race the enrich write',
+    });
+  }
   try {
     const body = ManualPasteSchema.parse(req.body);
     const job = await manualPaste(body);
 
-    // Append to pipeline.json (read-modify-write under simple lock would be
-    // ideal; here we accept last-writer-wins since manual paste is interactive
-    // and unlikely to race with a scan write).
+    // Append to pipeline.json. The 409 above ensures no scan/enrich is mid-
+    // flight, so this read-modify-write is safe under our single-process model.
     let current = { jobs: [], last_scan_at: null, scan_summary: [] };
     if (existsSync(PIPELINE_FILE)) {
       try {
