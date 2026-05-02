@@ -228,7 +228,7 @@ milestones:
       - "src/career/Shortlist.tsx"
       - "src/CareerApp.tsx"
       - "scripts/smoke-manual-paste.mjs"
-    commit_hash: "PENDING"
+    commit_hash: "2c22930"
     estimated_files:
       - "server.mjs"
       - "src/career/shortlist/NeedsManualEnrich.tsx"
