@@ -3,9 +3,9 @@ room:
   name: "Scan Scheduler"
   parent: "00-project-room/04-career-system/05-finder"
   type: feature
-  lifecycle: planning
+  lifecycle: active
   created_at: "2026-04-22"
-  updated_at: "2026-04-22"
+  updated_at: "2026-05-02"
   owner: backend
   contributors: []
   prompt_test:

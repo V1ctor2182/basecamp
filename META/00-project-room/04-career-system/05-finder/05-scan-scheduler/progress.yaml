@@ -156,7 +156,17 @@ milestones:
 
   - id: "m3-debug-endpoint-ui-and-room-complete"
     name: "POST /scan/source + GET /scheduler/status + Pipeline-tab UI panel (ROOM COMPLETE)"
-    status: pending
+    status: completed
+    actual_lines: 720
+    actual_files:
+      - "server.mjs"
+      - "src/career/Pipeline.tsx"
+      - "src/career/finder/SchedulerPanel.tsx"
+      - "src/career/finder/schedulerPanel.css"
+      - "scripts/smoke-scheduler-endpoints.mjs"
+    commit_hash: "PENDING"
+    review_findings:
+      - "[BUG] Pre-existing 409-spread overwrite — POST /scan and POST /scan/source returned 409 with error=null because {error: '...', ...e.state} spread overwrote our message with e.state.error (null). Fixed: spread state first, then error: 'scan already running'."
     estimated_files:
       - "server.mjs"
       - "src/career/Pipeline.tsx"
@@ -231,5 +241,6 @@ commits: []
 
 current_sprint: "Sprint 5 — Finder"
 blockers: []
-status_note: "Plan 完成 (2026-05-01). 3 milestones, ~700 行. OQs all locked at recommended values: per-type cadence (OQ-1=a), master tick (OQ-2=a), catch-up on first tick (OQ-3=a), DISABLE_SCAN_SCHEDULER env gate (OQ-4=a), hot-reload cadence (OQ-5=a), 60s tick (OQ-6=a), Pipeline-tab UI (OQ-7=a), {type}-only debug endpoint (OQ-8=a)."
-last_updated: "2026-05-01"
+lifecycle: active
+status_note: "🎉 ROOM COMPLETE (2026-05-02) — 3/3 milestones (m1+m2+m3). 05-finder EPIC at 100% (5/5 ROOMs ✅). Total ~1880 lines actual + smoke-scheduler-endpoints (6/6) + smoke-scheduler (14/14) + smoke-cadence-state (22/22) + 4 review fix passes (CRITICAL portals wipe, CRITICAL filtered-scan-with-failing-source, HIGH lost-update race, HIGH success-outcome-vs-errors, HIGH totals-mismatch, MEDIUM idempotence dep-graph drift, MEDIUM DISABLE_SCAN_SCHEDULER truthiness, BUG 409-spread overwrite)."
+last_updated: "2026-05-02"

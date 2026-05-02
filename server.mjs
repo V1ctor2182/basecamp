@@ -24,6 +24,11 @@ import { enrichBatch } from './src/career/finder/jdEnrich.mjs';
 import { shouldEnrich } from './src/career/finder/atsByUrl.mjs';
 import { startScheduler, stopScheduler } from './src/career/finder/scheduler.mjs';
 import {
+  readCadenceState,
+  cadenceToMs,
+} from './src/career/finder/cadenceState.mjs';
+import { SOURCE_TYPES } from './src/career/lib/jobSchema.mjs';
+import {
   readPortalsConfig,
   writePortalsConfig,
 } from './src/career/finder/portalsLoader.mjs';
@@ -2644,9 +2649,11 @@ app.post('/api/career/finder/scan', (_req, res) => {
     res.status(202).json({ scan_id, started_at });
   } catch (e) {
     if (e instanceof ScanAlreadyRunningError) {
+      // Spread state FIRST so our error string isn't overwritten by
+      // e.state.error (which is the scan-level error field — usually null).
       return res.status(409).json({
-        error: 'scan already running',
         ...e.state,
+        error: 'scan already running',
       });
     }
     res.status(500).json({ error: e.message });
@@ -2655,6 +2662,71 @@ app.post('/api/career/finder/scan', (_req, res) => {
 
 app.get('/api/career/finder/scan/status', (_req, res) => {
   res.json(getScanStatus());
+});
+
+// ─── Finder: per-source-type debug scan ────────────────────────────────
+// Triggers a scan filtered to one source-type, used by the scheduler UI's
+// "Run Now" button per-row. Same race-protection as the all-types /scan.
+const ScanSourceSchema = z.object({
+  type: z.enum(SOURCE_TYPES),
+});
+app.post('/api/career/finder/scan/source', (req, res) => {
+  let body;
+  try {
+    body = ScanSourceSchema.parse(req.body);
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid type', details: e.issues });
+  }
+  try {
+    const { scan_id, started_at } = startScan({ types: [body.type] });
+    res.status(202).json({ scan_id, started_at, types: [body.type] });
+  } catch (e) {
+    if (e instanceof ScanAlreadyRunningError) {
+      // Spread state FIRST so our error string isn't overwritten by e.state.error.
+      return res.status(409).json({ ...e.state, error: 'scan already running' });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Finder: scheduler status (cadence + last_run + next_run per type) ─
+// One row per type that has either a cadence configured OR an active source
+// in portals.yml. UI consumes this to render the SchedulerPanel table.
+app.get('/api/career/finder/scheduler/status', async (_req, res) => {
+  try {
+    const portals = await readPortalsConfig();
+    const cadenceStr = portals?.scan_cadence ?? {};
+    const cadenceMs = cadenceToMs(cadenceStr);
+    const state = await readCadenceState();
+    const sources = Array.isArray(portals?.sources) ? portals.sources : [];
+    const activeTypeSet = new Set(sources.map((s) => s?.type).filter((t) => typeof t === 'string'));
+
+    // Union: types with a cadence config + types with at least one active source.
+    const allTypes = new Set([...Object.keys(cadenceStr), ...activeTypeSet]);
+    const rows = Array.from(allTypes).sort().map((type) => {
+      const ms = cadenceMs[type];
+      const entry = state[type] ?? {};
+      const lastRunMs = typeof entry.last_run_at === 'string' ? Date.parse(entry.last_run_at) : NaN;
+      const nextRunMs = !Number.isNaN(lastRunMs) && typeof ms === 'number'
+        ? lastRunMs + ms
+        : null;
+      return {
+        type,
+        cadence_str: cadenceStr[type] ?? null,
+        cadence_ms: typeof ms === 'number' ? ms : null,
+        cadence_valid: typeof ms === 'number',
+        last_run_at: entry.last_run_at ?? null,
+        next_run_at: nextRunMs != null ? new Date(nextRunMs).toISOString() : null,
+        last_outcome: entry.last_outcome ?? null,
+        last_jobs_count: entry.last_jobs_count ?? null,
+        last_error: entry.last_error ?? null,
+        has_active_source: activeTypeSet.has(type),
+      };
+    });
+    res.json({ rows, scan_status: getScanStatus() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── Finder: portals.yml CRUD ──────────────────────────────────────────
