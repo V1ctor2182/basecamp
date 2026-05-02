@@ -84,7 +84,7 @@ milestones:
       - "src/career/finder/scheduler.mjs"
       - "server.mjs"
       - "scripts/smoke-scheduler.mjs"
-    commit_hash: "PENDING"
+    commit_hash: "41c5b7e"
     review_findings:
       - "[MEDIUM] Idempotent startScheduler returned mismatched tick + interval deps → fixed: cache _activeTick on first call, return on second"
       - "[MEDIUM] DISABLE_SCAN_SCHEDULER truthiness check disabled on '=0'/'=false' → fixed: gate on === '1' exact match (codex)"
