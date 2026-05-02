@@ -58,7 +58,19 @@ milestones:
 
   - id: "m2-playwright-pool-and-scraper"
     name: "Shared Playwright pool (refactor) + pageScraper for JD text extraction"
-    status: pending
+    status: completed
+    actual_lines: 360
+    actual_files:
+      - "src/career/lib/playwrightPool.mjs"
+      - "src/career/lib/htmlToPdf.mjs"
+      - "src/career/lib/pageScraper.mjs"
+      - "scripts/smoke-page-scraper.mjs"
+    commit_hash: "PENDING"
+    review_findings:
+      - "[CRITICAL] smoke /__hang fragile across Chromium versions → fixed: write headers, never end body"
+      - "[HIGH] idle timer could keep loop alive after SIGTERM → fixed: _idleTimer.unref()"
+      - "[MEDIUM] String(undefined) leak in EnrichError msg → fixed: pass empty url"
+      - "[MEDIUM] smoke whitespace assertion weak → fixed: /\\s{2,}/ stricter"
     estimated_files:
       - "src/career/lib/playwrightPool.mjs"
       - "src/career/lib/htmlToPdf.mjs"
