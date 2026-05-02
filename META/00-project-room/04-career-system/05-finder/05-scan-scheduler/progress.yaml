@@ -1,5 +1,246 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-per-type-runner-and-cadence-state"
+    name: "Per-type runScanCore filter + scan-cadence-state.json persistence"
+    status: completed
+    actual_lines: 580
+    actual_files:
+      - "src/career/finder/scanRunner.mjs"
+      - "src/career/finder/cadenceState.mjs"
+      - "src/career/finder/portalsLoader.mjs"
+      - "scripts/smoke-cadence-state.mjs"
+    commit_hash: "3864ddd"
+    review_findings:
+      - "[CRITICAL] writePortalsConfig wiped scan_cadence on partial PUT body → fixed: read-modify-merge if scan_cadence absent"
+      - "[CRITICAL] filtered scan with all-failing adapters wiped existing type's jobs → fixed: per-source replacement (only drop existing jobs whose source.name was successfully re-fetched)"
+      - "[HIGH] success outcome written despite per-source errors → fixed: per-type outcome ('ok' | 'partial' | 'error') + last_error surfaced"
+      - "[HIGH] totals from this run only mismatched mergedJobs → fixed: split into totals.per_run + totals.aggregate"
+      - "[HIGH] updateForTypes lost-update race → fixed: module-level promise queue serializer"
+      - "[MEDIUM] parseCadence accepted '0h' silently disabling type → fixed: throw on n=0"
+      - "[MEDIUM] isDue future last_run_at never expired → fixed: treat as due"
+      - "[MEDIUM] tmp filename collision in same ms → fixed: randomUUID slice"
+      - "[MEDIUM] unknown types polluted cadence-state → fixed: validate against portals.sources, drop unknowns with warn"
+      - "[MEDIUM] scan_summary stale entries semantics → deferred to m3 (where SchedulerPanel surfaces them)"
+      - "[LOW] filtered_types in two places → noted (in-memory scanState vs on-disk totals.per_run)"
+    estimated_files:
+      - "src/career/finder/scanRunner.mjs"
+      - "src/career/finder/cadenceState.mjs"
+      - "scripts/smoke-cadence-state.mjs"
+    estimated_lines: 250
+    depends_on: []
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    locked_decisions_overrides:
+      - "OQ-9 (added during m1 dev): per-type pipeline.json semantics → type-scoped MERGE not full replace; otherwise filtered scans would silently delete other types' jobs."
+      - "Per-source replacement (not per-type): only drop existing jobs whose source.name was successfully re-fetched THIS RUN. Failed-source jobs preserved. Closes both reviewers' all-failing-adapter-wipes-slice critical."
+      - "totals split: per_run (this scan's slice) + aggregate (counts from mergedJobs). UI badges read aggregate; per-run breakdown shown for the just-completed scan."
+      - "writePortalsConfig RMW-merges scan_cadence on partial bodies (UI compat: m4-Portals UI shipped before m1 of 05-scan-scheduler doesn't include scan_cadence in PUT)."
+    description: |
+      Refactor runScanCore to accept an optional `types` filter so the scheduler
+      can scan one source type independently (existing all-types path stays
+      backward-compat as the default). Add scan-cadence-state.json persistence
+      so per-type last_run_at survives server restarts (catch-up on boot per
+      OQ-3=a). Add cadence string parser ("72h" → ms).
+
+      Files:
+        - src/career/finder/scanRunner.mjs (+~70 lines):
+          · runScanCore({ types? }): if types is a non-empty array, filter
+            portals.sources to those whose source.type ∈ types. Default (no
+            filter) preserves the existing all-types behavior.
+          · startScan({ types? }) + runScanForTest({ types? }): pass-through.
+          · After atomicWriteJson(pipeline.json), emit cadence-state update for
+            the run's types: last_run_at = now, last_outcome = 'ok' | 'error',
+            last_jobs_count = kept.length. On runScanCore throw → mark 'error'
+            with last_error truncated.
+
+        - src/career/finder/cadenceState.mjs (NEW ~110 lines):
+          · CADENCE_STATE_FILE = data/career/scan-cadence-state.json
+          · readCadenceState() / writeCadenceState() with atomic-rename
+          · updateForTypes(types, patch): read-modify-write for listed types
+          · parseCadence("Nh"/"Nm"/"Nd"/"Ns") → ms; throws on malformed
+          · cadenceToMs(map): { greenhouse: '72h', ... } → { greenhouse: 259200000, ... }
+          · isDue(type, state, cadenceMap, now=Date.now()): true if
+            last_run_at + cadence_ms <= now OR last_run_at undefined
+
+        - scripts/smoke-cadence-state.mjs (~70 lines, ~12 assertions):
+          · parseCadence positive + malformed cases
+          · cadenceToMs round-trip
+          · isDue: never-run / just-ran / past-due / edge-ms
+          · updateForTypes: missing file / round-trip / partial update
+            doesn't mutate other types
+
+      Locked design (OQ lock-ins):
+        - Per-type cadence (OQ-1=a) — keys are SOURCE_TYPES values
+        - Cadence format: Nh/Nm/Nd/Ns (no decimals)
+        - State file shape stable across restarts; missing keys default to
+          "never run" → catch-up on first scheduler tick
+
+      验收: smoke 12/12 PASS; tsc + vite build clean.
+
+  - id: "m2-scheduler-bootstrap-and-tick"
+    name: "src/career/finder/scheduler.mjs + server.mjs bootstrap + SIGTERM teardown"
+    status: completed
+    actual_lines: 580
+    actual_files:
+      - "src/career/finder/scheduler.mjs"
+      - "server.mjs"
+      - "scripts/smoke-scheduler.mjs"
+    commit_hash: "41c5b7e"
+    review_findings:
+      - "[MEDIUM] Idempotent startScheduler returned mismatched tick + interval deps → fixed: cache _activeTick on first call, return on second"
+      - "[MEDIUM] DISABLE_SCAN_SCHEDULER truthiness check disabled on '=0'/'=false' → fixed: gate on === '1' exact match (codex)"
+      - "[MEDIUM] gracefulShutdown SIGTERM doesn't drain in-flight scans → documented trade-off in comment"
+      - "[LOW] tickMs=0 silent fallback → fixed: warn on invalid tickMs"
+      - "[LOW] dueTypes ordering, smoke #7 console.warn ordering, emoji in summary → deferred (cosmetic)"
+    estimated_files:
+      - "src/career/finder/scheduler.mjs"
+      - "server.mjs"
+      - "scripts/smoke-scheduler.mjs"
+    estimated_lines: 200
+    depends_on: ["m1-per-type-runner-and-cadence-state"]
+    complexity_flags: ["design_decisions", "error_handling_heavy"]
+    open_questions: []
+    description: |
+      Master-tick scheduler. setInterval every 60s reads portals.yml cadence
+      (hot-reload per OQ-5=a), reads scan-cadence-state.json, computes due
+      types, fires startScan({types: due}) if mutex free. Bootstrap from
+      server.mjs after app.listen, gated by DISABLE_SCAN_SCHEDULER=1 (OQ-4=a).
+      SIGTERM teardown clears the timer.
+
+      Files:
+        - src/career/finder/scheduler.mjs (NEW ~120 lines):
+          · startScheduler({ tickMs=60_000, _now, _readPortals,
+            _readCadenceState, _startScan }) — DI seam for smoke testing.
+            Returns { tick, stop }.
+          · tick():
+            1. read portals.yml (graceful degrade: error → warn + skip)
+            2. cadenceMap = cadenceToMs(portals.scan_cadence ?? {})
+            3. state = await readCadenceState()
+            4. activeTypes = unique source.type values in portals.sources
+            5. dueTypes = activeTypes.filter(t => cadenceMap[t] && isDue(...))
+            6. if dueTypes.length === 0 → return early
+            7. if scanState.running || pipelineMutex.enriching → log debug,
+               skip (no persistence — re-evaluated next tick)
+            8. startScan({ types: dueTypes }) — fire and forget
+          · setInterval timer is unref()'d so a pending tick doesn't block
+            process exit (mirror m2-jd-enrich pool fix).
+          · stop() clears the interval.
+
+        - server.mjs (+~25 lines):
+          · After app.listen: gated bootstrap; SIGTERM extended to call
+            scheduler.stop() before shutdownBrowser().
+
+        - scripts/smoke-scheduler.mjs (~80 lines, ~10 assertions):
+          DI-driven (no real timer / no real http):
+          1. no portals → no-op
+          2. cadence empty → no-op
+          3. type never run + non-zero cadence → due → _startScan called with [type]
+          4. type just-ran (last_run_at = now-1s, cadence = 60min) → not due
+          5. multiple types due → _startScan called once with the array
+          6. mutex busy → no _startScan
+          7. portals read throws → tick is no-op + console.warn
+          8. malformed cadence string → that type skipped (warn), others proceed
+          9. stop() clears interval (spy on clearInterval)
+          10. activeTypes filter: type in cadence_map but no source has it → skipped
+
+      Locked design:
+        - 60s master tick (OQ-6=a)
+        - Hot-reload cadence each tick (OQ-5=a)
+        - Catch-up on first tick after boot (OQ-3=a)
+        - DISABLE_SCAN_SCHEDULER=1 gate (OQ-4=a)
+        - Scheduler NEVER throws; per-tick errors warn + tick continues
+        - Mutex-aware: scan-running or enriching → skip tick (no queue)
+        - unref'd timer
+
+      验收: smoke 10/10 PASS; vite build clean; manual: server boots with
+      scheduler enabled by default + DISABLE_SCAN_SCHEDULER=1 disables.
+
+  - id: "m3-debug-endpoint-ui-and-room-complete"
+    name: "POST /scan/source + GET /scheduler/status + Pipeline-tab UI panel (ROOM COMPLETE)"
+    status: completed
+    actual_lines: 720
+    actual_files:
+      - "server.mjs"
+      - "src/career/Pipeline.tsx"
+      - "src/career/finder/SchedulerPanel.tsx"
+      - "src/career/finder/schedulerPanel.css"
+      - "scripts/smoke-scheduler-endpoints.mjs"
+    commit_hash: "3b5ae72"
+    review_findings:
+      - "[BUG] Pre-existing 409-spread overwrite — POST /scan and POST /scan/source returned 409 with error=null because {error: '...', ...e.state} spread overwrote our message with e.state.error (null). Fixed: spread state first, then error: 'scan already running'."
+    estimated_files:
+      - "server.mjs"
+      - "src/career/Pipeline.tsx"
+      - "src/career/finder/SchedulerPanel.tsx"
+      - "src/career/finder/schedulerPanel.css"
+      - "scripts/smoke-scheduler-endpoints.mjs"
+    estimated_lines: 250
+    depends_on: ["m2-scheduler-bootstrap-and-tick"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Wire the scheduler into the UI: per-type status table on the Pipeline
+      page, manual "Run Now" buttons, debug endpoint for single-type scans.
+      ROOM COMPLETE meta propagation closes 05-finder at 100%.
+
+      Files:
+        - server.mjs (+~80 lines):
+          · POST /api/career/finder/scan/source (OQ-8=a, type-only):
+            - body: { type: z.enum(SOURCE_TYPES) }
+            - 400 on zod fail; 409 if scan/enrich running
+            - startScan({ types: [body.type] })
+            - returns { scan_id, started_at }
+          · GET /api/career/finder/scheduler/status:
+            - reads portals.yml + cadenceState
+            - returns [{ type, cadence_ms, cadence_str, last_run_at,
+              next_run_at, last_outcome, last_jobs_count, last_error?,
+              has_active_source }]
+
+        - src/career/finder/SchedulerPanel.tsx (NEW ~140 lines):
+          · GET /scheduler/status on mount; auto-refresh every 30s
+          · Table: Source Type / Cadence / Last Run / Next Run / Last Outcome / Run Now
+          · Run Now → POST /scan/source { type } → optimistic "scanning…" badge
+          · Empty state, loading + error UI; outcome color coding (ok green,
+            error red, never gray)
+
+        - src/career/finder/schedulerPanel.css (NEW ~50 lines): card + table
+          layout matching Resumes.tsx visual language.
+
+        - src/career/Pipeline.tsx (refactor stub, +~30 lines): mount
+          <SchedulerPanel /> at top; existing stub copy below as defer note.
+
+        - scripts/smoke-scheduler-endpoints.mjs (~80 lines, ~7 assertions):
+          server-spawn pattern (matches smoke-manual-paste.mjs):
+          1. GET /scheduler/status returns array based on portals.yml cadence
+          2. POST /scan/source valid type → 202 + scan_id
+          3. POST /scan/source bad type → 400
+          4. POST /scan/source while scan running → 409
+          5. GET /scheduler/status reflects last_run_at after a scan
+          6. last_error surfaces on simulated failure (mock adapter throws)
+          7. POST /scan/source with type that no portals.yml source uses →
+             still works (debug endpoint), but the run does nothing useful
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml synced
+        - spec.md ROOM COMPLETE rewrite
+        - 05-finder progress.yaml: 80% → 100% (5/5 ROOMs ✅) 🎉 EPIC COMPLETE
+        - 04-career-system progress.yaml: 56% → 59% (avg 8 sub-epics)
+
+      验收:
+        - smoke-scheduler-endpoints 7/7 PASS
+        - prior smokes (m1 12 + m2 10 + 164 carry-over) = 193/193
+        - vite build ✓
+        - manual UI: /career/pipeline shows scheduler panel; "Run Now" on
+          github-md → running → eventually ok
+
+      下游 unblocked:
+        - 06-evaluator (pipeline.json continuously refreshed by scheduler;
+          no manual trigger needed)
+
+commits: []
+
+current_sprint: "Sprint 5 — Finder"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+lifecycle: active
+status_note: "🎉 ROOM COMPLETE (2026-05-02) — 3/3 milestones (m1+m2+m3). 05-finder EPIC at 100% (5/5 ROOMs ✅). Total ~1880 lines actual + smoke-scheduler-endpoints (6/6) + smoke-scheduler (14/14) + smoke-cadence-state (22/22) + 4 review fix passes (CRITICAL portals wipe, CRITICAL filtered-scan-with-failing-source, HIGH lost-update race, HIGH success-outcome-vs-errors, HIGH totals-mismatch, MEDIUM idempotence dep-graph drift, MEDIUM DISABLE_SCAN_SCHEDULER truthiness, BUG 409-spread overwrite)."
+last_updated: "2026-05-02"

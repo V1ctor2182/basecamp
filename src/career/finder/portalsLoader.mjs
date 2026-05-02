@@ -13,8 +13,14 @@ export const SourceConfigSchema = z.object({
   priority: z.number().int().min(1).max(10).optional(),
 });
 
+// scan_cadence is read by the scheduler (05-scan-scheduler) to decide when
+// each source type is due. Values are duration strings ("72h" / "24h" / etc.)
+// — strict format validated by cadenceState.parseCadence at read-time, not
+// here, so a malformed cadence for one type doesn't reject the whole portals
+// config (the scheduler logs + skips that type instead).
 export const PortalsFileSchema = z.object({
   sources: z.array(SourceConfigSchema).default([]),
+  scan_cadence: z.record(z.string(), z.string()).optional().default({}),
 });
 
 const DATA_DIR = path.resolve('data');
@@ -35,7 +41,23 @@ export async function readPortalsConfig() {
 }
 
 export async function writePortalsConfig(data) {
-  const parsed = PortalsFileSchema.parse(data);
+  // Preserve scan_cadence on partial writes. The Portals UI shipped before
+  // m1 of 05-scan-scheduler — its PUT bodies don't include scan_cadence.
+  // Without this read-modify-merge, a single Save click would silently
+  // wipe the cadence config and break the scheduler. To EXPLICITLY clear
+  // cadence, callers must pass `scan_cadence: {}`.
+  let merged = data;
+  if (data && typeof data === 'object' && !('scan_cadence' in data)) {
+    try {
+      const existing = await readPortalsConfig();
+      if (existing.scan_cadence && Object.keys(existing.scan_cadence).length > 0) {
+        merged = { ...data, scan_cadence: existing.scan_cadence };
+      }
+    } catch {
+      // existing file unreadable → fall through to default {}
+    }
+  }
+  const parsed = PortalsFileSchema.parse(merged);
   if (!existsSync(CAREER_DIR)) {
     await fs.mkdir(CAREER_DIR, { recursive: true });
   }
