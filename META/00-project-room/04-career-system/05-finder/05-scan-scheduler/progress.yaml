@@ -8,7 +8,7 @@ milestones:
       - "src/career/finder/cadenceState.mjs"
       - "src/career/finder/portalsLoader.mjs"
       - "scripts/smoke-cadence-state.mjs"
-    commit_hash: "PENDING"
+    commit_hash: "3864ddd"
     review_findings:
       - "[CRITICAL] writePortalsConfig wiped scan_cadence on partial PUT body → fixed: read-modify-merge if scan_cadence absent"
       - "[CRITICAL] filtered scan with all-failing adapters wiped existing type's jobs → fixed: per-source replacement (only drop existing jobs whose source.name was successfully re-fetched)"
