@@ -27,6 +27,33 @@ export const JobCompHintSchema = z
   })
   .nullable();
 
+// Stage A (Haiku) per-Job evaluation result. Written by 06-evaluator/01's
+// POST /api/career/evaluate/stage-a endpoint. Status 'archived' means the
+// score fell below prefs.thresholds.skip_below — the entry is preserved so
+// the user can review LLM reasoning and "Force Sonnet" via the UI.
+export const EvaluationStageASchema = z
+  .object({
+    score: z.number().min(1).max(5).nullable().optional(),
+    reason: z.string().max(2000).nullable().optional(),
+    model: z.string().max(100),
+    evaluated_at: z.string().datetime(),
+    cost_usd: z.number().nonnegative(),
+    status: z.enum(['evaluated', 'archived', 'error']),
+    error: z.string().max(500).optional(),
+  })
+  .nullable()
+  .default(null);
+
+// Wraps stage_a + reserves room for stage_b (06-evaluator/02). Future stages
+// add sibling fields here without touching the main JobSchema.
+export const EvaluationSchema = z
+  .object({
+    stage_a: EvaluationStageASchema,
+    // stage_b: reserved for 06-evaluator/02-stage-b-sonnet
+  })
+  .nullable()
+  .default(null);
+
 export const JobSchema = z.object({
   id: z.string().regex(/^[a-f0-9]{12}$/),
   source: JobSourceSchema,
@@ -45,6 +72,10 @@ export const JobSchema = z.object({
   // (no ATS API match, Playwright scrape failed/timed out). UI surfaces these
   // jobs in /career/shortlist/needs-manual for the user to paste JD manually.
   needs_manual_enrich: z.boolean().default(false),
+  // Per-stage evaluation results. Existing pipeline.json jobs without this
+  // field load as null (Zod default). Future stages add sibling fields
+  // without touching the main JobSchema.
+  evaluation: EvaluationSchema,
 });
 
 export function slugify(s) {
