@@ -1,7 +1,24 @@
 milestones:
   - id: "m1-anthropic-client-and-prompt"
     name: "@anthropic-ai/sdk install + getClient() + Stage A prompt module + parser"
-    status: pending
+    status: completed
+    actual_lines: 580
+    actual_files:
+      - "package.json"
+      - "package-lock.json"
+      - "src/career/lib/anthropicClient.mjs"
+      - "src/career/evaluator/stageAPrompt.mjs"
+      - "scripts/smoke-stage-a-prompt.mjs"
+    commit_hash: "PENDING"
+    review_findings:
+      - "[HIGH] Tier-2 regex capped score at 1 digit before/after decimal (Score: 3.55 → wrong score) → fixed: [0-9]+(\\.[0-9]+)?"
+      - "[HIGH] Tier-3 ^-anchored rejected 'Output: 3.5' / 'Result: 4.0' prefixes → fixed: non-anchored regex strips arbitrary prefix"
+      - "[MEDIUM] JSON tier rejected string-valued scores: {\"score\":\"3.5\"} → fixed: tier-0 full JSON.parse + accepts quoted values in embedded JSON"
+      - "[MEDIUM] Mock usage cache fields=0 didn't match real SDK shape (number|null) → fixed: mock now returns null"
+      - "[LOW] Tier-3 missing /m flag for multi-line robustness → fixed"
+      - "[LOW] comp_hint with all-null min/max emitted '?–?' line → fixed: only emit if min OR max is a number"
+      - "[LOW] APIConnectionError unimported in smoke → fixed: added typeof assertion"
+      - "[MEDIUM] ConfigError test brittleness → noted (test pattern is sound; future tests must always _resetClientForTesting)"
     estimated_files:
       - "package.json"
       - "src/career/lib/anthropicClient.mjs"
