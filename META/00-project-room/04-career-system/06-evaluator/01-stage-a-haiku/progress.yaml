@@ -9,7 +9,7 @@ milestones:
       - "src/career/lib/anthropicClient.mjs"
       - "src/career/evaluator/stageAPrompt.mjs"
       - "scripts/smoke-stage-a-prompt.mjs"
-    commit_hash: "PENDING"
+    commit_hash: "91b43f1"
     review_findings:
       - "[HIGH] Tier-2 regex capped score at 1 digit before/after decimal (Score: 3.55 → wrong score) → fixed: [0-9]+(\\.[0-9]+)?"
       - "[HIGH] Tier-3 ^-anchored rejected 'Output: 3.5' / 'Result: 4.0' prefixes → fixed: non-anchored regex strips arbitrary prefix"
