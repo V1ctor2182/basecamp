@@ -112,7 +112,7 @@ milestones:
       - "src/career/lib/jobSchema.mjs"
       - "server.mjs"
       - "scripts/smoke-stage-a-endpoint.mjs"
-    commit_hash: "PENDING"
+    commit_hash: "bf08191"
     review_findings:
       - "[Self-review] Mutation uses spread to preserve future stage_b sibling on evaluation object"
       - "[Self-review] Backward-compat verified live: existing pipeline.json jobs without evaluation field load as null via Zod default"
