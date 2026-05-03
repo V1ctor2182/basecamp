@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import { existsSync, mkdirSync, writeFileSync, createReadStream } from 'fs';
 import { createInterface } from 'readline';
 import { execSync } from 'child_process';
+import { randomBytes } from 'crypto';
 import path from 'path';
 import os from 'os';
 import { z } from 'zod';
@@ -11,6 +12,13 @@ import yaml from 'js-yaml';
 import { markdownToTemplateHtml, ALLOWED_TAGS } from './src/career/lib/markdownToTemplateHtml.mjs';
 import { htmlToPdf, shutdownBrowser } from './src/career/lib/htmlToPdf.mjs';
 import { composeCvHtml } from './src/career/lib/cvTemplate.mjs';
+import {
+  buildGoogleOAuthUrl,
+  exchangeGoogleAuthCode,
+  exportGoogleDocAsMarkdown,
+  normalizeGoogleDocId,
+  refreshGoogleAccessToken,
+} from './src/career/lib/googleDocs.mjs';
 import {
   startScan,
   getScanStatus,
@@ -66,6 +74,7 @@ const QA_TEMPLATES_FILE = path.join(QA_BANK_DIR, 'templates.md');
 const QA_HISTORY_FILE = path.join(QA_BANK_DIR, 'history.jsonl');
 const RESUMES_DIR = path.join(CAREER_DIR, 'resumes');
 const RESUMES_INDEX_FILE = path.join(RESUMES_DIR, 'index.yml');
+const CAREER_OAUTH_FILE = path.join(CAREER_DIR, '.oauth.json');
 
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(REPOS_FILE)) writeFileSync(REPOS_FILE, '[]');
@@ -2360,10 +2369,100 @@ app.post('/api/career/resumes/:id/duplicate', async (req, res) => {
 
 const VERSION_FILENAME_RE = /^[0-9TZ\-:.]{10,40}\.md$/i;
 const VERSIONS_CAP = 50;
+const GOOGLE_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const GOOGLE_OAUTH_START_PATH = '/api/career/google/oauth/start';
+const pendingGoogleOauthStates = new Map();
 
 // ISO 8601 with colons replaced by dashes — keeps lexical sort + filename-safe.
 function isoSnapshotFilename() {
   return new Date().toISOString().replace(/:/g, '-') + '.md';
+}
+
+function cleanupGoogleOauthStates() {
+  const now = Date.now();
+  for (const [state, createdAt] of pendingGoogleOauthStates) {
+    if (now - createdAt > GOOGLE_OAUTH_STATE_TTL_MS) pendingGoogleOauthStates.delete(state);
+  }
+}
+
+function issueGoogleOauthState() {
+  cleanupGoogleOauthStates();
+  const state = randomBytes(24).toString('hex');
+  pendingGoogleOauthStates.set(state, Date.now());
+  return state;
+}
+
+function consumeGoogleOauthState(state) {
+  cleanupGoogleOauthStates();
+  const createdAt = pendingGoogleOauthStates.get(state);
+  if (!createdAt) return false;
+  pendingGoogleOauthStates.delete(state);
+  return Date.now() - createdAt <= GOOGLE_OAUTH_STATE_TTL_MS;
+}
+
+function googleOauthHtml(title, body) {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>${title}</title>
+    <style>
+      body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 40px auto; max-width: 640px; padding: 0 20px; color: #111827; }
+      .card { border: 1px solid #d0d7de; border-radius: 12px; padding: 20px 24px; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.06); }
+      h1 { margin: 0 0 12px; font-size: 24px; }
+      p { line-height: 1.6; color: #374151; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.95em; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>${title}</h1>
+      ${body}
+    </div>
+    <script>
+      if (window.opener) {
+        setTimeout(() => window.close(), 1200);
+      }
+    </script>
+  </body>
+</html>`;
+}
+
+async function readCareerOauth() {
+  try {
+    return await readJSON(CAREER_OAUTH_FILE);
+  } catch (e) {
+    if (e.code === 'ENOENT') return null;
+    throw e;
+  }
+}
+
+async function writeCareerOauth(oauth) {
+  await writeJSON(CAREER_OAUTH_FILE, oauth);
+  return oauth;
+}
+
+async function clearCareerOauth() {
+  await fs.rm(CAREER_OAUTH_FILE, { force: true }).catch(() => {});
+}
+
+async function getGoogleOauthClientConfig() {
+  const config = await readJSON(CONFIG_FILE).catch(() => ({}));
+  const clientId = process.env.GOOGLE_CLIENT_ID || config.googleClientId;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || config.googleClientSecret;
+  if (!clientId || !clientSecret) {
+    const e = new Error(
+      'Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or add googleClientId/googleClientSecret to data/config.json.'
+    );
+    e.status = 503;
+    throw e;
+  }
+  return { clientId, clientSecret };
+}
+
+function getGoogleOauthRedirectUri() {
+  const base = process.env.CAREER_GOOGLE_REDIRECT_BASE_URL || `http://localhost:${process.env.PORT || 8000}`;
+  return new URL('/api/career/google/oauth/callback', base).toString();
 }
 
 async function listResumeVersions(id) {
@@ -2414,18 +2513,117 @@ async function readResumeContent(id) {
   }
 }
 
+async function snapshotResumeContent(id) {
+  const dir = resolveResumeDir(id);
+  const baseFile = path.join(dir, 'base.md');
+  const versionsDir = path.join(dir, 'versions');
+  await fs.mkdir(versionsDir, { recursive: true });
+
+  let snapshotName = null;
+  try {
+    const previous = await fs.readFile(baseFile, 'utf-8');
+    if (previous.trim().length > 0) {
+      snapshotName = isoSnapshotFilename();
+      await atomicWriteFile(path.join(versionsDir, snapshotName), previous);
+    }
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
+  return snapshotName;
+}
+
+async function writeResumeContentWithSnapshot(id, content) {
+  const baseFile = path.join(resolveResumeDir(id), 'base.md');
+  const snapshot = await snapshotResumeContent(id);
+  await atomicWriteFile(baseFile, content);
+  await pruneResumeVersions(id);
+  return snapshot;
+}
+
+// OAuth bootstrap for Google Docs sync.
+app.get('/api/career/google/oauth/start', async (_req, res) => {
+  try {
+    const { clientId } = await getGoogleOauthClientConfig();
+    const state = issueGoogleOauthState();
+    const redirectUri = getGoogleOauthRedirectUri();
+    res.redirect(buildGoogleOAuthUrl({ clientId, redirectUri, state }));
+  } catch (e) {
+    const status = e.status || 500;
+    res.status(status).type('html').send(
+      googleOauthHtml(
+        'Google OAuth Setup Needed',
+        `<p>${e.message}</p><p>Once the client credentials are configured, reopen <code>${GOOGLE_OAUTH_START_PATH}</code>.</p>`
+      )
+    );
+  }
+});
+
+app.get('/api/career/google/oauth/callback', async (req, res) => {
+  try {
+    const googleErrorCode = req.query.error;
+    if (googleErrorCode) {
+      return res.status(400).type('html').send(
+        googleOauthHtml(
+          'Google Authorization Cancelled',
+          `<p>Google returned <code>${String(googleErrorCode)}</code>. You can close this tab and try again from the dashboard.</p>`
+        )
+      );
+    }
+
+    const state = typeof req.query.state === 'string' ? req.query.state : '';
+    const code = typeof req.query.code === 'string' ? req.query.code : '';
+    if (!state || !consumeGoogleOauthState(state)) {
+      return res.status(400).type('html').send(
+        googleOauthHtml('Invalid OAuth State', '<p>This authorization link expired or is invalid. Start the Google auth flow again from the dashboard.</p>')
+      );
+    }
+    if (!code) {
+      return res.status(400).type('html').send(
+        googleOauthHtml('Missing Authorization Code', '<p>Google did not return an authorization code. Please retry the auth flow.</p>')
+      );
+    }
+
+    const { clientId, clientSecret } = await getGoogleOauthClientConfig();
+    const redirectUri = getGoogleOauthRedirectUri();
+    const tokens = await exchangeGoogleAuthCode({ clientId, clientSecret, redirectUri, code });
+    if (!tokens.refresh_token) {
+      throw new Error('Google did not return a refresh token. Revoke the app and retry, or ensure consent is granted again.');
+    }
+
+    await writeCareerOauth({
+      provider: 'google',
+      refresh_token: tokens.refresh_token,
+      token_type: tokens.token_type || 'Bearer',
+      scope: tokens.scope || '',
+      updated_at: new Date().toISOString(),
+    });
+
+    res.type('html').send(
+      googleOauthHtml(
+        'Google Connected',
+        '<p>Authorization succeeded. You can close this tab and click <code>Sync Now</code> again in the dashboard.</p>'
+      )
+    );
+  } catch (e) {
+    res.status(e.status || 500).type('html').send(
+      googleOauthHtml('Google Authorization Failed', `<p>${e.message}</p><p>Close this tab and retry from the dashboard.</p>`)
+    );
+  }
+});
+
 // GET — returns content + versions list (newest first).
 app.get('/api/career/resumes/:id/content', async (req, res) => {
   try {
     const { id } = req.params;
     if (!validateResumeId(id)) return res.status(400).json({ error: 'invalid id' });
     const idx = await readResumeIndex();
-    if (!idx.resumes.some(r => r.id === id)) return res.status(404).json({ error: 'not found' });
+    const entry = idx.resumes.find(r => r.id === id);
+    if (!entry) return res.status(404).json({ error: 'not found' });
     const [content, versions] = await Promise.all([
       readResumeContent(id),
       listResumeVersions(id),
     ]);
-    res.json({ content, versions });
+    res.json({ content, versions, source: entry.source });
   } catch (e) {
     if (e.status === 400) return res.status(400).json({ error: e.message });
     res.status(500).json({ error: e.message });
@@ -2446,31 +2644,105 @@ app.put('/api/career/resumes/:id/content', async (req, res) => {
       return res.status(413).json({ error: 'content too large (>500KB)' });
     }
     const idx = await readResumeIndex();
-    if (!idx.resumes.some(r => r.id === id)) return res.status(404).json({ error: 'not found' });
-
-    const dir = resolveResumeDir(id);
-    const baseFile = path.join(dir, 'base.md');
-    const versionsDir = path.join(dir, 'versions');
-    await fs.mkdir(versionsDir, { recursive: true });
-
-    let snapshotName = null;
-    try {
-      const previous = await fs.readFile(baseFile, 'utf-8');
-      if (previous.trim().length > 0) {
-        snapshotName = isoSnapshotFilename();
-        await atomicWriteFile(path.join(versionsDir, snapshotName), previous);
-      }
-    } catch (e) {
-      // If base.md doesn't exist yet, skip the snapshot — first save.
-      if (e.code !== 'ENOENT') throw e;
+    const entry = idx.resumes.find(r => r.id === id);
+    if (!entry) return res.status(404).json({ error: 'not found' });
+    if (entry.source === 'google_doc') {
+      return res.status(409).json({ error: 'google_doc resumes are read-only in the in-app editor. Use Sync Now from the Resumes page.' });
     }
 
-    await atomicWriteFile(baseFile, content);
-    await pruneResumeVersions(id);
-
+    const snapshotName = await writeResumeContentWithSnapshot(id, content);
     res.json({ content, snapshot: snapshotName });
   } catch (e) {
     if (e.status === 400) return res.status(400).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+const ResumeSyncRequestSchema = z.object({
+  gdoc_id: z.string().max(500).optional(),
+});
+
+app.post('/api/career/resumes/:id/sync', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!validateResumeId(id)) return res.status(400).json({ error: 'invalid id' });
+
+    const parsed = ResumeSyncRequestSchema.parse(req.body ?? {});
+    const idx = await readResumeIndex();
+    const entry = idx.resumes.find(r => r.id === id);
+    if (!entry) return res.status(404).json({ error: 'not found' });
+    if (entry.source !== 'google_doc') {
+      return res.status(409).json({ error: 'Only resumes with source=google_doc can be synced.' });
+    }
+
+    const docIdInput = parsed.gdoc_id ?? entry.gdoc_id;
+    const docId = normalizeGoogleDocId(docIdInput ?? '');
+    if (!docId) {
+      return res.status(400).json({ error: 'Missing Google Doc ID. Paste the Google Doc URL or ID and retry.' });
+    }
+
+    const oauth = await readCareerOauth();
+    if (!oauth?.refresh_token) {
+      return res.status(409).json({
+        error: 'Google authorization required. Finish OAuth once, then click Sync Now again.',
+        auth_required: true,
+        authorize_path: GOOGLE_OAUTH_START_PATH,
+      });
+    }
+
+    const { clientId, clientSecret } = await getGoogleOauthClientConfig();
+    let accessToken;
+    try {
+      const refreshed = await refreshGoogleAccessToken({
+        clientId,
+        clientSecret,
+        refreshToken: oauth.refresh_token,
+      });
+      accessToken = refreshed.access_token;
+    } catch (e) {
+      if (e.google_error === 'invalid_grant') {
+        await clearCareerOauth();
+        return res.status(409).json({
+          error: 'Stored Google authorization expired. Reconnect Google and retry the sync.',
+          auth_required: true,
+          authorize_path: GOOGLE_OAUTH_START_PATH,
+        });
+      }
+      throw e;
+    }
+
+    const markdown = await exportGoogleDocAsMarkdown({ accessToken, docId });
+    if (markdown.length > 500_000) {
+      return res.status(413).json({ error: 'exported markdown too large (>500KB)' });
+    }
+
+    const snapshot = await writeResumeContentWithSnapshot(id, markdown);
+    const syncedAt = new Date().toISOString();
+    const next = {
+      resumes: idx.resumes.map(r => {
+        if (r.id !== id) return r;
+        return {
+          ...r,
+          gdoc_id: docId,
+          last_synced_at: syncedAt,
+        };
+      }),
+    };
+    await writeResumeIndex(next);
+    const updated = next.resumes.find(r => r.id === id);
+
+    res.json({
+      ok: true,
+      snapshot,
+      resume: updated,
+      synced_at: syncedAt,
+    });
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid sync payload', details: e.issues });
+    }
+    if (e.status === 400) return res.status(400).json({ error: e.message });
+    if (e.status === 503) return res.status(503).json({ error: e.message });
     res.status(500).json({ error: e.message });
   }
 });

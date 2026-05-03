@@ -7,6 +7,7 @@ import '../ats-form.css'
 import './edit.css'
 
 type VersionEntry = { filename: string; ts: string; size: number }
+type ResumeSource = 'manual' | 'google_doc'
 
 function fmtVersionTs(iso: string): string {
   try {
@@ -32,6 +33,7 @@ export default function ResumeEdit() {
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [serverError, setServerError] = useState<string | null>(null)
+  const [source, setSource] = useState<ResumeSource>('manual')
   // Bump on save (or manual Refresh) — appended to iframe src= so the
   // browser fetches a fresh PDF instead of using the cached previous render.
   const [pdfRefreshKey, setPdfRefreshKey] = useState(() => Date.now())
@@ -55,6 +57,7 @@ export default function ResumeEdit() {
         if (cancelled) return
         setContent(data?.content ?? '')
         setVersions(Array.isArray(data?.versions) ? data.versions : [])
+        setSource(data?.source === 'google_doc' ? 'google_doc' : 'manual')
         setLoaded(true)
       })
       .catch(e => {
@@ -73,13 +76,14 @@ export default function ResumeEdit() {
   }, [dirty])
 
   function onChange(v: string) {
+    if (source === 'google_doc') return
     setContent(v)
     setDirty(true)
     setSavedAt(null)
   }
 
   async function save() {
-    if (!dirty || saving) return
+    if (source === 'google_doc' || !dirty || saving) return
     setSaving(true); setServerError(null)
     try {
       const r = await fetch(`/api/career/resumes/${id}/content`, {
@@ -210,7 +214,8 @@ export default function ResumeEdit() {
             className={`c-resume-edit-status${dirty ? ' dirty' : savedAt ? ' saved' : ''}`}
             aria-live="polite"
           >
-            {saving ? 'Saving…' :
+            {source === 'google_doc' ? 'Read-only (Google Doc source)' :
+             saving ? 'Saving…' :
              dirty ? 'Unsaved changes' :
              savedAt ? `✓ Saved at ${savedAt}` :
              'Ready'}
@@ -218,10 +223,10 @@ export default function ResumeEdit() {
           <button
             type="button"
             className="af-btn-primary"
-            disabled={!dirty || saving}
+            disabled={source === 'google_doc' || !dirty || saving}
             onClick={save}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {source === 'google_doc' ? 'Read-only' : saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
@@ -234,6 +239,13 @@ export default function ResumeEdit() {
             style={{ float: 'right', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
             aria-label="Dismiss"
           ><X size={14} /></button>
+        </div>
+      )}
+
+      {source === 'google_doc' && (
+        <div className="c-resume-edit-readonly">
+          This resume is managed by Google Docs. In-app editing is disabled here to avoid source-of-truth conflicts.
+          Go back to Resumes and use <strong>Sync Now</strong> to pull the latest content.
         </div>
       )}
 

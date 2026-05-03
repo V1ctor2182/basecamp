@@ -236,7 +236,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/03-cv-engine/02-google-docs-sync"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: backend
       parent: "00-project-room/04-career-system/03-cv-engine"
       children: []

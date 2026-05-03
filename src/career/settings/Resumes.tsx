@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, FormEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, MoreVertical, Star, FileText, X, Pencil, Sparkles, ChevronDown } from 'lucide-react'
 import TagInput from '../TagInput'
@@ -88,10 +89,12 @@ export default function Resumes() {
   const [resumes, setResumes] = useState<ResumeEntry[]>([])
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<ResumeEntry | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [syncingId, setSyncingId] = useState<string | null>(null)
 
   // Auto-select tester (m2 of 04-auto-select).
   const [showTester, setShowTester] = useState(false)
@@ -119,6 +122,7 @@ export default function Resumes() {
 
   async function handleSetDefault(id: string) {
     setOpenMenuId(null)
+    setNotice(null)
     try {
       const r = await fetch(`/api/career/resumes/${id}/set-default`, { method: 'PATCH' })
       if (!r.ok) {
@@ -134,6 +138,7 @@ export default function Resumes() {
 
   async function handleDuplicate(source: ResumeEntry) {
     setOpenMenuId(null)
+    setNotice(null)
     const existingIds = new Set(resumes.map(r => r.id))
     let newId = window.prompt(
       `New ID for the copy of "${source.title}":\n` +
@@ -162,6 +167,7 @@ export default function Resumes() {
   }
 
   async function handleDelete(id: string) {
+    setNotice(null)
     try {
       const r = await fetch(`/api/career/resumes/${id}`, { method: 'DELETE' })
       if (!r.ok) {
@@ -173,6 +179,51 @@ export default function Resumes() {
       await refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Network error')
+    }
+  }
+
+  async function handleSync(resume: ResumeEntry) {
+    if (resume.source !== 'google_doc' || syncingId) return
+
+    let requestedDocId: string | undefined
+    if (!resume.gdoc_id) {
+      const input = window.prompt(
+        `Paste the Google Doc URL or ID for "${resume.title}".\n` +
+        '(You only need to do this once.)'
+      )
+      if (!input?.trim()) return
+      requestedDocId = input.trim()
+    }
+
+    setSyncingId(resume.id)
+    setError(null)
+    setNotice(null)
+    try {
+      const r = await fetch(`/api/career/resumes/${resume.id}/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestedDocId ? { gdoc_id: requestedDocId } : {}),
+      })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        if (data?.auth_required && data?.authorize_path) {
+          window.open(data.authorize_path, '_blank', 'noopener,noreferrer')
+          setNotice('Google authorization opened in a new tab. Finish that flow, then click Sync Now again.')
+          return
+        }
+        setError(data.error || `HTTP ${r.status}`)
+        return
+      }
+      await refresh()
+      setNotice(
+        data?.snapshot
+          ? `Synced "${resume.title}" from Google Docs. Previous content was snapshotted to ${data.snapshot}.`
+          : `Synced "${resume.title}" from Google Docs.`
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error')
+    } finally {
+      setSyncingId(null)
     }
   }
 
@@ -369,6 +420,17 @@ export default function Resumes() {
         </div>
       )}
 
+      {notice && (
+        <div className="c-resumes-modal-note" style={{ marginBottom: 16 }}>
+          {notice}
+          <button
+            onClick={() => setNotice(null)}
+            style={{ float: 'right', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
+            aria-label="Dismiss"
+          ><X size={14} /></button>
+        </div>
+      )}
+
       {resumes.length === 0 ? (
         <div className="c-resume-empty">
           <FileText size={32} strokeWidth={1.5} style={{ marginBottom: 12, opacity: 0.5 }} />
@@ -441,8 +503,10 @@ export default function Resumes() {
               {expandedId === r.id && (
                 <div onClick={e => e.stopPropagation()}>
                   <MetadataDrawer
-                    resumeId={r.id}
+                    resume={r}
                     onClose={() => setExpandedId(null)}
+                    onSync={handleSync}
+                    syncing={syncingId === r.id}
                   />
                 </div>
               )}
@@ -586,15 +650,15 @@ function AddResumeDialog({
 
           {source === 'google_doc' && (
             <div className="af-field">
-              <label className="af-label">Google Doc ID (optional)</label>
+              <label className="af-label">Google Doc ID or URL (optional)</label>
               <input
                 className="af-input"
-                placeholder="1A2B3C... (or leave blank, set later)"
+                placeholder="1A2B3C... or full docs.google.com URL"
                 value={gdocId}
                 onChange={e => setGdocId(e.target.value)}
-                maxLength={200}
+                maxLength={500}
               />
-              <span className="af-help-text">Sync 操作在 03-cv-engine/02-google-docs-sync 接入。</span>
+              <span className="af-help-text">留空也可以，第一次点 Sync Now 时会再提示你粘一次。</span>
             </div>
           )}
 
@@ -620,11 +684,14 @@ function AddResumeDialog({
 }
 
 function MetadataDrawer({
-  resumeId, onClose,
+  resume, onClose, onSync, syncing,
 }: {
-  resumeId: string
+  resume: ResumeEntry
   onClose: () => void
+  onSync: (resume: ResumeEntry) => void
+  syncing: boolean
 }) {
+  const resumeId = resume.id
   const [meta, setMeta] = useState<ResumeMetadata>(BLANK_METADATA)
   const [loaded, setLoaded] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -692,14 +759,38 @@ function MetadataDrawer({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Metadata</h4>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Link
-            to={`/career/settings/resumes/${resumeId}/edit`}
-            className="af-btn-add"
-            style={{ marginTop: 0, padding: '4px 10px', fontSize: 12, textDecoration: 'none' }}
-            title="Open the full-page editor for base.md content"
-          >
-            <Pencil size={12} /> Edit content
-          </Link>
+          {resume.source === 'manual' ? (
+            <Link
+              to={`/career/settings/resumes/${resumeId}/edit`}
+              className="af-btn-add"
+              style={{ marginTop: 0, padding: '4px 10px', fontSize: 12, textDecoration: 'none' }}
+              title="Open the full-page editor for base.md content"
+            >
+              <Pencil size={12} /> Edit content
+            </Link>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="af-btn-primary"
+                style={{ marginTop: 0, padding: '4px 10px', fontSize: 12 }}
+                onClick={() => onSync(resume)}
+                disabled={syncing}
+                title="Pull the latest markdown from this resume's Google Doc"
+              >
+                {syncing ? 'Syncing…' : 'Sync Now'}
+              </button>
+              <button
+                type="button"
+                className="af-btn-add"
+                style={{ marginTop: 0, padding: '4px 10px', fontSize: 12, opacity: 0.7 }}
+                disabled
+                title="Google Doc resumes are read-only in the in-app editor to avoid source-of-truth conflicts."
+              >
+                <Pencil size={12} /> Managed by Google Doc
+              </button>
+            </>
+          )}
           <button
             type="button"
             className="c-resume-actions-btn"
@@ -708,6 +799,21 @@ function MetadataDrawer({
           ><X size={14} /></button>
         </div>
       </div>
+
+      {resume.source === 'google_doc' && (
+        <div className="c-resume-sync-note">
+          This resume is synced from Google Docs, so in-app editing is disabled to avoid conflicts.
+          {' '}
+          {resume.gdoc_id ? (
+            <>Current Doc ID: <code>{resume.gdoc_id}</code>.</>
+          ) : (
+            <>No Doc ID saved yet. The first sync will ask for a Google Doc URL or ID.</>
+          )}
+          {resume.last_synced_at && (
+            <> Last synced: <strong>{fmtDate(resume.last_synced_at)}</strong>.</>
+          )}
+        </div>
+      )}
 
       <section className="af-section">
         <h3 className="af-section-title">Archetype</h3>

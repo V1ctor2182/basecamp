@@ -5,7 +5,7 @@ completion: 60  # avg(100, 100, 60, 100, 100, 0, 0, 0) = 57.5 across 8 sub-epics
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
   "02-profile": 100     # ✅ Sprint 2 CLOSED
-  "03-cv-engine": 60    # 🔄 3/5 ROOMs ✅
+  "03-cv-engine": 80    # 🔄 4/5 ROOMs ✅
   "04-renderer": 100    # ✅ sub-epic DONE
   "05-finder": 100      # 🎉 EPIC COMPLETE (5/5 ROOMs ✅)
   "06-evaluator": 0

@@ -1,0 +1,43 @@
+spec_id: "change-2026-04-30-m2-resume-sync-endpoint"
+type: change
+state: active
+intent:
+  summary: "m2: POST /api/career/resumes/:id/sync + pre-sync snapshot + gdoc_id/last_synced_at persistence"
+  detail: |
+    落地真正的同步动作：
+
+      - POST /api/career/resumes/:id/sync
+        body 可带 gdoc_id（支持 full docs URL）
+      - refresh token 刷 access token
+      - Drive files.export(text/markdown) 拉最新 doc 内容
+      - Sync 前 snapshot 当前 base.md 到 versions/
+      - 覆盖 base.md
+      - 更新 index.yml 里的 gdoc_id / last_synced_at
+
+    错误分支:
+      - 未授权或 invalid_grant -> 409 + auth_required + authorize_path
+      - 无 doc ID -> 400
+      - markdown 超 500KB -> 413
+
+    复用并抽出了 content room 的 snapshot helper，避免手写第二套 versions 逻辑。
+constraints:
+  - "Sync 前必须 snapshot 当前 base.md"
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m2, backend, sync, versions, drive-export]
+provenance:
+  source_type: manual
+  confidence: 0.92
+  source_ref: "local workspace changes"
+relations:
+  - "implements intent-google-docs-sync-001 (m2/3)"
+  - "depends_on change-2026-04-30-m1-google-oauth-bootstrap"
+  - "depends_on change-2026-04-29-m1-content-versions-render-backend"
+anchors:
+  - file: "server.mjs"
+    symbols: ["/api/career/resumes/:id/sync", "snapshotResumeContent", "writeResumeContentWithSnapshot"]
+created_at: "2026-04-30"
+updated_at: "2026-04-30"

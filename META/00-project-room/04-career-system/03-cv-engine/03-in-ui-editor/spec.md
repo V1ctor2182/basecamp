@@ -59,7 +59,7 @@ source: manual 简历的 CodeMirror 编辑器 + 实时 PDF 预览 + versions 快
 | Restore | **Load into editor → user Saves** (creates new snapshot) | Reversible; review before commit; window.confirm if dirty |
 | Popover close | **outside-click + Escape + re-click button** | Standard modal dismissal; doesn't block editing flow |
 | Path traversal defence | **3-layer**: id slug regex + path.basename + filename regex | Defence in depth |
-| google_doc resume editing | Allowed; next Sync will overwrite (versions/ saves locally first) | Flexibility; reversible |
+| google_doc resume editing | **Read-only in the in-app editor**; use `02-google-docs-sync` → Sync Now | Single source of truth; avoids drift/conflicts |
 | Branch | Off `resume-index` | 1 PR/Room rhythm; needed Drawer link from m3-resume-index |
 
 ## Specs in this Room

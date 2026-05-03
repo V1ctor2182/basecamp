@@ -1,0 +1,51 @@
+spec_id: "change-2026-04-30-m3-sync-ui-and-readonly-guard"
+type: change
+state: active
+intent:
+  summary: "m3: Resumes drawer Sync Now + first-sync doc prompt + google_doc read-only guard (ROOM COMPLETE)"
+  detail: |
+    前端把同步真正接到用户操作里，并把 source-of-truth 约束落地：
+
+      - Resumes.tsx
+        · google_doc drawer 显示 Sync Now
+        · 没有 gdoc_id 时，首次 Sync prompt 粘 URL/ID
+        · auth_required -> window.open('/api/career/google/oauth/start')
+        · 顶部 info banner 提示 “先授权，再点一次 Sync”
+        · Manual resume 仍保留 Edit content
+
+      - Edit.tsx
+        · GET /content 读 source
+        · source=google_doc 时显示只读提示
+        · Save 按钮禁用，onChange 忽略输入
+
+      - server.mjs
+        · PUT /api/career/resumes/:id/content 对 google_doc 直接 409
+
+    结果是 google_doc 与 manual 两类 resume 的 UX 边界清晰：
+      manual -> 本地编辑器
+      google_doc -> Sync Now
+constraints:
+  - "Google Doc 是 source of truth，UI 层禁用本地编辑入口"
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [milestone, m3, frontend, react, read-only, room-complete]
+provenance:
+  source_type: manual
+  confidence: 0.92
+  source_ref: "local workspace changes"
+relations:
+  - "implements intent-google-docs-sync-001 (m3/3)"
+  - "depends_on change-2026-04-30-m2-resume-sync-endpoint"
+  - "depends_on change-2026-04-29-m2-resume-edit-page"
+anchors:
+  - file: "src/career/settings/Resumes.tsx"
+    symbols: ["handleSync", "MetadataDrawer"]
+  - file: "src/career/settings/resumes/Edit.tsx"
+    symbols: ["ResumeEdit"]
+  - file: "server.mjs"
+    symbols: ["/api/career/resumes/:id/content"]
+created_at: "2026-04-30"
+updated_at: "2026-04-30"
