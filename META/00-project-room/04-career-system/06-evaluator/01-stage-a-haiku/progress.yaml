@@ -63,7 +63,7 @@ milestones:
       - "src/career/evaluator/stageARunner.mjs"
       - "server.mjs"
       - "scripts/smoke-stage-a-runner.mjs"
-    commit_hash: "PENDING"
+    commit_hash: "96f9e7d"
     review_findings:
       - "[LOW] isRetryableError missed 408 (request timeout) → fixed: added status===408 retry"
       - "[LOW] server.mjs duplicated cost arithmetic now that helper exists → fixed: replaced inline math with computeCostUsd() call"
