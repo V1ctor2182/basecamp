@@ -23,6 +23,7 @@ import { previewHardFilter } from './src/career/finder/dryRun.mjs';
 import { enrichBatch } from './src/career/finder/jdEnrich.mjs';
 import { shouldEnrich } from './src/career/finder/atsByUrl.mjs';
 import { startScheduler, stopScheduler } from './src/career/finder/scheduler.mjs';
+import { MODEL_PRICING, computeCostUsd } from './src/career/lib/anthropicPricing.mjs';
 import {
   readCadenceState,
   cadenceToMs,
@@ -1961,13 +1962,8 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // --- Compute dailyCost from JSONL session files and write to DAILY_COST_FILE ---
-const MODEL_PRICING = {
-  'claude-opus-4-6':            { input: 15,   output: 75,  cacheRead: 1.875, cacheWrite: 18.75 },
-  'claude-opus-4-5-20251101':   { input: 15,   output: 75,  cacheRead: 1.875, cacheWrite: 18.75 },
-  'claude-sonnet-4-6':          { input: 3,    output: 15,  cacheRead: 0.375, cacheWrite: 3.75  },
-  'claude-sonnet-4-5-20250929': { input: 3,    output: 15,  cacheRead: 0.375, cacheWrite: 3.75  },
-  'claude-haiku-4-5-20251001':  { input: 0.80, output: 4,   cacheRead: 0.08,  cacheWrite: 1.0   },
-};
+// Pricing imported from the shared module — keeps server-side cost rollup
+// and evaluator runner cost computation in lockstep.
 
 async function computeDailyCost() {
   const projectsDir = path.join(os.homedir(), '.claude', 'projects');
@@ -2002,14 +1998,11 @@ async function computeDailyCost() {
         const model = msg.model;
         const usage = msg.usage;
         if (!model || !usage) continue;
-        const p = MODEL_PRICING[model];
-        if (!p) continue;
-        const cost = (
-          (usage.input_tokens || 0) * p.input +
-          (usage.output_tokens || 0) * p.output +
-          (usage.cache_read_input_tokens || 0) * p.cacheRead +
-          (usage.cache_creation_input_tokens || 0) * p.cacheWrite
-        ) / 1_000_000;
+        // Use shared helper — same formula as the evaluator runner. Returns 0
+        // if the model isn't in MODEL_PRICING (no warn here; bulk session
+        // imports may include older models we don't price).
+        if (!MODEL_PRICING[model]) continue;
+        const cost = computeCostUsd(model, usage);
         if (!dailyCost[date]) dailyCost[date] = {};
         dailyCost[date][model] = (dailyCost[date][model] || 0) + cost;
       }

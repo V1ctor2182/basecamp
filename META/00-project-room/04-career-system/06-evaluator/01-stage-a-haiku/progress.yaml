@@ -56,7 +56,23 @@ milestones:
 
   - id: "m2-stage-a-runner-and-cost"
     name: "evaluateJobsStageA worker-pool + cost recording + retry"
-    status: pending
+    status: completed
+    actual_lines: 660
+    actual_files:
+      - "src/career/lib/anthropicPricing.mjs"
+      - "src/career/evaluator/stageARunner.mjs"
+      - "server.mjs"
+      - "scripts/smoke-stage-a-runner.mjs"
+    commit_hash: "PENDING"
+    review_findings:
+      - "[LOW] isRetryableError missed 408 (request timeout) → fixed: added status===408 retry"
+      - "[LOW] server.mjs duplicated cost arithmetic now that helper exists → fixed: replaced inline math with computeCostUsd() call"
+      - "[LOW] Counter-sum invariant (evaluated+archived+errors+skipped == jobs.length) untested → fixed: added assertion to mixed-batch test"
+      - "[LOW] getClient() ConfigError fall-through path untested → fixed: added test that omits _client + unsets env"
+      - "[LOW] response.content === undefined / [] untested → fixed: 2 new assertions"
+      - "[LOW] Default real setTimeout sleep blocks m3 endpoint on retry storm → deferred to m3 (m3 should stream progress or run detached)"
+      - "[LOW] Direct fs append bypasses CostRecordInput zod validation → deferred (Anthropic contract guarantees integers)"
+      - "[LOW] Silent zero-cost return on unknown model → deferred (observability follow-up; pre-existing behavior in server.mjs too)"
     estimated_files:
       - "src/career/evaluator/stageARunner.mjs"
       - "scripts/smoke-stage-a-runner.mjs"
@@ -64,6 +80,8 @@ milestones:
     depends_on: ["m1-anthropic-client-and-prompt"]
     complexity_flags: ["external_api", "error_handling_heavy"]
     open_questions: []
+    locked_decisions_overrides:
+      - "Pricing extracted to src/career/lib/anthropicPricing.mjs (per user request: long-term-best). Both server.mjs cost rollup and stageARunner cost computation import from same source. server.mjs's inline math at line ~2007 also replaced by computeCostUsd() call to eliminate duplicate formula."
     description: |
       Worker-pool runner. Mirrors jdEnrich.enrichBatch shape (concurrency=3,
       DI seam, never throws out — per-job errors absorbed). Records cost per
