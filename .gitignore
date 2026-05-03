@@ -49,6 +49,8 @@ data/career/applications.json
 data/career/pipeline.json
 data/career/scan-history.jsonl
 data/career/archive.jsonl
+data/career/scan-cadence-state.json
+data/career/scan-cadence-state.json.smoke-backup.*
 data/career/llm-costs.jsonl
 data/career/followup-templates.md
 

@@ -1,12 +1,12 @@
 milestones: []
 current_sprint: "Sprint 5 — Finder"
 blockers: []
-completion: 60  # avg(100, 100, 100, 0, 0) = 60 across 5 features (3/5 ROOMs ✅)
+completion: 100  # 🎉 EPIC COMPLETE (5/5 ROOMs)
 children_completion:
   "01-source-adapters": 100       # ✅ active — ROOM COMPLETE (4/4 milestones)
   "02-job-schema-normalize": 100  # ✅ active — ROOM COMPLETE
   "03-dedupe-hard-filter": 100    # ✅ active — ROOM COMPLETE (3/3 milestones)
-  "04-jd-enrich": 0
-  "05-scan-scheduler": 0
-status_note: "🎉 03-dedupe-hard-filter COMPLETE (3/3 ms, ~1205 行). 05-finder 60% (3/5). 下一个: 04-jd-enrich 或 05-scan-scheduler."
-last_updated: "2026-04-30"
+  "04-jd-enrich": 100             # ✅ active — ROOM COMPLETE (4/4 milestones)
+  "05-scan-scheduler": 100        # ✅ active — ROOM COMPLETE (3/3 milestones)
+status_note: "🎉🎉 05-finder EPIC COMPLETE (5/5 ROOMs ✅). Total ~7000+ 行 across all 5 Rooms. Pipeline: portals → adapters → dedupe → hardFilter → jdEnrich (4-tier) → kept-only pipeline.json. Scheduler auto-fires per-type scans every 60s based on portals.scan_cadence. Downstream 06-evaluator unblocked."
+last_updated: "2026-05-02"

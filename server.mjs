@@ -24,8 +24,18 @@ import {
   getScanStatus,
   ScanAlreadyRunningError,
   PIPELINE_FILE,
+  acquirePipelineEnrichLock,
+  releasePipelineEnrichLock,
 } from './src/career/finder/scanRunner.mjs';
 import { previewHardFilter } from './src/career/finder/dryRun.mjs';
+import { enrichBatch } from './src/career/finder/jdEnrich.mjs';
+import { shouldEnrich } from './src/career/finder/atsByUrl.mjs';
+import { startScheduler, stopScheduler } from './src/career/finder/scheduler.mjs';
+import {
+  readCadenceState,
+  cadenceToMs,
+} from './src/career/finder/cadenceState.mjs';
+import { SOURCE_TYPES } from './src/career/lib/jobSchema.mjs';
 import {
   readPortalsConfig,
   writePortalsConfig,
@@ -1921,13 +1931,38 @@ app.post('/api/career/render/_test-html-to-pdf', async (req, res) => {
   }
 });
 
+// Career scan scheduler — fires startScan({types: due}) every 60s based on
+// portals.yml::scan_cadence. Gated by DISABLE_SCAN_SCHEDULER=1 (set during
+// dev / tests when you don't want background scans). The scheduler's first
+// tick fires 60s after this registration, so initial server boot is quiet.
+//
+// Match exactly "1" — a truthiness check would disable on any non-empty
+// value including "0" / "false", which silently breaks deployments that
+// expect those to mean "don't disable".
+if (process.env.DISABLE_SCAN_SCHEDULER !== '1') {
+  startScheduler();
+  console.log('Scan scheduler enabled (master tick every 60s).');
+}
+
 // Clean shutdown: kill chromium subprocess on Ctrl+C / docker stop / nodemon
 // restart. Without this, Playwright leaves zombie browsers eating RAM.
+// Also stops the scan scheduler so no NEW ticks fire after this point.
+//
+// Trade-off: in-flight scans / enrichments are NOT drained. stopScheduler
+// only clears the interval timer; runScanCore's fire-and-forget body keeps
+// running after this returns. shutdownBrowser then closes chromium, which
+// crashes any pages mid-scrape (acceptable per jdEnrich tier-4 catch).
+// process.exit(0) hard-aborts whatever's still running. This means a scan
+// that was atomic-renaming pipeline.json or scan-cadence-state.json at
+// SIGTERM time may leave .tmp.{pid}.* files behind — readers tolerate the
+// missing target on next boot. We accept this over the complexity of an
+// in-flight-drain protocol.
 let _shuttingDown = false;
 async function gracefulShutdown(signal) {
   if (_shuttingDown) return;
   _shuttingDown = true;
   console.log(`Received ${signal}, shutting down chromium...`);
+  stopScheduler();
   await shutdownBrowser();
   process.exit(0);
 }
@@ -2886,9 +2921,11 @@ app.post('/api/career/finder/scan', (_req, res) => {
     res.status(202).json({ scan_id, started_at });
   } catch (e) {
     if (e instanceof ScanAlreadyRunningError) {
+      // Spread state FIRST so our error string isn't overwritten by
+      // e.state.error (which is the scan-level error field — usually null).
       return res.status(409).json({
-        error: 'scan already running',
         ...e.state,
+        error: 'scan already running',
       });
     }
     res.status(500).json({ error: e.message });
@@ -2897,6 +2934,71 @@ app.post('/api/career/finder/scan', (_req, res) => {
 
 app.get('/api/career/finder/scan/status', (_req, res) => {
   res.json(getScanStatus());
+});
+
+// ─── Finder: per-source-type debug scan ────────────────────────────────
+// Triggers a scan filtered to one source-type, used by the scheduler UI's
+// "Run Now" button per-row. Same race-protection as the all-types /scan.
+const ScanSourceSchema = z.object({
+  type: z.enum(SOURCE_TYPES),
+});
+app.post('/api/career/finder/scan/source', (req, res) => {
+  let body;
+  try {
+    body = ScanSourceSchema.parse(req.body);
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid type', details: e.issues });
+  }
+  try {
+    const { scan_id, started_at } = startScan({ types: [body.type] });
+    res.status(202).json({ scan_id, started_at, types: [body.type] });
+  } catch (e) {
+    if (e instanceof ScanAlreadyRunningError) {
+      // Spread state FIRST so our error string isn't overwritten by e.state.error.
+      return res.status(409).json({ ...e.state, error: 'scan already running' });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Finder: scheduler status (cadence + last_run + next_run per type) ─
+// One row per type that has either a cadence configured OR an active source
+// in portals.yml. UI consumes this to render the SchedulerPanel table.
+app.get('/api/career/finder/scheduler/status', async (_req, res) => {
+  try {
+    const portals = await readPortalsConfig();
+    const cadenceStr = portals?.scan_cadence ?? {};
+    const cadenceMs = cadenceToMs(cadenceStr);
+    const state = await readCadenceState();
+    const sources = Array.isArray(portals?.sources) ? portals.sources : [];
+    const activeTypeSet = new Set(sources.map((s) => s?.type).filter((t) => typeof t === 'string'));
+
+    // Union: types with a cadence config + types with at least one active source.
+    const allTypes = new Set([...Object.keys(cadenceStr), ...activeTypeSet]);
+    const rows = Array.from(allTypes).sort().map((type) => {
+      const ms = cadenceMs[type];
+      const entry = state[type] ?? {};
+      const lastRunMs = typeof entry.last_run_at === 'string' ? Date.parse(entry.last_run_at) : NaN;
+      const nextRunMs = !Number.isNaN(lastRunMs) && typeof ms === 'number'
+        ? lastRunMs + ms
+        : null;
+      return {
+        type,
+        cadence_str: cadenceStr[type] ?? null,
+        cadence_ms: typeof ms === 'number' ? ms : null,
+        cadence_valid: typeof ms === 'number',
+        last_run_at: entry.last_run_at ?? null,
+        next_run_at: nextRunMs != null ? new Date(nextRunMs).toISOString() : null,
+        last_outcome: entry.last_outcome ?? null,
+        last_jobs_count: entry.last_jobs_count ?? null,
+        last_error: entry.last_error ?? null,
+        has_active_source: activeTypeSet.has(type),
+      };
+    });
+    res.json({ rows, scan_status: getScanStatus() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── Finder: portals.yml CRUD ──────────────────────────────────────────
@@ -2921,6 +3023,150 @@ app.put('/api/career/finder/portals', async (req, res) => {
   }
 });
 
+// ─── Finder: manual JD enrich retry ────────────────────────────────────
+// Re-runs the 4-tier enrich (skip → ATS → Playwright → manual flag) against
+// the current pipeline.json's kept jobs. Used after a scan to retry the
+// jobs that landed with needs_manual_enrich=true, or to enrich freshly
+// added manual-paste jobs that have description=null. Returns counters.
+// Refuses (409) if a scan is in flight to avoid pipeline.json races.
+app.post('/api/career/finder/enrich', async (_req, res) => {
+  // Acquire the pipeline-enrich lock BEFORE any I/O. The lock blocks
+  // startScan() too, so a scan can't land a fresh pipeline.json mid-enrich
+  // and have it overwritten by our stale snapshot at the end.
+  const lock = acquirePipelineEnrichLock();
+  if (!lock.ok) {
+    return res.status(409).json({
+      error: lock.reason === 'scan_running'
+        ? 'scan in progress; enrich would race the scan write'
+        : 'another enrich is already running',
+    });
+  }
+  try {
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.json({
+        total: 0,
+        enriched_now: 0,
+        still_needs_manual: 0,
+        ats_hits: 0,
+        scrape_hits: 0,
+      });
+    }
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+    // Mirror scanRunner's enrichBatch behavior: any job that shouldEnrich
+    // (description ≤ 500 chars) OR explicitly flagged needs_manual_enrich.
+    // Pre-m3 pipeline entries with a short ATS snippet would otherwise be
+    // skipped forever by /enrich while a fresh scan would re-enrich them.
+    const candidates = jobs.filter(
+      (j) => j && (j.needs_manual_enrich === true || shouldEnrich(j))
+    );
+    const counters = await enrichBatch(candidates, { concurrency: 3 });
+    // candidates entries are the same references as pipeline.jobs entries —
+    // mutation already landed; just write the whole pipeline back.
+    pipeline.jobs = jobs;
+    await atomicWriteFile(PIPELINE_FILE, JSON.stringify(pipeline, null, 2));
+    res.json({
+      total: candidates.length,
+      enriched_now: counters.enriched,
+      still_needs_manual: counters.needs_manual,
+      ats_hits: counters.ats_hits,
+      scrape_hits: counters.scrape_hits,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  } finally {
+    releasePipelineEnrichLock();
+  }
+});
+
+// ─── Finder: needs-manual list (UI feeds off this) ─────────────────────
+// Returns the subset of pipeline.json kept jobs that the 4-tier enrich
+// flagged as needing manual JD paste. UI under /career/shortlist/needs-manual
+// renders these with a paste textarea per row.
+app.get('/api/career/finder/needs-manual', async (_req, res) => {
+  try {
+    if (!existsSync(PIPELINE_FILE)) return res.json({ jobs: [] });
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+    // Project to a smaller view shape for the UI — full Job has raw and other
+    // bulky fields the list doesn't need.
+    const out = jobs
+      .filter((j) => j && j.needs_manual_enrich === true)
+      .map((j) => ({
+        id: j.id,
+        company: j.company,
+        role: j.role,
+        url: j.url,
+        location: j.location,
+        posted_at: j.posted_at ?? null,
+        source: j.source ?? null,
+      }));
+    res.json({ jobs: out });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Pipeline: PATCH a single job's description (manual JD paste) ──────
+// Used by the needs-manual UI when the user pastes JD text for a job that
+// the enricher couldn't fetch automatically. 409s if a scan or enrich is
+// running so the write doesn't race their pipeline.json snapshot.
+const JobDescriptionPatchSchema = z.object({
+  description: z.string().min(10).max(50_000),
+});
+
+app.patch('/api/career/pipeline/job/:id/description', async (req, res) => {
+  const status = getScanStatus();
+  if (status.running || status.enriching) {
+    return res.status(409).json({
+      error: status.running
+        ? 'scan in progress; PATCH would race the scan write'
+        : 'enrich in progress; PATCH would race the enrich write',
+    });
+  }
+  try {
+    const body = JobDescriptionPatchSchema.parse(req.body);
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.status(404).json({ error: 'pipeline.json does not exist' });
+    }
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+    const job = jobs.find((j) => j && j.id === req.params.id);
+    if (!job) return res.status(404).json({ error: 'job not found' });
+    job.description = body.description;
+    job.needs_manual_enrich = false;
+    await atomicWriteFile(PIPELINE_FILE, JSON.stringify(pipeline, null, 2));
+    res.json({
+      ok: true,
+      job: {
+        id: job.id,
+        description: job.description,
+        needs_manual_enrich: job.needs_manual_enrich,
+      },
+    });
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid description', details: e.issues });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Pipeline: manual paste ────────────────────────────────────────────
 const ManualPasteSchema = z.object({
   url: z.string().url().max(2000),
@@ -2929,13 +3175,24 @@ const ManualPasteSchema = z.object({
 });
 
 app.post('/api/career/pipeline/manual', async (req, res) => {
+  // Manual paste is a pipeline.json writer. If a scan or enrich is running,
+  // its multi-second-to-multi-minute window could overwrite the manual write,
+  // silently dropping the just-pasted job. 409 keeps semantics consistent
+  // with /scan and /enrich.
+  const status = getScanStatus();
+  if (status.running || status.enriching) {
+    return res.status(409).json({
+      error: status.running
+        ? 'scan in progress; manual paste would race the scan write'
+        : 'enrich in progress; manual paste would race the enrich write',
+    });
+  }
   try {
     const body = ManualPasteSchema.parse(req.body);
     const job = await manualPaste(body);
 
-    // Append to pipeline.json (read-modify-write under simple lock would be
-    // ideal; here we accept last-writer-wins since manual paste is interactive
-    // and unlikely to race with a scan write).
+    // Append to pipeline.json. The 409 above ensures no scan/enrich is mid-
+    // flight, so this read-modify-write is safe under our single-process model.
     let current = { jobs: [], last_scan_at: null, scan_summary: [] };
     if (existsSync(PIPELINE_FILE)) {
       try {
