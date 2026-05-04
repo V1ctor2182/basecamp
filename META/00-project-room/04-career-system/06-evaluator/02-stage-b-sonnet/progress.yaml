@@ -359,7 +359,7 @@ milestones:
           via the report markdown file
 
 commits:
-  - hash: "PENDING"  # filled by followup commit
+  - hash: "b93b9c4"
     date: "2026-05-04"
     message: "[04-career-system/06-evaluator/02-stage-b-sonnet] m1: stageBPrompt + smoke 33/33"
     files_changed: 2
