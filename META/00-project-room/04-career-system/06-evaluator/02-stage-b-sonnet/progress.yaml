@@ -1,5 +1,366 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-stage-b-prompt-module"
+    name: "Stage B prompt builder + block-aware system + tool-use-aware parser"
+    status: pending
+    estimated_files:
+      - "src/career/evaluator/stageBPrompt.mjs"
+      - "scripts/smoke-stage-b-prompt.mjs"
+    estimated_lines: 350
+    depends_on: []
+    complexity_flags: ["external_api", "prompt_engineering", "design_decisions"]
+    open_questions: []
+    description: |
+      Stage B prompt module. System block carries 4 cached files (cv.md +
+      narrative.md + proof-points.md + identity.yml) + STAGE_B_INSTRUCTIONS
+      describing the 7-block A-G report format + Block toggle awareness +
+      total score directive (Sonnet does its own weighted math from
+      prefs.scoring_weights). User block carries the JD only.
+
+      Blocks (canonical, per spec — supersedes existing UI placeholder labels):
+        A — Role Summary (always-on, no toggle)
+        B — CV Match (LOCKED ON, Tailor depends)
+        C — Level & Strategy (toggleable)
+        D — Comp & Demand + WebSearch (toggleable)
+        E — Personalization Plan (LOCKED ON, Tailor depends)
+        F — Interview Plan + qa-bank few-shot (toggleable)
+        G — Posting Legitimacy + Playwright tool (toggleable)
+
+      Files:
+        - src/career/evaluator/stageBPrompt.mjs (~270 lines):
+          · STAGE_B_INSTRUCTIONS const — describes 7 blocks, format
+            (`## Block X — Title`), final-score line (`**Total: X.X/5**`),
+            confidence:low fallback for tool failures
+          · STAGE_B_MODEL = 'claude-sonnet-4-6' (matches MODEL_PRICING)
+          · buildSystemBlock({cv, narrative, proofPoints, identity, qaFewShot,
+            enabledBlocks, prefs}) → array of 1 cache_control:ephemeral text
+            block (one big cached chunk per locked design — same as Stage A)
+          · buildUserMessage(job) — JD only (per-call uniqueness)
+          · buildStageBPrompt(job, prefs, cvBundle) → { model, max_tokens,
+            system, messages } — tools added in m3 not here
+          · parseStageBResponse(content) — content is Anthropic API content
+            array (may contain tool_use blocks in m3); v1 walks blocks,
+            concatenates text-type, ignores tool_use intermixing
+          · extractBlocks(text) → { A: '...', B: '...', ..., total_score: 4.2 }
+            via `## Block X — Title` regex split + `**Total: ...**` extraction
+
+        - scripts/smoke-stage-b-prompt.mjs (~130 lines, ~14 assertions):
+          · System block: ONE cache_control marker on combined text
+          · CV bundle missing fields handled gracefully (use placeholders)
+          · enabledBlocks filter: B/E always present even if flagged off
+            (instructions say so); A always present
+          · User message has JD body, no CV (CV is in cached system)
+          · Parser: 7-block split with title regex; total score extraction;
+            tolerant of trailing whitespace + CRLF
+          · Parser tolerance: missing block → empty string (not throw); extra
+            non-block content before Block A → captured as preamble
+
+      Locked design (OQ lock-ins):
+        - OQ-1=a: spec's A-G naming wins (UI labels updated in m5)
+        - OQ-2: A always-on (no toggle); B+E forced-on; C/D/F/G toggleable
+        - OQ-4=a: Sonnet emits `**Total: X.X/5**` (no m2-side weighted math)
+        - Single cache_control block per Stage A m1 lock-in
+        - Tool-use intermixing in response: parser handles via Anthropic
+          content[] iteration (text-type only)
+
+      Defer to m3:
+        - WebSearch tool definition + handler
+        - Playwright tool definition + handler
+        - Tool-use response loop (call → tool result → re-call)
+
+      验收: smoke 14/14 PASS; tsc + vite build clean.
+
+  - id: "m2-stage-b-runner-cost-reports"
+    name: "evaluateJobsStageB worker-pool + cost recording + reports/ writer"
+    status: pending
+    estimated_files:
+      - "src/career/evaluator/stageBRunner.mjs"
+      - "scripts/smoke-stage-b-runner.mjs"
+    estimated_lines: 300
+    depends_on: ["m1-stage-b-prompt-module"]
+    complexity_flags: ["external_api", "error_handling_heavy"]
+    open_questions: []
+    description: |
+      Worker-pool runner mirroring stageARunner shape. Per-job: load the CV
+      bundle (cv.md + narrative.md + proof-points.md + identity.yml + recent
+      qa-bank entries) → buildPrompt → callWithRetry (2x on 5xx/429/408/
+      APIConnectionError) → parseResponse → write `data/career/reports/{
+      jobId}.md` → record cost via shared anthropicPricing → return result
+      with total_score + report_path. NEVER throws; per-job errors absorbed.
+
+      Files:
+        - src/career/evaluator/stageBRunner.mjs (~260 lines):
+          · STAGE_B_CALLER = 'evaluator:stage-b'
+          · REPORTS_DIR = data/career/reports
+          · loadCvBundle() — reads default resume's base.md + narrative.md +
+            proof-points.md + identity.yml + last 5 qa-bank/history.jsonl
+            entries (graceful missing-file → '' or [])
+          · resolveEnabledBlocks(prefs) — applies toggle policy:
+            A always; B+E always; C/D/F/G from prefs.evaluator_strategy.
+            stage_b.blocks
+          · evaluateOneJob(job, prefs, cvBundle, deps) — full lifecycle;
+            writes report markdown atomically; returns { jobId, total_score,
+            blocks, report_path, model, cost_usd, status:'evaluated'|'error',
+            error? }
+          · evaluateJobsStageB(jobs, prefs, opts) — worker-pool concurrency=3;
+            counters { evaluated, errors, skipped, total_cost_usd, results }.
+            Note: NO 'archived' status — Stage B already runs only on Stage A
+            survivors; threshold gating at the m4 endpoint level (callers
+            pass jobs that meet stage_a.score >= stage_a.threshold).
+          · DI seam: _client / _recordCost / _sleep / _writeReport (matches
+            Stage A pattern)
+          · Skip if job.evaluation?.stage_b != null (idempotent per OQ-10)
+
+        - scripts/smoke-stage-b-runner.mjs (~150 lines, ~12 assertions):
+          DI-driven: empty input / 3 jobs all evaluated / counter sums /
+          429 retry / 5xx retry / 408 retry / 401 fast-fail / parse error /
+          report file written + atomic-renamed / cost recorded with caller=
+          'evaluator:stage-b' / concurrency 3 observed via in-flight counter /
+          report write failure → status:'error' (atomicWriteFile throw caught)
+
+      Locked design:
+        - Reports written to data/career/reports/{jobId}.md (gitignored — m4)
+        - Concurrency 3 (OQ-7)
+        - Cost recording via shared computeCostUsd from anthropicPricing
+        - Sonnet pricing already in MODEL_PRICING table
+        - No threshold gate — m4 endpoint filters input before runner
+
+      验收: smoke 12/12 PASS.
+
+  - id: "m3-tools-websearch-playwright"
+    name: "Anthropic Tools API: hosted WebSearch + local Playwright handler"
+    status: pending
+    estimated_files:
+      - "src/career/evaluator/stageBTools.mjs"
+      - "src/career/evaluator/stageBRunner.mjs"
+      - "scripts/smoke-stage-b-tools.mjs"
+    estimated_lines: 350
+    depends_on: ["m2-stage-b-runner-cost-reports"]
+    complexity_flags: ["external_api", "error_handling_heavy", "first_of_kind"]
+    open_questions: []
+    description: |
+      First project use of the Anthropic Tools API. Sonnet emits tool_use
+      blocks; runner handles them in a loop (call → tool result → re-call
+      until model emits final text response). Two tools:
+        - web_search_20250305 (Anthropic-hosted, server-side) — Block D
+        - verify_job_posting (local Playwright handler) — Block G
+
+      Files:
+        - src/career/evaluator/stageBTools.mjs (NEW ~200 lines):
+          · WEB_SEARCH_TOOL = { type: 'web_search_20250305', name: 'web_search',
+            max_uses: 2 }  // Anthropic-hosted, no local handler needed
+          · VERIFY_JOB_POSTING_TOOL definition + handler — Sonnet calls
+            { url } → handler runs scrapeJdText(url) from pageScraper.mjs;
+            returns { ok: bool, body_excerpt: '...', error? }
+          · 30s timeout per local tool call (locked constraint #3)
+          · runToolUseLoop(client, params, deps): orchestrates the multi-turn
+            tool conversation. Loops until response.stop_reason === 'end_turn'
+            or maxToolRounds (5) reached. Each round:
+              1. client.messages.create(params)
+              2. if tool_use blocks → execute handlers → push tool_result
+                 messages → next round
+              3. else → return final response
+          · Aggregates token usage across rounds for accurate cost
+          · Tool failure (timeout / handler throw) → returns
+            { error: 'verify_job_posting timeout' } as tool_result; Sonnet
+            sees the error and falls back to "confidence: low" per
+            instructions in m1 system prompt
+
+        - src/career/evaluator/stageBRunner.mjs (+~80 lines, integration):
+          · Replace direct client.messages.create with runToolUseLoop
+          · Pass tools array to the prompt params
+          · Cost computation now sums per-round usage (multiple API calls
+            per job when tools fire)
+
+        - scripts/smoke-stage-b-tools.mjs (~130 lines, ~10 assertions):
+          DI-mocked client cycles tool_use → tool_result → final response.
+          · Single round (no tool calls) → end_turn directly
+          · One web_search round → tool_result auto-handled by Anthropic
+            (we just see usage delta, not handler invocation)
+          · One verify_job_posting round → local handler runs, tool_result
+            pushed
+          · Tool handler throws → tool_result has error field; Sonnet
+            continues with confidence:low
+          · Tool handler timeout (30s) → tool_result error; cost still
+            recorded
+          · maxToolRounds=5 cap — runaway loop bails with final partial
+          · Per-round usage summed correctly into cost_usd
+
+      Locked design:
+        - Anthropic-hosted web_search_20250305 (OQ-5=a, ~$0.025/search)
+        - Local verify_job_posting backed by pageScraper.mjs (OQ-6)
+        - 30s per-tool timeout (constraint #3)
+        - 5 max tool rounds per job (defensive cap)
+        - Tool errors → tool_result with error field; Sonnet sees and
+          downgrades to confidence:low (instruction in m1 system prompt)
+        - Cost accumulates across rounds; recorded once per job at end
+
+      验收: smoke 10/10 PASS; live test against 1 fixture job
+      verifies real WebSearch call works (manual, not in smoke).
+
+  - id: "m4-schema-and-endpoint"
+    name: "Job.evaluation.stage_b schema + POST /api/career/evaluate/stage-b"
+    status: pending
+    estimated_files:
+      - "src/career/lib/jobSchema.mjs"
+      - "server.mjs"
+      - ".gitignore"
+      - "scripts/smoke-stage-b-endpoint.mjs"
+    estimated_lines: 250
+    depends_on: ["m3-tools-websearch-playwright"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      HTTP surface. Schema migration adds Job.evaluation.stage_b sibling to
+      stage_a (preserves m3-stage-a's spread mutation pattern). Endpoint
+      reads Stage A passing jobs, runs the m3 runner, writes reports + mutates
+      pipeline.json. Reuses pipelineMutex (now 6-way: scan + enrich +
+      manual-paste + PATCH + /evaluate/stage-a + /evaluate/stage-b).
+
+      Files:
+        - src/career/lib/jobSchema.mjs (+~25 lines):
+          · EvaluationStageBSchema = z.object({
+              total_score: z.number().min(1).max(5).nullable(),
+              report_path: z.string().nullable(),  // relative to data/career/
+              blocks_emitted: z.array(z.string()),  // ['A','B','C',...]
+              model: z.string(),
+              evaluated_at: z.string().datetime(),
+              cost_usd: z.number().nonnegative(),
+              status: z.enum(['evaluated', 'error']),
+              error: z.string().max(500).optional(),
+            }).nullable().default(null)
+          · Add stage_b sibling to EvaluationSchema (alongside stage_a)
+          · Existing pipeline.json jobs without stage_b coerce to null
+
+        - server.mjs (+~140 lines):
+          · POST /api/career/evaluate/stage-b:
+            - body: { jobIds?: string[] | null }
+            - Acquire pipelineMutex (409 on contention)
+            - Filter candidates: jobIds-supplied OR all jobs where
+              evaluation?.stage_a?.status === 'evaluated' AND
+              evaluation?.stage_b == null AND
+              evaluation?.stage_a?.score >= prefs.thresholds.consider
+              (v1 default; m4-budget-gate may add cost gate later)
+            - prefs = readPreferences(); blocks toggle from
+              prefs.evaluator_strategy.stage_b.blocks
+            - evaluateJobsStageB(candidates, prefs)
+            - Mutate via spread: job.evaluation = { ...existing,
+              stage_b: { ...result, evaluated_at: now, blocks_emitted: keys
+              of result.blocks } }
+            - atomicWriteFile pipeline.json
+            - Returns { total, evaluated, errors, total_cost_usd }
+            - releasePipelineEnrichLock in finally
+
+          · GET /api/career/evaluate/stage-b/results — projection for UI:
+            { total, pending, evaluated_count, results: [{ id, company,
+              role, total_score, report_path, status, evaluated_at,
+              cost_usd, error? }] } sorted by total_score desc, top 50.
+            Pending = jobs with stage_a evaluated/score>=consider but
+            stage_b == null
+
+          · GET /api/career/evaluate/stage-b/report/:jobId — serves the
+            report markdown content { content, evaluated_at }; 404 if
+            no stage_b. UI uses this to show report in m5.
+
+        - .gitignore (+1 line): data/career/reports/
+
+        - scripts/smoke-stage-b-endpoint.mjs (~85 lines, ~7 assertions):
+          server-spawn pattern with MOCK_ANTHROPIC=1 + mock tool handlers
+          via env or module-level overrides:
+          · Happy path: 3 stage-A-passing jobs → all evaluated; reports
+            written; mutation persisted
+          · Idempotent re-run → 0 newly evaluated
+          · Filter: jobs without stage_a → not candidates
+          · Filter: jobs where stage_a.score < consider threshold → not
+            candidates
+          · 400 zod / 404 missing pipeline / 409 race
+          · GET /report/:jobId returns content
+
+      Locked design:
+        - 6-way pipelineMutex (extends 5-way from earlier)
+        - Threshold gate: stage_a.score >= prefs.thresholds.consider
+          (default 3.5) — only consider+ jobs deserve $0.30 deep eval
+        - Mutation via spread (preserves stage_a sibling)
+        - reports/ directory gitignored
+        - empty/null jobIds = all qualifying pending jobs
+
+      验收: smoke 7/7 PASS.
+
+  - id: "m5-stage-b-ui-and-room-complete"
+    name: "StageBBatch UI panel + Block toggles UI in Preferences + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "src/career/evaluator/StageBBatch.tsx"
+      - "src/career/evaluator/stageBBatch.css"
+      - "src/career/evaluator/ReportViewer.tsx"
+      - "src/career/Pipeline.tsx"
+      - "src/career/settings/Preferences.tsx"
+      - "scripts/smoke-stage-b-ui.mjs"
+    estimated_lines: 280
+    depends_on: ["m4-schema-and-endpoint"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Pipeline tab gets a StageBBatch panel below StageABatch: pending count
+      (Stage A passed but Stage B not run) + Run button + per-row total_score
+      badges + report link → opens ReportViewer modal/panel. Preferences UI
+      block toggles updated to canonical A-G naming with B/E locked.
+
+      Files:
+        - src/career/evaluator/StageBBatch.tsx (NEW ~190 lines):
+          · GET /api/career/evaluate/stage-b/results on mount + 30s refresh
+          · Pending badge: "N awaiting deep eval" / "all done 🎉"
+          · 'Run Stage B on N pending' button — same color tier as Stage A
+            (4.0+ green, 3.5-4.0 amber, etc.)
+          · Per-row: total_score badge / role+company / "View Report" link
+            opens ReportViewer / cost shown
+          · Toast on result with cost summary
+          · 409 + error handling matches StageABatch
+
+        - src/career/evaluator/ReportViewer.tsx (NEW ~70 lines):
+          · Modal/drawer that GETs /report/:jobId and renders the markdown
+            via existing markdown lib (used elsewhere in career app)
+          · Close button; outside-click dismiss; Esc key
+
+        - src/career/evaluator/stageBBatch.css (NEW ~70 lines):
+          · Card layout matching StageABatch
+          · Modal overlay styling for ReportViewer
+
+        - src/career/Pipeline.tsx (+~3 lines):
+          · Mount <StageBBatch /> below <StageABatch />
+
+        - src/career/settings/Preferences.tsx (+~30 lines):
+          · Update existing block toggle UI labels to canonical A-G:
+              block_a (always-on, no toggle, badge "Always rendered")
+              block_b "CV Match" (locked on, "Required by Tailor" badge)
+              block_c "Level & Strategy" (toggleable)
+              block_d "Comp & Demand" (toggleable, "Uses WebSearch")
+              block_e "Personalization Plan" (locked on, "Required by Tailor")
+              block_f "Interview Plan" (toggleable, "Uses qa-bank few-shot")
+              block_g "Posting Legitimacy" (toggleable, "Uses Playwright")
+          · PreferencesSchema in server.mjs unchanged (block_a not in schema —
+            stays implicit always-on; UI shows it as info-only)
+
+        - scripts/smoke-stage-b-ui.mjs (~80 lines, ~5 assertions):
+          GET endpoint shape verification (similar to smoke-stage-a-ui)
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml synced
+        - 06-evaluator parent progress: 20% → 40% (2/5 ROOMs ✅)
+        - 04-career-system: 63% → 65%
+
+      下游 unblocked:
+        - 03-block-toggles: extends Preferences UI further (this Room's
+          v1 already labels canonically — block-toggles Room may add
+          per-block cost preview / disable-on-budget hints)
+        - 04-budget-gate: enforces daily_budget_usd cap on Stage B runs
+        - 05-pipeline-ui: extends Pipeline tab UI further
+        - Tailor Engine (future, separate epic): consumes report Block E
+          via the report markdown file
+
+commits: []
+
+current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "Plan 完成 (2026-05-04). 5 milestones, ~1530 行. 11 OQs all locked at recommended: spec naming wins (OQ-1), A always-on/B+E locked (OQ-2), reports/{jobId}.md gitignored (OQ-3), Sonnet emits final score (OQ-4), Anthropic hosted WebSearch (OQ-5), local Playwright tool (OQ-6), concurrency 3 (OQ-7), v1 default resume (OQ-8), 5-entry qa-bank few-shot (OQ-9), idempotent skip-if-evaluated (OQ-10), no v1 budget enforcement (OQ-11)."
+last_updated: "2026-05-04"

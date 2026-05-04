@@ -23,6 +23,46 @@ Block B 和 Block E 必须始终启用（下游依赖） + prompt caching 必开
 - [intent-stage-b-sonnet-001](specs/intent-stage-b-sonnet-001.yaml) — Sonnet 深评（Stage B）：完整 A-G Block 报告 + 总分 + prompt caching
 - [constraint-stage-b-sonnet-001](specs/constraint-stage-b-sonnet-001.yaml) — Block B 和 Block E 必须始终启用（下游依赖） + prompt caching 必开
 
+## 当前进度 — Plan 完成 (2026-05-04)
+
+5 milestones, ~1530 行. 11 OQs all locked at recommended values. **First project use of Anthropic Tools API** (m3).
+
+- ⏳ **m1-stage-b-prompt-module** (~350) — `stageBPrompt.mjs` (system block: 4 cached files + 5 qa-bank few-shot + STAGE_B_INSTRUCTIONS describing 7-block A-G format) + tool-use-aware parser + smoke 14
+- ⏳ **m2-stage-b-runner-cost-reports** (~300) — `stageBRunner.mjs` worker-pool concurrency=3 + retry + atomic-write `data/career/reports/{jobId}.md` + cost via shared `computeCostUsd` + smoke 12
+- ⏳ **m3-tools-websearch-playwright** (~350) — `stageBTools.mjs`: hosted `web_search_20250305` (Block D, ~$0.025/search) + local `verify_job_posting` handler (Block G, backed by `pageScraper.mjs` from m2-jd-enrich) + multi-turn tool-use loop + smoke 10
+- ⏳ **m4-schema-and-endpoint** (~250) — `Job.evaluation.stage_b` schema (sibling to stage_a, spread-mutation preserves both) + POST `/api/career/evaluate/stage-b` (6-way pipelineMutex) + GET `/results` projection + GET `/report/:jobId` markdown serving + smoke 7
+- ⏳ **m5-stage-b-ui-and-room-complete** (~280) — `<StageBBatch />` Pipeline-tab panel + `<ReportViewer />` modal + Preferences UI updated to canonical A-G block labels (B/E locked-on with "Required by Tailor" badge) + ROOM COMPLETE → 06-evaluator parent 20% → 40%
+
+### Locked design (long-term-best, all defaults)
+
+| Decision | Choice |
+|----------|--------|
+| Block naming (OQ-1) | spec wins: A Role Summary / B CV Match / C Level&Strategy / D Comp&Demand / E Personalization / F Interview Plan / G Posting Legitimacy |
+| Block toggles (OQ-2) | A always-on (no toggle); B+E locked-on (Tailor depends, UI disabled); C/D/F/G user-toggleable |
+| Reports path (OQ-3) | `data/career/reports/{jobId}.md` (gitignored, m4) |
+| Total score (OQ-4) | Sonnet emits `**Total: X.X/5**` line per system-prompt instructions weighted by `prefs.scoring_weights`; m2 parser extracts |
+| WebSearch (OQ-5) | Anthropic hosted `web_search_20250305` server-side tool (~$0.025/search) |
+| Playwright (OQ-6) | Local `verify_job_posting(url)` tool handler backed by existing `pageScraper.mjs` (m2-jd-enrich shared chromium pool) |
+| Concurrency (OQ-7) | 3 (matches Stage A) |
+| CV source (OQ-8) | v1 = default resume's base.md; auto-select integration deferred to follow-up when 03-cv-engine/04 m2 ships |
+| qa-bank few-shot (OQ-9) | up to 5 most recent `history.jsonl` entries cached in system block; better Block F STAR stories |
+| Idempotency (OQ-10) | skip if `job.evaluation?.stage_b != null`; m5 UI clears field for retry |
+| Budget enforcement (OQ-11) | none in v1 (m5 UI surfaces total cost as info); real enforcement in `04-budget-gate` |
+| Tool failure semantics | tool error → `tool_result` with error field → Sonnet downgrades block to "confidence: low" per system-prompt instruction |
+| Tool timeout | 30s per local tool call (constraint #3) |
+| Tool round cap | 5 max tool rounds per job (defensive cap against runaway loops) |
+| Threshold gate (m4 endpoint) | candidates filtered to `evaluation.stage_a.score >= prefs.thresholds.consider` (default 3.5) — only consider+ jobs get $0.30 deep eval |
+| Mutex | 6-way pipelineMutex extends 5-way: scan + enrich + manual-paste + PATCH + /evaluate/stage-a + /evaluate/stage-b |
+| Mutation | spread `{ ...evaluation, stage_b: result }` preserves stage_a sibling |
+| Cost recording | per-job aggregate across all tool rounds; appended to `llm-costs.jsonl` with `caller: 'evaluator:stage-b'` |
+
+### 下游 contracts
+
+- **`03-block-toggles`**: extends Preferences UI; this Room ships canonical A-G labels with B/E locked. block-toggles Room may add per-block cost preview / disable-on-budget hints.
+- **`04-budget-gate`**: enforces daily_budget_usd cap; consumes the per-call cost records in `llm-costs.jsonl` already written by m2.
+- **`05-pipeline-ui`**: extends Pipeline tab UI further; this Room ships v1 minimum.
+- **Tailor Engine** (future, separate epic): consumes `reports/{jobId}.md` Block E (Personalization Plan) for resume rewrite suggestions.
+
 ---
 
-_Generated 2026-04-22 by room-init._
+_Generated 2026-04-22 by room-init. Plan refined 2026-05-04 by plan-milestones._
