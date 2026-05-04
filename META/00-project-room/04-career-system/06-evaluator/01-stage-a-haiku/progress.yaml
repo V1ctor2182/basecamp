@@ -172,7 +172,7 @@ milestones:
       - "src/career/evaluator/stageABatch.css"
       - "src/career/Pipeline.tsx"
       - "scripts/smoke-stage-a-ui.mjs"
-    commit_hash: "PENDING"
+    commit_hash: "e259321"
     estimated_files:
       - "src/career/Pipeline.tsx"
       - "src/career/evaluator/StageABatch.tsx"
