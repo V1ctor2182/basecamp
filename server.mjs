@@ -2921,6 +2921,56 @@ async function readSimplifiedCvForStageA() {
   }
 }
 
+// ─── Evaluator: Stage A status + projected results for the UI ──────────
+// UI consumes this to render the Pipeline-tab StageABatch panel:
+// pending count drives the "Run Stage A on N pending" button enabled state;
+// `results` shows recently-evaluated jobs sorted by score desc (top 50).
+// Returning a projection (not full Job objects) keeps the payload small.
+app.get('/api/career/evaluate/stage-a/results', async (_req, res) => {
+  try {
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.json({ pending: 0, total: 0, results: [] });
+    }
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+    const pending = jobs.filter((j) => j && j.evaluation?.stage_a == null).length;
+    const evaluated = jobs.filter((j) => j && j.evaluation?.stage_a != null);
+    // Sort by score desc; archived/error rows fall to the bottom (null score
+    // → -Infinity).
+    evaluated.sort((a, b) => {
+      const sa = a.evaluation.stage_a.score ?? -Infinity;
+      const sb = b.evaluation.stage_a.score ?? -Infinity;
+      return sb - sa;
+    });
+    const results = evaluated.slice(0, 50).map((j) => ({
+      id: j.id,
+      company: j.company,
+      role: j.role,
+      url: j.url,
+      location: j.location,
+      score: j.evaluation.stage_a.score,
+      reason: j.evaluation.stage_a.reason,
+      status: j.evaluation.stage_a.status,
+      evaluated_at: j.evaluation.stage_a.evaluated_at,
+      cost_usd: j.evaluation.stage_a.cost_usd,
+      error: j.evaluation.stage_a.error ?? null,
+    }));
+    res.json({
+      total: jobs.length,
+      pending,
+      evaluated_count: evaluated.length,
+      results,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/career/evaluate/stage-a', async (req, res) => {
   // Acquire the pipeline mutex BEFORE any I/O. Blocks scan-start, /enrich,
   // and /scan/source the same way they block each other; symmetric.

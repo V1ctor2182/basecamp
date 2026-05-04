@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/06-evaluator/01-stage-a-haiku`  
 **Type**: feature  
-**Lifecycle**: planning  
+**Lifecycle**: active (ROOM COMPLETE 2026-05-03)  
 **Owner**: backend  
 **Parent**: `00-project-room/04-career-system/06-evaluator`  
 

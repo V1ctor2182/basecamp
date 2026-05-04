@@ -164,7 +164,15 @@ milestones:
 
   - id: "m4-pipeline-ui-and-room-complete"
     name: "Pipeline tab Stage A panel + ROOM COMPLETE"
-    status: pending
+    status: completed
+    actual_lines: 680
+    actual_files:
+      - "server.mjs"
+      - "src/career/evaluator/StageABatch.tsx"
+      - "src/career/evaluator/stageABatch.css"
+      - "src/career/Pipeline.tsx"
+      - "scripts/smoke-stage-a-ui.mjs"
+    commit_hash: "PENDING"
     estimated_files:
       - "src/career/Pipeline.tsx"
       - "src/career/evaluator/StageABatch.tsx"
@@ -174,6 +182,8 @@ milestones:
     depends_on: ["m3-endpoint-and-schema"]
     complexity_flags: []
     open_questions: []
+    locked_decisions_overrides:
+      - "Added GET /api/career/evaluate/stage-a/results endpoint (not in plan) — UI needs a projection of evaluated jobs without shipping the full pipeline.json. Returns {pending, total, evaluated_count, results: top-50 sorted by score desc}."
     description: |
       Pipeline tab gets a "Run Stage A on N pending" button + per-row score
       badges + archived row dimming. Force Sonnet button placeholder
@@ -206,5 +216,6 @@ commits: []
 
 current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-status_note: "Plan 完成 (2026-05-02). 4 milestones, ~950 行. OQs all locked at recommended: @anthropic-ai/sdk (OQ-1), ANTHROPIC_API_KEY env (OQ-2), in-place pipeline.json eval (OQ-3), prompt caching ephemeral (OQ-4), concurrency 3 (OQ-5), nullable schema migration (OQ-6), empty=all-pending (OQ-7), per-call cost record (OQ-8), 2 retries 5xx/429 (OQ-9), MOCK_ANTHROPIC env (OQ-10)."
-last_updated: "2026-05-02"
+lifecycle: active
+status_note: "🎉 ROOM COMPLETE (2026-05-03) — 4/4 milestones (m1+m2+m3+m4). Total ~2300 lines actual. m1 91b43f1 (SDK + prompt + parser, 28 smoke); m2 96f9e7d (worker-pool + retry + cost, 22 smoke); m3 bf08191 (schema + endpoint, 7 smoke); m4 (this commit, UI + 5 smoke). Pipeline tab now has SchedulerPanel (05-finder) + StageABatch (06-evaluator/01) stacked. Downstream 02-stage-b-sonnet + 05-pipeline-ui unblocked."
+last_updated: "2026-05-03"
