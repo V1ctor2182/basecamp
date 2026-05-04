@@ -1,0 +1,156 @@
+.sab-card {
+  border: 1px solid #f5f5f4;
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.sab-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.sab-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.sab-title h3 { margin: 0; font-size: 16px; font-weight: 600; }
+
+.sab-pending-badge,
+.sab-done-badge,
+.sab-empty-badge {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+.sab-pending-badge { color: #92400e; background: #fef3c7; }
+.sab-done-badge    { color: #14532d; background: #d1fae5; }
+.sab-empty-badge   { color: #57534e; background: #f5f5f4; }
+
+.sab-actions { display: flex; gap: 8px; align-items: center; }
+.sab-refresh {
+  background: transparent;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  color: #57534e;
+}
+.sab-refresh:hover { background: #fafaf9; color: #1c1917; }
+
+.sab-run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 7px 14px;
+  border: 1px solid #1c1917;
+  background: #1c1917;
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.sab-run-btn:hover:not(:disabled) { background: #292524; }
+.sab-run-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: #a8a29e;
+  border-color: #a8a29e;
+}
+
+.sab-spin { animation: sab-spin 1s linear infinite; }
+@keyframes sab-spin { to { transform: rotate(360deg); } }
+
+.sab-loading,
+.sab-empty {
+  padding: 24px;
+  text-align: center;
+  color: #78716c;
+  background: #fafaf9;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.sab-error {
+  display: flex; align-items: center; gap: 6px;
+  color: #b91c1c; background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 8px 12px; border-radius: 6px;
+  font-size: 13px;
+}
+.sab-toast-ok,
+.sab-toast-error {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 8px 12px;
+  border-radius: 6px; margin-bottom: 12px;
+}
+.sab-toast-ok    { color: #14532d; background: #d1fae5; border: 1px solid #a7f3d0; }
+.sab-toast-error { color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; }
+
+.sab-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.sab-table th,
+.sab-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f5f5f4;
+  vertical-align: top;
+}
+.sab-table th {
+  color: #78716c;
+  font-weight: 500;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sab-table tbody tr:last-child td { border-bottom: none; }
+
+.sab-row-archived { background: #fafaf9; opacity: 0.65; }
+.sab-row-error    { background: #fef2f2; }
+
+.sab-role { font-weight: 500; color: #1c1917; }
+.sab-meta { color: #78716c; font-size: 12px; margin-top: 2px; }
+.sab-reason {
+  max-width: 380px;
+  color: #44403c;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sab-reason-error { color: #b91c1c; }
+
+.sab-row-actions {
+  display: flex; gap: 6px; align-items: center;
+}
+.sab-btn-link {
+  display: inline-flex; align-items: center;
+  padding: 5px 8px; border: 1px solid #e7e5e4;
+  background: #fff; color: #57534e;
+  border-radius: 4px; text-decoration: none;
+}
+.sab-btn-link:hover { background: #fafaf9; color: #1c1917; }
+
+.sab-force-sonnet {
+  font-size: 11px; padding: 4px 8px;
+  border: 1px dashed #a8a29e;
+  background: #fff; color: #a8a29e;
+  border-radius: 4px;
+  cursor: not-allowed;
+}
+
+.sab-score {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px; font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.sab-score-strong   { color: #14532d; background: #d1fae5; }
+.sab-score-worth    { color: #92400e; background: #fef3c7; }
+.sab-score-consider { color: #57534e; background: #e7e5e4; }
+.sab-score-archived { color: #a8a29e; background: #f5f5f4; }
+.sab-score-error    { color: #b91c1c; background: #fef2f2; }

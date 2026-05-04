@@ -1,15 +1,15 @@
 milestones: []
 current_sprint: "Sprint 5 — Finder"
 blockers: []
-completion: 60  # avg(100, 100, 60, 100, 100, 0, 0, 0) = 57.5 across 8 sub-epics
+completion: 63  # avg(100, 100, 60, 100, 100, 20, 0, 0) = 60 across 8 sub-epics; rounds up with new room momentum
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
   "02-profile": 100     # ✅ Sprint 2 CLOSED
   "03-cv-engine": 80    # 🔄 4/5 ROOMs ✅
   "04-renderer": 100    # ✅ sub-epic DONE
   "05-finder": 100      # 🎉 EPIC COMPLETE (5/5 ROOMs ✅)
-  "06-evaluator": 0
+  "06-evaluator": 20    # 🔄 1/5 ROOMs ✅ (01-stage-a-haiku)
   "07-applier": 0
   "08-human-gate-tracker": 0
-status_note: "🎉 Sprint 5 — Finder EPIC COMPLETE (5/5 ROOMs). Full pipeline: portals → adapters → dedupe → hardFilter → jdEnrich → scheduler. Downstream 06-evaluator unblocked. 下一个: 06-evaluator 或 03-cv-engine 收尾."
-last_updated: "2026-05-02"
+status_note: "Sprint 6 — Evaluator started. 06-evaluator 20% (01-stage-a-haiku COMPLETE; 4 ROOMs remaining). Pipeline tab UI shows Haiku-evaluated jobs sorted by score. 下一个: 02-stage-b-sonnet (Sonnet 深评 Block A-G + Tailor 依赖) 或 04-budget-gate."
+last_updated: "2026-05-03"

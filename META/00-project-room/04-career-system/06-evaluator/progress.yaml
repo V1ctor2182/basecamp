@@ -1,5 +1,12 @@
 milestones: []
-current_sprint: null
+current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 20  # avg(100, 0, 0, 0, 0) = 20 across 5 features (1/5 ROOMs ✅)
+children_completion:
+  "01-stage-a-haiku": 100  # ✅ active — ROOM COMPLETE (4/4 milestones, ~2300 行)
+  "02-stage-b-sonnet": 0
+  "03-block-toggles": 0
+  "04-budget-gate": 0
+  "05-pipeline-ui": 0
+status_note: "🎉 01-stage-a-haiku COMPLETE (4/4 ms, ~2300 行). 06-evaluator 20% (1/5). Pipeline tab now has Haiku quick-eval panel. 下一个: 02-stage-b-sonnet (Sonnet 深评 + Block A-G report)."
+last_updated: "2026-05-03"

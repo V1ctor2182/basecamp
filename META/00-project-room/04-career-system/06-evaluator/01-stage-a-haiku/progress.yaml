@@ -1,5 +1,221 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-anthropic-client-and-prompt"
+    name: "@anthropic-ai/sdk install + getClient() + Stage A prompt module + parser"
+    status: completed
+    actual_lines: 580
+    actual_files:
+      - "package.json"
+      - "package-lock.json"
+      - "src/career/lib/anthropicClient.mjs"
+      - "src/career/evaluator/stageAPrompt.mjs"
+      - "scripts/smoke-stage-a-prompt.mjs"
+    commit_hash: "91b43f1"
+    review_findings:
+      - "[HIGH] Tier-2 regex capped score at 1 digit before/after decimal (Score: 3.55 → wrong score) → fixed: [0-9]+(\\.[0-9]+)?"
+      - "[HIGH] Tier-3 ^-anchored rejected 'Output: 3.5' / 'Result: 4.0' prefixes → fixed: non-anchored regex strips arbitrary prefix"
+      - "[MEDIUM] JSON tier rejected string-valued scores: {\"score\":\"3.5\"} → fixed: tier-0 full JSON.parse + accepts quoted values in embedded JSON"
+      - "[MEDIUM] Mock usage cache fields=0 didn't match real SDK shape (number|null) → fixed: mock now returns null"
+      - "[LOW] Tier-3 missing /m flag for multi-line robustness → fixed"
+      - "[LOW] comp_hint with all-null min/max emitted '?–?' line → fixed: only emit if min OR max is a number"
+      - "[LOW] APIConnectionError unimported in smoke → fixed: added typeof assertion"
+      - "[MEDIUM] ConfigError test brittleness → noted (test pattern is sound; future tests must always _resetClientForTesting)"
+    estimated_files:
+      - "package.json"
+      - "src/career/lib/anthropicClient.mjs"
+      - "src/career/evaluator/stageAPrompt.mjs"
+      - "scripts/smoke-stage-a-prompt.mjs"
+    estimated_lines: 250
+    depends_on: []
+    complexity_flags: ["external_api", "first_of_kind", "prompt_engineering"]
+    open_questions: []
+    description: |
+      First project use of LLM. Install @anthropic-ai/sdk, build the lazy
+      getClient() factory + the Stage A prompt builder + the response parser.
+      No real API calls in this milestone — m2 consumes them in the worker pool.
+
+      Files:
+        - package.json: +1 dep `@anthropic-ai/sdk`
+        - src/career/lib/anthropicClient.mjs (NEW ~70 lines):
+          · getClient(): lazy init from process.env.ANTHROPIC_API_KEY; throws
+            ConfigError if missing
+          · Module-level _client cache (one Anthropic instance per process)
+          · MOCK_ANTHROPIC=1 env returns canned mock client (smoke-friendly)
+        - src/career/evaluator/stageAPrompt.mjs (NEW ~140 lines):
+          · buildStageAPrompt(job, prefs, simplifiedCv) → { system, messages }
+            with cache_control: ephemeral on system block (CV + prefs
+            stable per batch → ~90% input token savings on call 2..N)
+          · parseStageAResponse(text) → {score: 1.0-5.0, reason: string}
+            tolerant of JSON / "Score 3.5/5" / numeric-prefix formats
+          · Score clamped to [1.0, 5.0], rounded to 1 decimal
+        - scripts/smoke-stage-a-prompt.mjs (~80 lines, 10 assertions)
+
+      Locked design (OQ lock-ins): SDK (OQ-1=a), API key env (OQ-2=a), prompt
+      caching (OQ-4=a), MOCK_ANTHROPIC for smoke (OQ-10=a).
+
+      验收: smoke 10/10 PASS; tsc + vite build clean.
+
+  - id: "m2-stage-a-runner-and-cost"
+    name: "evaluateJobsStageA worker-pool + cost recording + retry"
+    status: completed
+    actual_lines: 660
+    actual_files:
+      - "src/career/lib/anthropicPricing.mjs"
+      - "src/career/evaluator/stageARunner.mjs"
+      - "server.mjs"
+      - "scripts/smoke-stage-a-runner.mjs"
+    commit_hash: "96f9e7d"
+    review_findings:
+      - "[LOW] isRetryableError missed 408 (request timeout) → fixed: added status===408 retry"
+      - "[LOW] server.mjs duplicated cost arithmetic now that helper exists → fixed: replaced inline math with computeCostUsd() call"
+      - "[LOW] Counter-sum invariant (evaluated+archived+errors+skipped == jobs.length) untested → fixed: added assertion to mixed-batch test"
+      - "[LOW] getClient() ConfigError fall-through path untested → fixed: added test that omits _client + unsets env"
+      - "[LOW] response.content === undefined / [] untested → fixed: 2 new assertions"
+      - "[LOW] Default real setTimeout sleep blocks m3 endpoint on retry storm → deferred to m3 (m3 should stream progress or run detached)"
+      - "[LOW] Direct fs append bypasses CostRecordInput zod validation → deferred (Anthropic contract guarantees integers)"
+      - "[LOW] Silent zero-cost return on unknown model → deferred (observability follow-up; pre-existing behavior in server.mjs too)"
+    estimated_files:
+      - "src/career/evaluator/stageARunner.mjs"
+      - "scripts/smoke-stage-a-runner.mjs"
+    estimated_lines: 250
+    depends_on: ["m1-anthropic-client-and-prompt"]
+    complexity_flags: ["external_api", "error_handling_heavy"]
+    open_questions: []
+    locked_decisions_overrides:
+      - "Pricing extracted to src/career/lib/anthropicPricing.mjs (per user request: long-term-best). Both server.mjs cost rollup and stageARunner cost computation import from same source. server.mjs's inline math at line ~2007 also replaced by computeCostUsd() call to eliminate duplicate formula."
+    description: |
+      Worker-pool runner. Mirrors jdEnrich.enrichBatch shape (concurrency=3,
+      DI seam, never throws out — per-job errors absorbed). Records cost per
+      call to llm-costs.jsonl via direct fs append.
+
+      Files:
+        - src/career/evaluator/stageARunner.mjs (NEW ~180 lines):
+          · evaluateJobsStageA(jobs, prefs, opts) → counters
+            { evaluated, archived, errors, total_cost_usd, results: [...] }
+          · Worker-pool concurrency=3. DI seam: opts._client, opts._recordCost
+          · Per-job: shouldEvaluate (skip if already done) → buildPrompt →
+            callWithRetry (2 retries on 5xx/429 with exp backoff 500ms/2s;
+            fast-fail 4xx) → parseResponse → compute cost from token usage →
+            recordCost → determine status (score < skip_below → archived)
+          · Per-job try/catch absorbs errors → status:'error', batch continues
+        - scripts/smoke-stage-a-runner.mjs (~150 lines, 10 assertions): DI mocks
+
+      Locked design: concurrency 3 (OQ-5), retry 2x on 5xx/429 only (OQ-9),
+      cost per-call (OQ-8), threshold from prefs.thresholds.skip_below.
+
+      验收: smoke 10/10 PASS.
+
+  - id: "m3-endpoint-and-schema"
+    name: "POST /api/career/evaluate/stage-a + Job.evaluation schema migration"
+    status: completed
+    actual_lines: 380
+    actual_files:
+      - "src/career/lib/jobSchema.mjs"
+      - "server.mjs"
+      - "scripts/smoke-stage-a-endpoint.mjs"
+    commit_hash: "bf08191"
+    review_findings:
+      - "[Self-review] Mutation uses spread to preserve future stage_b sibling on evaluation object"
+      - "[Self-review] Backward-compat verified live: existing pipeline.json jobs without evaluation field load as null via Zod default"
+      - "[Self-review] 5-way mutex correctly extends 4-way pattern from earlier rooms"
+    estimated_files:
+      - "src/career/lib/jobSchema.mjs"
+      - "server.mjs"
+      - "scripts/smoke-stage-a-endpoint.mjs"
+    estimated_lines: 200
+    depends_on: ["m2-stage-a-runner-and-cost"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      HTTP surface. Schema migration adds Job.evaluation; endpoint reads
+      pipeline.json, runs the m2 runner, atomic-writes results. Reuses
+      pipelineMutex 4-way race protection from earlier rooms.
+
+      Files:
+        - src/career/lib/jobSchema.mjs (+~25 lines):
+          · EvaluationStageASchema = z.object({
+              score, reason, model, evaluated_at, cost_usd, status
+              ('evaluated'|'archived'|'error'), error?
+            }).nullable().default(null)
+          · evaluation: z.object({stage_a, /* stage_b reserved */})
+            .nullable().default(null) added to JobSchema
+          · Existing pipeline.json jobs without field → null on read
+
+        - server.mjs (+~110 lines):
+          · POST /api/career/evaluate/stage-a:
+            - body: { jobIds?: string[] | null }
+            - Acquire pipelineMutex (409 with reason on contention)
+            - Filter: jobIds-supplied OR all pending (evaluation?.stage_a==null)
+            - Read base.md (or default-resume from resumes/index.yml) for CV
+            - evaluateJobsStageA(candidates, prefs)
+            - Mutate candidate.evaluation = { stage_a: result }
+            - atomicWriteFile pipeline.json
+            - Return { total, evaluated, archived, errors, total_cost_usd }
+            - releasePipelineEnrichLock in finally
+
+        - scripts/smoke-stage-a-endpoint.mjs (~110 lines, 6 assertions):
+          server-spawn with MOCK_ANTHROPIC=1; idempotent re-run, jobIds
+          filter, 409 race, 400 zod
+
+      Locked design: in-place evaluation (OQ-3), empty/null = all pending
+      (OQ-7), nullable schema (OQ-6), 4-way mutex (scan/enrich/manual-paste/
+      PATCH/+ now /evaluate).
+
+      验收: smoke 6/6 PASS.
+
+  - id: "m4-pipeline-ui-and-room-complete"
+    name: "Pipeline tab Stage A panel + ROOM COMPLETE"
+    status: completed
+    actual_lines: 680
+    actual_files:
+      - "server.mjs"
+      - "src/career/evaluator/StageABatch.tsx"
+      - "src/career/evaluator/stageABatch.css"
+      - "src/career/Pipeline.tsx"
+      - "scripts/smoke-stage-a-ui.mjs"
+    commit_hash: "e259321"
+    estimated_files:
+      - "src/career/Pipeline.tsx"
+      - "src/career/evaluator/StageABatch.tsx"
+      - "src/career/evaluator/stageABatch.css"
+      - "scripts/smoke-stage-a-ui.mjs"
+    estimated_lines: 250
+    depends_on: ["m3-endpoint-and-schema"]
+    complexity_flags: []
+    open_questions: []
+    locked_decisions_overrides:
+      - "Added GET /api/career/evaluate/stage-a/results endpoint (not in plan) — UI needs a projection of evaluated jobs without shipping the full pipeline.json. Returns {pending, total, evaluated_count, results: top-50 sorted by score desc}."
+    description: |
+      Pipeline tab gets a "Run Stage A on N pending" button + per-row score
+      badges + archived row dimming. Force Sonnet button placeholder
+      (deferred to 02-stage-b-sonnet).
+
+      Files:
+        - src/career/evaluator/StageABatch.tsx (NEW ~170 lines):
+          · GET pipeline.json on mount; auto-refresh after each batch run
+          · Pending count badge; "Run Stage A" button
+          · Optimistic "Running…" → toast on 200/409 with summary
+          · Job rows: company/role/score-badge/reason-tooltip/Force-Sonnet
+            placeholder
+        - src/career/evaluator/stageABatch.css (NEW ~80 lines): score badge
+          color-coding (4.0+ green, 3.5-4.0 amber, <3.5 gray)
+        - src/career/Pipeline.tsx (+~30): mount <StageABatch /> below
+          <SchedulerPanel />
+
+      ROOM COMPLETE work:
+        - lifecycle: planning → active
+        - _tree.yaml synced
+        - 06-evaluator parent progress: 0% → 20% (1/5 ROOMs ✅)
+        - 04-career-system: 60% → 62%
+
+      下游 unblocked:
+        - 02-stage-b-sonnet (consumes evaluation.stage_a.score >= threshold
+          to pick which jobs deserve deep eval)
+        - 05-pipeline-ui (extends Pipeline tab UI further)
+
+commits: []
+
+current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+lifecycle: active
+status_note: "🎉 ROOM COMPLETE (2026-05-03) — 4/4 milestones (m1+m2+m3+m4). Total ~2300 lines actual. m1 91b43f1 (SDK + prompt + parser, 28 smoke); m2 96f9e7d (worker-pool + retry + cost, 22 smoke); m3 bf08191 (schema + endpoint, 7 smoke); m4 (this commit, UI + 5 smoke). Pipeline tab now has SchedulerPanel (05-finder) + StageABatch (06-evaluator/01) stacked. Downstream 02-stage-b-sonnet + 05-pipeline-ui unblocked."
+last_updated: "2026-05-03"

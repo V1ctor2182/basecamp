@@ -31,6 +31,8 @@ import { previewHardFilter } from './src/career/finder/dryRun.mjs';
 import { enrichBatch } from './src/career/finder/jdEnrich.mjs';
 import { shouldEnrich } from './src/career/finder/atsByUrl.mjs';
 import { startScheduler, stopScheduler } from './src/career/finder/scheduler.mjs';
+import { MODEL_PRICING, computeCostUsd } from './src/career/lib/anthropicPricing.mjs';
+import { evaluateJobsStageA } from './src/career/evaluator/stageARunner.mjs';
 import {
   readCadenceState,
   cadenceToMs,
@@ -1970,13 +1972,8 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // --- Compute dailyCost from JSONL session files and write to DAILY_COST_FILE ---
-const MODEL_PRICING = {
-  'claude-opus-4-6':            { input: 15,   output: 75,  cacheRead: 1.875, cacheWrite: 18.75 },
-  'claude-opus-4-5-20251101':   { input: 15,   output: 75,  cacheRead: 1.875, cacheWrite: 18.75 },
-  'claude-sonnet-4-6':          { input: 3,    output: 15,  cacheRead: 0.375, cacheWrite: 3.75  },
-  'claude-sonnet-4-5-20250929': { input: 3,    output: 15,  cacheRead: 0.375, cacheWrite: 3.75  },
-  'claude-haiku-4-5-20251001':  { input: 0.80, output: 4,   cacheRead: 0.08,  cacheWrite: 1.0   },
-};
+// Pricing imported from the shared module — keeps server-side cost rollup
+// and evaluator runner cost computation in lockstep.
 
 async function computeDailyCost() {
   const projectsDir = path.join(os.homedir(), '.claude', 'projects');
@@ -2011,14 +2008,11 @@ async function computeDailyCost() {
         const model = msg.model;
         const usage = msg.usage;
         if (!model || !usage) continue;
-        const p = MODEL_PRICING[model];
-        if (!p) continue;
-        const cost = (
-          (usage.input_tokens || 0) * p.input +
-          (usage.output_tokens || 0) * p.output +
-          (usage.cache_read_input_tokens || 0) * p.cacheRead +
-          (usage.cache_creation_input_tokens || 0) * p.cacheWrite
-        ) / 1_000_000;
+        // Use shared helper — same formula as the evaluator runner. Returns 0
+        // if the model isn't in MODEL_PRICING (no warn here; bulk session
+        // imports may include older models we don't price).
+        if (!MODEL_PRICING[model]) continue;
+        const cost = computeCostUsd(model, usage);
         if (!dailyCost[date]) dailyCost[date] = {};
         dailyCost[date][model] = (dailyCost[date][model] || 0) + cost;
       }
@@ -3164,6 +3158,181 @@ app.patch('/api/career/pipeline/job/:id/description', async (req, res) => {
       return res.status(400).json({ error: 'Invalid description', details: e.issues });
     }
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Evaluator: Stage A (Haiku) batch endpoint ─────────────────────────
+// Runs evaluateJobsStageA against currently-pending pipeline jobs (or a
+// caller-supplied jobIds subset). Mutates pipeline.json::jobs[i].evaluation
+// in place; idempotent (skips jobs that already have a stage_a entry).
+//
+// 4-way pipelineMutex from earlier rooms is now 5-way: scan + enrich +
+// manual-paste + PATCH /:id/description + this. All five acquire the same
+// lock — runs are serialized to avoid pipeline.json overwrite races.
+const EvaluateStageABodySchema = z.object({
+  jobIds: z.array(z.string().min(1)).optional().nullable(),
+});
+
+// Reads the user's default resume's base.md and returns its content as the
+// simplifiedCv input to Stage A's prompt builder. m1's prompt builder
+// already trims to 1500 chars in the system block, so no need to extract
+// here. If no default resume exists OR base.md is missing, returns ''
+// (m1 prompt handles this gracefully with "(no CV summary available)").
+async function readSimplifiedCvForStageA() {
+  try {
+    const idx = await readResumeIndex();
+    const def = (idx?.resumes ?? []).find((r) => r && r.is_default === true);
+    if (!def) return '';
+    const baseMd = path.join(resolveResumeDir(def.id), 'base.md');
+    if (!existsSync(baseMd)) return '';
+    const raw = await fs.readFile(baseMd, 'utf-8');
+    return typeof raw === 'string' ? raw : '';
+  } catch (e) {
+    console.warn('[stage-a] simplifiedCv read failed:', String(e?.message ?? e).slice(0, 200));
+    return '';
+  }
+}
+
+// ─── Evaluator: Stage A status + projected results for the UI ──────────
+// UI consumes this to render the Pipeline-tab StageABatch panel:
+// pending count drives the "Run Stage A on N pending" button enabled state;
+// `results` shows recently-evaluated jobs sorted by score desc (top 50).
+// Returning a projection (not full Job objects) keeps the payload small.
+app.get('/api/career/evaluate/stage-a/results', async (_req, res) => {
+  try {
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.json({ pending: 0, total: 0, results: [] });
+    }
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+    const pending = jobs.filter((j) => j && j.evaluation?.stage_a == null).length;
+    const evaluated = jobs.filter((j) => j && j.evaluation?.stage_a != null);
+    // Sort by score desc; archived/error rows fall to the bottom (null score
+    // → -Infinity).
+    evaluated.sort((a, b) => {
+      const sa = a.evaluation.stage_a.score ?? -Infinity;
+      const sb = b.evaluation.stage_a.score ?? -Infinity;
+      return sb - sa;
+    });
+    const results = evaluated.slice(0, 50).map((j) => ({
+      id: j.id,
+      company: j.company,
+      role: j.role,
+      url: j.url,
+      location: j.location,
+      score: j.evaluation.stage_a.score,
+      reason: j.evaluation.stage_a.reason,
+      status: j.evaluation.stage_a.status,
+      evaluated_at: j.evaluation.stage_a.evaluated_at,
+      cost_usd: j.evaluation.stage_a.cost_usd,
+      error: j.evaluation.stage_a.error ?? null,
+    }));
+    res.json({
+      total: jobs.length,
+      pending,
+      evaluated_count: evaluated.length,
+      results,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/career/evaluate/stage-a', async (req, res) => {
+  // Acquire the pipeline mutex BEFORE any I/O. Blocks scan-start, /enrich,
+  // and /scan/source the same way they block each other; symmetric.
+  const lock = acquirePipelineEnrichLock();
+  if (!lock.ok) {
+    return res.status(409).json({
+      error:
+        lock.reason === 'scan_running'
+          ? 'scan in progress; Stage A would race the scan write'
+          : 'another pipeline writer is running (enrich or earlier evaluate)',
+    });
+  }
+  try {
+    let body;
+    try {
+      body = EvaluateStageABodySchema.parse(req.body ?? {});
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid body', details: e.issues });
+    }
+
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.status(404).json({ error: 'pipeline.json does not exist' });
+    }
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+
+    let candidates;
+    if (Array.isArray(body.jobIds) && body.jobIds.length > 0) {
+      const wanted = new Set(body.jobIds);
+      candidates = jobs.filter((j) => j && wanted.has(j.id));
+    } else {
+      // All pending = no Stage A entry yet. Errored jobs (status === 'error')
+      // are NOT auto-retried — m4 UI clears the field first to retry.
+      candidates = jobs.filter((j) => j && (j.evaluation?.stage_a == null));
+    }
+
+    if (candidates.length === 0) {
+      return res.json({
+        total: 0,
+        evaluated: 0,
+        archived: 0,
+        errors: 0,
+        skipped: 0,
+        total_cost_usd: 0,
+      });
+    }
+
+    const prefs = await readPreferences();
+    const simplifiedCv = await readSimplifiedCvForStageA();
+    const result = await evaluateJobsStageA(candidates, prefs, { simplifiedCv });
+
+    // Map results back to jobs by id and mutate evaluation.stage_a in place.
+    // Spread the existing evaluation object so future stage_b siblings
+    // (06-evaluator/02) aren't clobbered.
+    const evaluatedAt = new Date().toISOString();
+    const resultsById = new Map(result.results.map((r) => [r.jobId, r]));
+    for (const job of candidates) {
+      const r = resultsById.get(job.id);
+      if (!r) continue;
+      const stageA = {
+        score: r.score ?? null,
+        reason: r.reason ?? null,
+        model: r.model,
+        evaluated_at: evaluatedAt,
+        cost_usd: r.cost_usd ?? 0,
+        status: r.status,
+      };
+      if (r.error) stageA.error = String(r.error).slice(0, 500);
+      job.evaluation = { ...(job.evaluation ?? {}), stage_a: stageA };
+    }
+
+    await atomicWriteFile(PIPELINE_FILE, JSON.stringify(pipeline, null, 2));
+
+    res.json({
+      total: candidates.length,
+      evaluated: result.evaluated,
+      archived: result.archived,
+      errors: result.errors,
+      skipped: result.skipped,
+      total_cost_usd: result.total_cost_usd,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  } finally {
+    releasePipelineEnrichLock();
   }
 });
 
