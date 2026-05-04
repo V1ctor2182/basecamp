@@ -1,12 +1,12 @@
 milestones: []
 current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-completion: 20  # avg(100, 0, 0, 0, 0) = 20 across 5 features (1/5 ROOMs ✅)
+completion: 24  # avg(100, 20, 0, 0, 0) = 24 across 5 features (1 ROOM ✅ + 1 in-progress 1/5)
 children_completion:
-  "01-stage-a-haiku": 100  # ✅ active — ROOM COMPLETE (4/4 milestones, ~2300 行)
-  "02-stage-b-sonnet": 0
+  "01-stage-a-haiku": 100  # ✅ ROOM COMPLETE (4/4 milestones, ~2300 行)
+  "02-stage-b-sonnet": 20  # 🔄 m1/5 done (stageBPrompt + parser, ~360 行 + smoke 33/33)
   "03-block-toggles": 0
   "04-budget-gate": 0
   "05-pipeline-ui": 0
-status_note: "🎉 01-stage-a-haiku COMPLETE (4/4 ms, ~2300 行). 06-evaluator 20% (1/5). Pipeline tab now has Haiku quick-eval panel. 下一个: 02-stage-b-sonnet (Sonnet 深评 + Block A-G report)."
-last_updated: "2026-05-03"
+status_note: "06-evaluator 24% (1 ROOM ✅ + 1 in-progress). 02-stage-b-sonnet m1/5 done — stageBPrompt + parser landed. 下一个: 02-stage-b-sonnet m2 (worker-pool runner + reports/ writer + cost) → m3 (Tools API: web_search + verify_job_posting) → m4 (schema + endpoint) → m5 (UI + ROOM COMPLETE)."
+last_updated: "2026-05-04"

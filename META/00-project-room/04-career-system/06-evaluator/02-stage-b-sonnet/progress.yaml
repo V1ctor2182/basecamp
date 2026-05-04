@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-stage-b-prompt-module"
     name: "Stage B prompt builder + block-aware system + tool-use-aware parser"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/evaluator/stageBPrompt.mjs"
       - "scripts/smoke-stage-b-prompt.mjs"
@@ -358,9 +358,18 @@ milestones:
         - Tailor Engine (future, separate epic): consumes report Block E
           via the report markdown file
 
-commits: []
+commits:
+  - hash: "PENDING"  # filled by followup commit
+    date: "2026-05-04"
+    message: "[04-career-system/06-evaluator/02-stage-b-sonnet] m1: stageBPrompt + smoke 33/33"
+    files_changed: 2
+    specs_affected:
+      - "intent-stage-b-sonnet-001 (anchors added: stageBPrompt module symbols)"
+      - "constraint-stage-b-sonnet-001 (anchors added: forced-on / cache / parser / fallback)"
+    milestones_affected:
+      - "m1-stage-b-prompt-module (→ completed)"
 
 current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-status_note: "Plan 完成 (2026-05-04). 5 milestones, ~1530 行. 11 OQs all locked at recommended: spec naming wins (OQ-1), A always-on/B+E locked (OQ-2), reports/{jobId}.md gitignored (OQ-3), Sonnet emits final score (OQ-4), Anthropic hosted WebSearch (OQ-5), local Playwright tool (OQ-6), concurrency 3 (OQ-7), v1 default resume (OQ-8), 5-entry qa-bank few-shot (OQ-9), idempotent skip-if-evaluated (OQ-10), no v1 budget enforcement (OQ-11)."
+status_note: "🟢 m1 complete (1/5). stageBPrompt.mjs (~360) + smoke 33/33. Plan-agent review applied 4 HIGH fixes (mid-line total → anchored full-line, decimal denom .0 leak, bold-wrapped headers, colon dash variant) + H3 fallback. Codex CLI quota-blocked. All 21 smoke files green + vite build clean. 02-stage-b-sonnet 0% → 20%. 下一个: m2-stage-b-runner-cost-reports (worker-pool concurrency=3 + atomic reports/ writer + cost recording)."
 last_updated: "2026-05-04"
