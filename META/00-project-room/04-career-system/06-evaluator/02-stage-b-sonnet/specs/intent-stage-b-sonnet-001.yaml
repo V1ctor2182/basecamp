@@ -52,5 +52,17 @@ anchors:
       - "verifyJobPostingHandler"
       - "runToolUseLoop"
     description: "Anthropic Tools API integration (m3, first project use): hosted web_search_20250305 (Block D) + local verify_job_posting handler backed by pageScraper (Block G); multi-turn tool-use loop with cross-round usage aggregation, pause_turn handling, server_tool_use.web_search_requests tracking, max-rounds cap, content sanitization on echo-back"
+  - file: "src/career/lib/jobSchema.mjs"
+    symbols:
+      - "EvaluationStageBSchema"
+      - "EvaluationSchema"
+    description: "Stage B per-job evaluation schema (m4): total_score / report_path / blocks_emitted / web_search_requests / tool_rounds_used / status (NO 'archived'). Sibling to stage_a; preserves spread-mutation pattern; existing pipeline.json jobs without stage_b coerce to null via Zod default."
+  - file: "server.mjs"
+    symbols:
+      - "EvaluateStageBBodySchema"
+      - "resolveStageBConsiderThreshold"
+      - "JOB_ID_PATH_RE"
+      - "STAGE_B_REPORTS_DIR"
+    description: "Stage B HTTP endpoints (m4): POST /api/career/evaluate/stage-b (6-way pipelineMutex; threshold gate; jobIds bypass) + GET /results (projection) + GET /report/:jobId (path-traversal-safe disk read built from validated jobId)"
 created_at: "2026-04-22"
 updated_at: "2026-05-05"

@@ -199,7 +199,7 @@ milestones:
 
   - id: "m4-schema-and-endpoint"
     name: "Job.evaluation.stage_b schema + POST /api/career/evaluate/stage-b"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/lib/jobSchema.mjs"
       - "server.mjs"
@@ -384,8 +384,16 @@ commits:
       - "intent-stage-b-sonnet-001 (anchors extended: stageBTools.mjs)"
     milestones_affected:
       - "m3-tools-websearch-playwright (→ completed)"
+  - hash: "PENDING"  # filled by m4 followup
+    date: "2026-05-05"
+    message: "[04-career-system/06-evaluator/02-stage-b-sonnet] m4: schema + endpoint + 6-way mutex (smoke 15)"
+    files_changed: 4
+    specs_affected:
+      - "intent-stage-b-sonnet-001 (anchors extended: server.mjs Stage B endpoint + EvaluationStageBSchema)"
+    milestones_affected:
+      - "m4-schema-and-endpoint (→ completed)"
 
 current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-status_note: "🟢 m3 complete (3/5). stageBTools.mjs (~280) — first project use of Anthropic Tools API. Hosted web_search_20250305 (Block D) + local verify_job_posting handler backed by pageScraper.mjs (Block G, 30s Promise.race timeout). Multi-turn loop: stop_reason='tool_use'|'pause_turn' → execute local handlers in parallel via Promise.all → echo sanitized assistant content + user(tool_result) → re-call. Aggregates usage cross-round (server_tool_use.web_search_requests + token totals); mutates final resp.usage in-place. maxRounds=5 cap. Runner integration: paramsWithTools, _toolHandlers + _maxToolRounds DI seams, web_search_requests + tool_rounds_used threaded into result + cost record. 19 new tools smoke + 2 runner integration smoke (33+18+15+19+13=98 stage-b asserts; m2 still green). Plan-agent review: applied 5 HIGH (pause_turn loop continuation, web_search_tool_result NOT echoed back, is_error defaults true on malformed handler return, tool_use id validation, tools spread order) + 1 MEDIUM (tool_rounds_used ?? 0 instead of ?? 1). Codex still quota-blocked. All 24 smoke files green + vite build clean. 02-stage-b-sonnet 40% → 60%. 下一个: m4 (Job.evaluation.stage_b schema + POST /evaluate/stage-b endpoint + 6-way pipelineMutex + GET /results /report)."
+status_note: "🟢 m4 complete (4/5). EvaluationStageBSchema (sibling to stage_a, preserves spread-mutation pattern; existing pipeline.json jobs without stage_b coerce to null via Zod default) + 3 endpoints in server.mjs: POST /evaluate/stage-b (6-way pipelineMutex extending m1 5-way; threshold gate stage_a.score >= prefs.thresholds.consider default 3.5; jobIds bypasses gate for force-rerun); GET /results (projection sorted by total_score desc top 50, pending count, threshold echo); GET /report/:jobId (jobId regex validated; reads disk content built from validated jobId — IGNORES stored report_path field for path-traversal defense). 15 new endpoint smoke (113 total stage-b asserts). Plan-agent review applied 1 CRITICAL fix: GET /report/:jobId originally did `path.resolve('.', stageB.report_path)` — pipeline.json with malicious report_path could exfiltrate any file. Fixed: build reportFile from validated jobId; ignore stored report_path; defense-in-depth startsWith check. Smoke +1 verifies /etc/passwd in pipeline.json yields 404. Codex still quota-blocked. All 25 smoke files green + vite build clean. 02-stage-b-sonnet 60% → 80%. 下一个: m5 (StageBBatch UI panel + ReportViewer modal + Preferences A-G block toggles + ROOM COMPLETE → 06-evaluator 32% → 40%)."
 last_updated: "2026-05-05"

@@ -33,6 +33,7 @@ import { shouldEnrich } from './src/career/finder/atsByUrl.mjs';
 import { startScheduler, stopScheduler } from './src/career/finder/scheduler.mjs';
 import { MODEL_PRICING, computeCostUsd } from './src/career/lib/anthropicPricing.mjs';
 import { evaluateJobsStageA } from './src/career/evaluator/stageARunner.mjs';
+import { evaluateJobsStageB } from './src/career/evaluator/stageBRunner.mjs';
 import {
   readCadenceState,
   cadenceToMs,
@@ -3328,6 +3329,255 @@ app.post('/api/career/evaluate/stage-a', async (req, res) => {
       errors: result.errors,
       skipped: result.skipped,
       total_cost_usd: result.total_cost_usd,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  } finally {
+    releasePipelineEnrichLock();
+  }
+});
+
+// ─── Evaluator: Stage B (Sonnet) batch endpoint ────────────────────────
+// Runs evaluateJobsStageB against stage-A-passing pending jobs (or a
+// caller-supplied jobIds subset). Threshold-gated: only jobs with
+// stage_a.score >= prefs.thresholds.consider get the $0.30 deep eval.
+//
+// Mutex pattern matches Stage A — pipelineMutex is now 6-way: scan +
+// enrich + manual-paste + PATCH /:id/description + /evaluate/stage-a +
+// /evaluate/stage-b. All six serialize via the same lock.
+//
+// Mutation: spread {...evaluation, stage_b: r} preserves the stage_a
+// sibling. The runner has already written the report markdown atomically
+// to data/career/reports/{jobId}.md before returning.
+const EvaluateStageBBodySchema = z.object({
+  jobIds: z.array(z.string().min(1)).optional().nullable(),
+});
+
+// Threshold default lives in prefs.thresholds.consider; if missing or
+// non-numeric, fall back to 3.5 (matches stage-a-haiku Room defaults).
+function resolveStageBConsiderThreshold(prefs) {
+  const v = Number(prefs?.thresholds?.consider);
+  return Number.isFinite(v) ? v : 3.5;
+}
+
+// JobSchema.id regex; reused at the report-serving endpoint as a
+// path-traversal guard (defense in depth — runner already validates).
+const JOB_ID_PATH_RE = /^[a-f0-9]{12}$/;
+
+// ─── Stage B: results projection for the UI ─────────────────────────────
+app.get('/api/career/evaluate/stage-b/results', async (_req, res) => {
+  try {
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.json({ pending: 0, total: 0, evaluated_count: 0, results: [] });
+    }
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+    const prefs = await readPreferences();
+    const threshold = resolveStageBConsiderThreshold(prefs);
+
+    // Pending = stage_a evaluated, score >= threshold, AND stage_b == null
+    const pending = jobs.filter(
+      (j) =>
+        j &&
+        j.evaluation?.stage_a?.status === 'evaluated' &&
+        (j.evaluation.stage_a.score ?? 0) >= threshold &&
+        j.evaluation.stage_b == null
+    ).length;
+
+    const evaluated = jobs.filter((j) => j && j.evaluation?.stage_b != null);
+    evaluated.sort((a, b) => {
+      const sa = a.evaluation.stage_b.total_score ?? -Infinity;
+      const sb = b.evaluation.stage_b.total_score ?? -Infinity;
+      return sb - sa;
+    });
+    const results = evaluated.slice(0, 50).map((j) => ({
+      id: j.id,
+      company: j.company,
+      role: j.role,
+      url: j.url,
+      location: j.location,
+      total_score: j.evaluation.stage_b.total_score,
+      blocks_emitted: j.evaluation.stage_b.blocks_emitted ?? [],
+      report_path: j.evaluation.stage_b.report_path,
+      status: j.evaluation.stage_b.status,
+      evaluated_at: j.evaluation.stage_b.evaluated_at,
+      cost_usd: j.evaluation.stage_b.cost_usd,
+      web_search_requests: j.evaluation.stage_b.web_search_requests ?? 0,
+      tool_rounds_used: j.evaluation.stage_b.tool_rounds_used ?? 0,
+      error: j.evaluation.stage_b.error ?? null,
+    }));
+    res.json({
+      total: jobs.length,
+      pending,
+      evaluated_count: evaluated.length,
+      threshold,
+      results,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Stage B: serve report markdown to the UI ──────────────────────────
+// GET /api/career/evaluate/stage-b/report/:jobId
+// Validates jobId against the canonical regex, then reads the file from
+// disk. The on-disk path is computed from the validated jobId — we IGNORE
+// the report_path field stored in pipeline.json to defeat any path-traversal
+// attempt via a hand-edited or compromised pipeline.json (e.g.
+// report_path: '/etc/passwd' or '../../secret').
+const STAGE_B_REPORTS_DIR = path.resolve('data', 'career', 'reports');
+
+app.get('/api/career/evaluate/stage-b/report/:jobId', async (req, res) => {
+  const jobId = req.params?.jobId;
+  if (typeof jobId !== 'string' || !JOB_ID_PATH_RE.test(jobId)) {
+    return res.status(400).json({ error: 'invalid jobId' });
+  }
+  try {
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.status(404).json({ error: 'pipeline.json does not exist' });
+    }
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+    const job = jobs.find((j) => j && j.id === jobId);
+    if (!job) return res.status(404).json({ error: 'job not found' });
+    const stageB = job.evaluation?.stage_b;
+    if (!stageB || !stageB.report_path) {
+      return res.status(404).json({ error: 'no stage_b report for this job' });
+    }
+
+    // Build path from validated jobId (NOT from stored report_path) and
+    // verify the resolved path stays inside REPORTS_DIR (defense in depth).
+    const reportFile = path.join(STAGE_B_REPORTS_DIR, `${jobId}.md`);
+    if (!reportFile.startsWith(STAGE_B_REPORTS_DIR + path.sep)) {
+      return res.status(400).json({ error: 'invalid report path' });
+    }
+    if (!existsSync(reportFile)) {
+      return res.status(404).json({ error: 'report file missing on disk' });
+    }
+    const content = await fs.readFile(reportFile, 'utf-8');
+    res.json({
+      content,
+      evaluated_at: stageB.evaluated_at,
+      total_score: stageB.total_score ?? null,
+      blocks_emitted: stageB.blocks_emitted ?? [],
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Stage B: POST /evaluate/stage-b — run deep eval batch ──────────────
+app.post('/api/career/evaluate/stage-b', async (req, res) => {
+  // Acquire pipelineMutex BEFORE any I/O. Same lock as scan / enrich /
+  // manual-paste / PATCH / stage-a — the 6-way mutex.
+  const lock = acquirePipelineEnrichLock();
+  if (!lock.ok) {
+    return res.status(409).json({
+      error:
+        lock.reason === 'scan_running'
+          ? 'scan in progress; Stage B would race the scan write'
+          : 'another pipeline writer is running (enrich, stage-a, or stage-b)',
+    });
+  }
+  try {
+    let body;
+    try {
+      body = EvaluateStageBBodySchema.parse(req.body ?? {});
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid body', details: e.issues });
+    }
+
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.status(404).json({ error: 'pipeline.json does not exist' });
+    }
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+
+    const prefs = await readPreferences();
+    const threshold = resolveStageBConsiderThreshold(prefs);
+
+    let candidates;
+    if (Array.isArray(body.jobIds) && body.jobIds.length > 0) {
+      // jobIds-supplied path: pick exactly those (skip stage_a/threshold gate
+      // — caller is explicitly requesting; runner's idempotency still skips
+      // anything already with stage_b set).
+      const wanted = new Set(body.jobIds);
+      candidates = jobs.filter((j) => j && wanted.has(j.id));
+    } else {
+      // All-pending path: stage_a evaluated AND score >= threshold AND stage_b
+      // not yet set. Errored stage_a rows are excluded (their score is null).
+      candidates = jobs.filter(
+        (j) =>
+          j &&
+          j.evaluation?.stage_a?.status === 'evaluated' &&
+          (j.evaluation.stage_a.score ?? 0) >= threshold &&
+          j.evaluation.stage_b == null
+      );
+    }
+
+    if (candidates.length === 0) {
+      return res.json({
+        total: 0,
+        evaluated: 0,
+        errors: 0,
+        skipped: 0,
+        total_cost_usd: 0,
+        total_web_search_requests: 0,
+        threshold,
+      });
+    }
+
+    const result = await evaluateJobsStageB(candidates, prefs);
+
+    // Map results back to jobs by id and mutate evaluation.stage_b in place.
+    // Spread the existing evaluation object so stage_a sibling isn't clobbered.
+    const evaluatedAt = new Date().toISOString();
+    const resultsById = new Map(result.results.map((r) => [r.jobId, r]));
+    let totalWebSearchRequests = 0;
+    for (const job of candidates) {
+      const r = resultsById.get(job.id);
+      if (!r) continue;
+      const stageB = {
+        total_score: r.total_score ?? null,
+        report_path: r.report_path ?? null,
+        blocks_emitted: r.blocks_emitted ?? [],
+        model: r.model,
+        evaluated_at: evaluatedAt,
+        cost_usd: r.cost_usd ?? 0,
+        web_search_requests: r.web_search_requests ?? 0,
+        tool_rounds_used: r.tool_rounds_used ?? 0,
+        status: r.status,
+      };
+      if (r.error) stageB.error = String(r.error).slice(0, 500);
+      job.evaluation = { ...(job.evaluation ?? {}), stage_b: stageB };
+      totalWebSearchRequests += stageB.web_search_requests;
+    }
+
+    await atomicWriteFile(PIPELINE_FILE, JSON.stringify(pipeline, null, 2));
+
+    res.json({
+      total: candidates.length,
+      evaluated: result.evaluated,
+      errors: result.errors,
+      skipped: result.skipped,
+      total_cost_usd: result.total_cost_usd,
+      total_web_search_requests: totalWebSearchRequests,
+      threshold,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });

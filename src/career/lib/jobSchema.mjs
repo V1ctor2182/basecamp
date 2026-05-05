@@ -44,12 +44,38 @@ export const EvaluationStageASchema = z
   .nullable()
   .default(null);
 
-// Wraps stage_a + reserves room for stage_b (06-evaluator/02). Future stages
-// add sibling fields here without touching the main JobSchema.
+// Stage B (Sonnet) per-Job evaluation result. Written by 06-evaluator/02's
+// POST /api/career/evaluate/stage-b endpoint. Status enum has NO 'archived' —
+// Stage B's threshold gate (only stage_a passers deserve a $0.30 deep eval)
+// lives at the endpoint level, not in the runner.
+//
+// `report_path` is the relative path to the rendered markdown report
+// (data/career/reports/{jobId}.md). Null on error rows.
+// `web_search_requests` counts hosted web_search_20250305 calls (pricing
+// deferred to 04-budget-gate; 0 today).
+export const EvaluationStageBSchema = z
+  .object({
+    total_score: z.number().min(1).max(5).nullable(),
+    report_path: z.string().nullable(),
+    blocks_emitted: z.array(z.string()).default([]),
+    model: z.string().max(100),
+    evaluated_at: z.string().datetime(),
+    cost_usd: z.number().nonnegative(),
+    web_search_requests: z.number().int().nonnegative().default(0),
+    tool_rounds_used: z.number().int().nonnegative().default(0),
+    status: z.enum(['evaluated', 'error']),
+    error: z.string().max(500).optional(),
+  })
+  .nullable()
+  .default(null);
+
+// Wraps stage_a + stage_b. Future stages add sibling fields here without
+// touching the main JobSchema. Existing pipeline.json jobs without these
+// fields coerce to null via the inner default.
 export const EvaluationSchema = z
   .object({
     stage_a: EvaluationStageASchema,
-    // stage_b: reserved for 06-evaluator/02-stage-b-sonnet
+    stage_b: EvaluationStageBSchema,
   })
   .nullable()
   .default(null);

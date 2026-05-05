@@ -1,12 +1,12 @@
 milestones: []
 current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-completion: 32  # avg(100, 60, 0, 0, 0) = 32 across 5 features (1 ROOM ✅ + 1 in-progress 3/5)
+completion: 36  # avg(100, 80, 0, 0, 0) = 36 across 5 features (1 ROOM ✅ + 1 in-progress 4/5)
 children_completion:
   "01-stage-a-haiku": 100  # ✅ ROOM COMPLETE (4/4 milestones, ~2300 行)
-  "02-stage-b-sonnet": 60  # 🔄 m3/5 done (prompt + runner + cvBundle + tools loop, ~1100 行 + 98 smoke asserts)
+  "02-stage-b-sonnet": 80  # 🔄 m4/5 done (prompt + runner + cvBundle + tools + schema/endpoint, ~1300 行 + 113 smoke asserts)
   "03-block-toggles": 0
   "04-budget-gate": 0
   "05-pipeline-ui": 0
-status_note: "06-evaluator 32% (1 ROOM ✅ + 1 in-progress 3/5). 02-stage-b-sonnet m3/5 done — Anthropic Tools API integration landed (first project use). 下一个: m4 (Job.evaluation.stage_b schema + POST /evaluate/stage-b endpoint + 6-way mutex) → m5 (UI + ROOM COMPLETE)."
+status_note: "06-evaluator 36% (1 ROOM ✅ + 1 in-progress 4/5). 02-stage-b-sonnet m4/5 done — schema + endpoint + 6-way mutex + path-traversal-safe report serving. 下一个: m5 (UI + Preferences A-G toggles + ROOM COMPLETE → 06-evaluator 36% → 40%)."
 last_updated: "2026-05-05"
