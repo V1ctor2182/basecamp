@@ -17,6 +17,64 @@ provenance:
   confidence: 0.9
   source_ref: "career-architecture/05-evaluator.md#stage-b-sonnet-深评 + block-a-g"
 relations: []
-anchors: []
+anchors:
+  - file: "src/career/evaluator/stageBPrompt.mjs"
+    symbols:
+      - "STAGE_B_MODEL"
+      - "BLOCK_KEYS"
+      - "BLOCK_CONFIG"
+      - "FORCED_ON_BLOCKS"
+      - "buildSystemBlock"
+      - "buildUserMessage"
+      - "buildStageBPrompt"
+      - "resolveEnabledBlocks"
+      - "extractBlocks"
+      - "parseStageBResponse"
+      - "concatTextBlocks"
+    description: "Stage B Sonnet prompt builder + tool-aware parser (m1)"
+  - file: "src/career/evaluator/stageBRunner.mjs"
+    symbols:
+      - "evaluateJobsStageB"
+      - "STATUS"
+      - "defaultWriteReport"
+      - "STAGE_B_CALLER"
+    description: "Stage B worker-pool runner: concurrency=3, DI seam, atomic reports/ writer, idempotent skip, retry on 5xx/429/408 (m2)"
+  - file: "src/career/evaluator/cvBundle.mjs"
+    symbols:
+      - "loadCvBundle"
+    description: "CV-bundle loader: default resume base.md + narrative + proof-points + identity + last 5 qa-bank entries; graceful on missing files (m2; shared with m4 endpoint + future Tailor Engine)"
+  - file: "src/career/evaluator/stageBTools.mjs"
+    symbols:
+      - "WEB_SEARCH_TOOL"
+      - "VERIFY_JOB_POSTING_TOOL"
+      - "STAGE_B_TOOLS"
+      - "LOCAL_TOOL_HANDLERS"
+      - "verifyJobPostingHandler"
+      - "runToolUseLoop"
+    description: "Anthropic Tools API integration (m3, first project use): hosted web_search_20250305 (Block D) + local verify_job_posting handler backed by pageScraper (Block G); multi-turn tool-use loop with cross-round usage aggregation, pause_turn handling, server_tool_use.web_search_requests tracking, max-rounds cap, content sanitization on echo-back"
+  - file: "src/career/lib/jobSchema.mjs"
+    symbols:
+      - "EvaluationStageBSchema"
+      - "EvaluationSchema"
+    description: "Stage B per-job evaluation schema (m4): total_score / report_path / blocks_emitted / web_search_requests / tool_rounds_used / status (NO 'archived'). Sibling to stage_a; preserves spread-mutation pattern; existing pipeline.json jobs without stage_b coerce to null via Zod default."
+  - file: "server.mjs"
+    symbols:
+      - "EvaluateStageBBodySchema"
+      - "resolveStageBConsiderThreshold"
+      - "JOB_ID_PATH_RE"
+      - "STAGE_B_REPORTS_DIR"
+    description: "Stage B HTTP endpoints (m4): POST /api/career/evaluate/stage-b (6-way pipelineMutex; threshold gate; jobIds bypass) + GET /results (projection) + GET /report/:jobId (path-traversal-safe disk read built from validated jobId)"
+  - file: "src/career/evaluator/StageBBatch.tsx"
+    symbols:
+      - "default"
+    description: "StageBBatch Pipeline-tab panel (m5): pending count, Run Stage B button, per-row score+blocks+tools chips, View Report opens ReportViewer modal. 30s polling with abort-on-unmount."
+  - file: "src/career/evaluator/ReportViewer.tsx"
+    symbols:
+      - "default"
+    description: "ReportViewer modal (m5): GETs /report/:jobId, renders markdown via react-markdown + remark-gfm. role=dialog + aria-modal + Esc dismiss + click-outside-to-close."
+  - file: "src/career/Pipeline.tsx"
+    description: "Mounts <StageBBatch /> below <StageABatch /> in the Pipeline tab (m5)."
+  - file: "src/career/settings/Preferences.tsx"
+    description: "BLOCK_META updated to canonical A-G (Block A info-only 'Always rendered'; B/E locked 'Required by Tailor'; D/F/G toolHint badges); load-time coercion forces saved block_b/block_e to true. (m5)"
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-05"

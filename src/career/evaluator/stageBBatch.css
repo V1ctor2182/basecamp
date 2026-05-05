@@ -1,0 +1,328 @@
+/* Stage B batch panel — mirrors StageABatch styling but with sbb- prefix
+ * to keep selectors scoped. Same warm + Lucide design language. */
+
+.sbb-card {
+  border: 1px solid #f5f5f4;
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.sbb-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.sbb-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.sbb-title h3 { margin: 0; font-size: 16px; font-weight: 600; }
+
+.sbb-pending-badge,
+.sbb-done-badge,
+.sbb-empty-badge {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+.sbb-pending-badge { color: #92400e; background: #fef3c7; }
+.sbb-done-badge    { color: #14532d; background: #d1fae5; }
+.sbb-empty-badge   { color: #57534e; background: #f5f5f4; }
+
+.sbb-threshold-hint {
+  font-size: 11px;
+  color: #a8a29e;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  padding: 2px 6px;
+  border: 1px solid #f5f5f4;
+  border-radius: 4px;
+}
+
+.sbb-actions { display: flex; gap: 8px; align-items: center; }
+.sbb-refresh {
+  background: transparent;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  color: #57534e;
+}
+.sbb-refresh:hover { background: #fafaf9; color: #1c1917; }
+
+.sbb-run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 7px 14px;
+  border: 1px solid #1c1917;
+  background: #1c1917;
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.sbb-run-btn:hover:not(:disabled) { background: #292524; }
+.sbb-run-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: #a8a29e;
+  border-color: #a8a29e;
+}
+
+.sbb-spin { animation: sbb-spin 1s linear infinite; }
+@keyframes sbb-spin { to { transform: rotate(360deg); } }
+
+.sbb-loading,
+.sbb-empty {
+  padding: 24px;
+  text-align: center;
+  color: #78716c;
+  background: #fafaf9;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.sbb-error {
+  display: flex; align-items: center; gap: 6px;
+  color: #b91c1c; background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 8px 12px; border-radius: 6px;
+  font-size: 13px;
+}
+.sbb-toast-ok,
+.sbb-toast-error {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 8px 12px;
+  border-radius: 6px; margin-bottom: 12px;
+}
+.sbb-toast-ok    { color: #14532d; background: #d1fae5; border: 1px solid #a7f3d0; }
+.sbb-toast-error { color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; }
+
+.sbb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.sbb-table th,
+.sbb-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f5f5f4;
+  vertical-align: top;
+}
+.sbb-table th {
+  color: #78716c;
+  font-weight: 500;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sbb-table tbody tr:last-child td { border-bottom: none; }
+
+.sbb-row-error    { background: #fef2f2; }
+
+.sbb-role { font-weight: 500; color: #1c1917; }
+.sbb-meta { color: #78716c; font-size: 12px; margin-top: 2px; }
+.sbb-reason-error {
+  color: #b91c1c;
+  font-size: 12px;
+  display: inline-block;
+  max-width: 280px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.sbb-blocks { display: flex; flex-wrap: wrap; gap: 4px; max-width: 220px; }
+.sbb-block-chip {
+  display: inline-flex; align-items: center;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px; font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #e7e5e4;
+  color: #44403c;
+}
+
+.sbb-tools { display: flex; flex-wrap: wrap; gap: 4px; }
+.sbb-tool-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.sbb-row-actions {
+  display: flex; gap: 6px; align-items: center;
+}
+.sbb-btn-link {
+  display: inline-flex; align-items: center;
+  padding: 5px 8px; border: 1px solid #e7e5e4;
+  background: #fff; color: #57534e;
+  border-radius: 4px; text-decoration: none;
+}
+.sbb-btn-link:hover { background: #fafaf9; color: #1c1917; }
+
+.sbb-view-report {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; padding: 5px 10px;
+  border: 1px solid #e7e5e4;
+  background: #fff; color: #44403c;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.sbb-view-report:hover:not(:disabled) {
+  background: #fafaf9;
+  border-color: #1c1917;
+  color: #1c1917;
+}
+.sbb-view-report:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sbb-score {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px; font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.sbb-score-strong   { color: #14532d; background: #d1fae5; }
+.sbb-score-worth    { color: #92400e; background: #fef3c7; }
+.sbb-score-consider { color: #57534e; background: #e7e5e4; }
+.sbb-score-archived { color: #a8a29e; background: #f5f5f4; }
+.sbb-score-error    { color: #b91c1c; background: #fef2f2; }
+
+/* ── ReportViewer modal ──────────────────────────────────────────────── */
+.sbb-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(28, 25, 23, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+.sbb-modal {
+  background: #fff;
+  border-radius: 12px;
+  max-width: 900px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+.sbb-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f5f5f4;
+}
+.sbb-modal-title {
+  display: flex; align-items: center; gap: 12px;
+  flex: 1;
+}
+.sbb-modal-title h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.sbb-modal-score {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 13px; font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  color: #14532d;
+  background: #d1fae5;
+}
+.sbb-modal-blocks {
+  font-size: 12px;
+  color: #78716c;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.sbb-modal-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #78716c;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+}
+.sbb-modal-close:hover { background: #fafaf9; color: #1c1917; }
+
+.sbb-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+.sbb-modal-loading,
+.sbb-modal-error {
+  display: flex; align-items: center; gap: 8px;
+  padding: 24px;
+  color: #78716c;
+  font-size: 13px;
+  justify-content: center;
+}
+.sbb-modal-error { color: #b91c1c; }
+
+.sbb-modal-markdown {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1c1917;
+}
+.sbb-modal-markdown h1 { font-size: 22px; margin-top: 0; margin-bottom: 16px; }
+.sbb-modal-markdown h2 { font-size: 18px; margin-top: 24px; margin-bottom: 12px; padding-bottom: 4px; border-bottom: 1px solid #f5f5f4; }
+.sbb-modal-markdown h3 { font-size: 15px; margin-top: 20px; margin-bottom: 8px; }
+.sbb-modal-markdown p { margin: 8px 0; }
+.sbb-modal-markdown ul,
+.sbb-modal-markdown ol { padding-left: 24px; margin: 8px 0; }
+.sbb-modal-markdown li { margin: 4px 0; }
+.sbb-modal-markdown code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  background: #f5f5f4;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.sbb-modal-markdown pre {
+  background: #fafaf9;
+  border: 1px solid #f5f5f4;
+  border-radius: 6px;
+  padding: 12px;
+  overflow-x: auto;
+}
+.sbb-modal-markdown pre code { background: transparent; padding: 0; }
+.sbb-modal-markdown blockquote {
+  border-left: 3px solid #e7e5e4;
+  padding-left: 12px;
+  color: #57534e;
+  margin: 8px 0;
+}
+.sbb-modal-markdown table {
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+.sbb-modal-markdown th,
+.sbb-modal-markdown td {
+  border: 1px solid #f5f5f4;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.sbb-modal-markdown th {
+  background: #fafaf9;
+  font-weight: 600;
+}
+.sbb-modal-markdown strong { font-weight: 600; }
+
+.sbb-modal-footer {
+  padding: 12px 24px;
+  border-top: 1px solid #f5f5f4;
+  font-size: 12px;
+  color: #78716c;
+  text-align: right;
+}

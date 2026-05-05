@@ -17,6 +17,14 @@ provenance:
   confidence: 0.9
   source_ref: "career-architecture/05-evaluator.md#block-启用开关 + llm-strategy.md"
 relations: []
-anchors: []
+anchors:
+  - file: "src/career/evaluator/stageBPrompt.mjs"
+    symbols:
+      - "FORCED_ON_BLOCKS"            # constraint #1: A/B/E forced-on enforcement
+      - "resolveEnabledBlocks"        # honors forced-on regardless of toggle
+      - "buildSystemBlock"            # constraint #2: cache_control:ephemeral
+      - "BLOCK_HEADER_RE_G"           # constraint #4: `## Block X — Title` parser
+      - "STAGE_B_INSTRUCTIONS_HEAD"   # constraint #3: confidence:low fallback directive
+    description: "Constraint enforcement points: forced-on blocks (#1), prompt-cache marker (#2), tool-fail fallback directive (#3), Block A-G format (#4)"
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-04"

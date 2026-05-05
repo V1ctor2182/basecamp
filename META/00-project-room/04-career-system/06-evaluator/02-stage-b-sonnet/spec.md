@@ -23,6 +23,46 @@ Block B 和 Block E 必须始终启用（下游依赖） + prompt caching 必开
 - [intent-stage-b-sonnet-001](specs/intent-stage-b-sonnet-001.yaml) — Sonnet 深评（Stage B）：完整 A-G Block 报告 + 总分 + prompt caching
 - [constraint-stage-b-sonnet-001](specs/constraint-stage-b-sonnet-001.yaml) — Block B 和 Block E 必须始终启用（下游依赖） + prompt caching 必开
 
+## 当前进度 — 🎉 ROOM COMPLETE (2026-05-05, 5/5, 100%)
+
+5 milestones, ~1530 行. 11 OQs all locked at recommended values. **First project use of Anthropic Tools API** (m3).
+
+- ✅ **m1-stage-b-prompt-module** (~360 + smoke ~390, **33/33 green**) — `stageBPrompt.mjs`: STAGE_B_MODEL=claude-sonnet-4-6, BLOCK_KEYS frozen A-G, FORCED_ON_BLOCKS=[A,B,E], `buildSystemBlock` with cache_control:ephemeral, `buildUserMessage` JD-only, `extractBlocks` regex-tolerant of em/en/hyphen/colon dash + bold-wrap + H3, `parseStageBResponse` ignores tool_use blocks. Plan-agent review applied 4 HIGH fixes (anchored total-line / decimal denom / bold headers / colon variant) + H3 fallback. Codex quota-blocked.
+- ✅ **m2-stage-b-runner-cost-reports** (~360 + cvBundle ~110 + smokes 18 + 13, **all green**) — `stageBRunner.mjs`: worker-pool concurrency=3, DI seam (`_client`/`_recordCost`/`_sleep`/`_writeReport`/`cvBundle`), atomic tmp+rename writer, idempotent skip, retry on 5xx/429/408, NEVER throws. Rejects degenerate Sonnet responses (missing total_score or forced-on blocks). `cvBundle.mjs`: graceful loader for default resume + narrative + proof-points + identity + last 5 qa-bank entries. Plan-agent review applied 4 HIGH/CRITICAL (degenerate→error, jobId path-traversal validation, exported `concatTextBlocks` for parser-writer single source of truth, NaN cost guard) + 4 MEDIUM (hoisted getClient fail-fast, forward-slash report_path, tmp cleanup on rename failure, wrapped loadCvBundle for non-ENOENT).
+- ✅ **m3-tools-websearch-playwright** (~280 + smoke ~480, 19 new asserts + 2 runner integration) — `stageBTools.mjs` first project use of Anthropic Tools API. Hosted `web_search_20250305` (Block D, ~$0.025/search, max_uses=2) + local `verify_job_posting` handler (Block G, 30s Promise.race timeout, backed by `pageScraper.mjs`). `runToolUseLoop` orchestrates multi-turn: stop_reason `tool_use`|`pause_turn` → execute local handlers in parallel → echo sanitized content (drops `web_search_tool_result` server-result blocks) + tool_result back → re-call. Aggregates usage cross-round (mutates final resp.usage in place). `max_uses_exceeded` flag + 5-round cap. Runner integration: `_toolHandlers` / `_maxToolRounds` DI seams, `web_search_requests` + `tool_rounds_used` threaded into result + cost record. Plan-agent review applied 5 HIGH fixes: pause_turn continuation, sanitize assistant echo (drop `web_search_tool_result`), `is_error` defaults true on malformed handler return (`null`/`undefined`/missing-`ok`), tool_use id validation, tools spread order; + 1 MEDIUM: `tool_rounds_used ?? 0`.
+- ✅ **m4-schema-and-endpoint** (~190 server.mjs + ~25 jobSchema.mjs + smoke ~590, **15 asserts green**) — `EvaluationStageBSchema` sibling to stage_a (preserves spread-mutation; existing pipeline.json jobs coerce to null). 3 endpoints: POST `/evaluate/stage-b` (6-way pipelineMutex; threshold gate `stage_a.score >= prefs.thresholds.consider` default 3.5; jobIds bypass for force-rerun), GET `/results` (projection sorted by total_score desc top 50, pending count, threshold echo), GET `/report/:jobId` (jobId regex validated; reads disk content built from validated jobId — IGNORES stored report_path field for path-traversal defense, defense-in-depth startsWith check). Plan-agent review applied 1 CRITICAL fix: original `path.resolve('.', stageB.report_path)` would have allowed pipeline.json to specify `/etc/passwd` and exfiltrate any file. Smoke +1 verifies attack returns 404.
+- ✅ **m5-stage-b-ui-and-room-complete** (~270 StageBBatch + ~75 ReportViewer + ~290 css + Preferences A-G + Pipeline mount + smoke 6, **all green**) — `<StageBBatch />` Pipeline-tab panel (pending count + Run button + score/blocks/tools chips per row + View Report opens modal) + `<ReportViewer />` modal (react-markdown + remark-gfm + role=dialog + aria-modal + Esc dismiss + click-outside) + Preferences canonical A-G block toggles (Block A info-only "Always rendered"; B/E locked-on "Required by Tailor"; D/F/G show toolHint badge for `web_search` / `qa-bank few-shot` / `verify_job_posting`) + Pipeline.tsx mounts panel below StageABatch. Plan-agent review applied 4 HIGH fixes: load-time coerce saved `block_b`/`block_e` to true, role=dialog+aria-modal on ReportViewer, propagate abort signal to interval handler, update Force Sonnet copy to point at 05-pipeline-ui.
+
+### Locked design (long-term-best, all defaults)
+
+| Decision | Choice |
+|----------|--------|
+| Block naming (OQ-1) | spec wins: A Role Summary / B CV Match / C Level&Strategy / D Comp&Demand / E Personalization / F Interview Plan / G Posting Legitimacy |
+| Block toggles (OQ-2) | A always-on (no toggle); B+E locked-on (Tailor depends, UI disabled); C/D/F/G user-toggleable |
+| Reports path (OQ-3) | `data/career/reports/{jobId}.md` (gitignored, m4) |
+| Total score (OQ-4) | Sonnet emits `**Total: X.X/5**` line per system-prompt instructions weighted by `prefs.scoring_weights`; m2 parser extracts |
+| WebSearch (OQ-5) | Anthropic hosted `web_search_20250305` server-side tool (~$0.025/search) |
+| Playwright (OQ-6) | Local `verify_job_posting(url)` tool handler backed by existing `pageScraper.mjs` (m2-jd-enrich shared chromium pool) |
+| Concurrency (OQ-7) | 3 (matches Stage A) |
+| CV source (OQ-8) | v1 = default resume's base.md; auto-select integration deferred to follow-up when 03-cv-engine/04 m2 ships |
+| qa-bank few-shot (OQ-9) | up to 5 most recent `history.jsonl` entries cached in system block; better Block F STAR stories |
+| Idempotency (OQ-10) | skip if `job.evaluation?.stage_b != null`; m5 UI clears field for retry |
+| Budget enforcement (OQ-11) | none in v1 (m5 UI surfaces total cost as info); real enforcement in `04-budget-gate` |
+| Tool failure semantics | tool error → `tool_result` with error field → Sonnet downgrades block to "confidence: low" per system-prompt instruction |
+| Tool timeout | 30s per local tool call (constraint #3) |
+| Tool round cap | 5 max tool rounds per job (defensive cap against runaway loops) |
+| Threshold gate (m4 endpoint) | candidates filtered to `evaluation.stage_a.score >= prefs.thresholds.consider` (default 3.5) — only consider+ jobs get $0.30 deep eval |
+| Mutex | 6-way pipelineMutex extends 5-way: scan + enrich + manual-paste + PATCH + /evaluate/stage-a + /evaluate/stage-b |
+| Mutation | spread `{ ...evaluation, stage_b: result }` preserves stage_a sibling |
+| Cost recording | per-job aggregate across all tool rounds; appended to `llm-costs.jsonl` with `caller: 'evaluator:stage-b'` |
+
+### 下游 contracts
+
+- **`03-block-toggles`**: extends Preferences UI; this Room ships canonical A-G labels with B/E locked. block-toggles Room may add per-block cost preview / disable-on-budget hints.
+- **`04-budget-gate`**: enforces daily_budget_usd cap; consumes the per-call cost records in `llm-costs.jsonl` already written by m2.
+- **`05-pipeline-ui`**: extends Pipeline tab UI further; this Room ships v1 minimum.
+- **Tailor Engine** (future, separate epic): consumes `reports/{jobId}.md` Block E (Personalization Plan) for resume rewrite suggestions.
+
 ---
 
-_Generated 2026-04-22 by room-init._
+_Generated 2026-04-22 by room-init. Plan refined 2026-05-04 by plan-milestones._
