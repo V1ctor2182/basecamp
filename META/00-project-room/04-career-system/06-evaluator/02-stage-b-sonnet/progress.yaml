@@ -384,7 +384,7 @@ commits:
       - "intent-stage-b-sonnet-001 (anchors extended: stageBTools.mjs)"
     milestones_affected:
       - "m3-tools-websearch-playwright (→ completed)"
-  - hash: "PENDING"  # filled by m4 followup
+  - hash: "ac6eaf9"
     date: "2026-05-05"
     message: "[04-career-system/06-evaluator/02-stage-b-sonnet] m4: schema + endpoint + 6-way mutex (smoke 15)"
     files_changed: 4
