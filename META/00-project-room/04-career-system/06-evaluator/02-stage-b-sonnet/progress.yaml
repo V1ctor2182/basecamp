@@ -376,7 +376,7 @@ commits:
       - "intent-stage-b-sonnet-001 (anchors extended: stageBRunner + cvBundle modules)"
     milestones_affected:
       - "m2-stage-b-runner-cost-reports (→ completed)"
-  - hash: "PENDING"  # filled by m3 followup
+  - hash: "5141d3c"
     date: "2026-05-05"
     message: "[04-career-system/06-evaluator/02-stage-b-sonnet] m3: stageBTools + tool-use loop (smoke 19+20)"
     files_changed: 4
