@@ -43,5 +43,14 @@ anchors:
     symbols:
       - "loadCvBundle"
     description: "CV-bundle loader: default resume base.md + narrative + proof-points + identity + last 5 qa-bank entries; graceful on missing files (m2; shared with m4 endpoint + future Tailor Engine)"
+  - file: "src/career/evaluator/stageBTools.mjs"
+    symbols:
+      - "WEB_SEARCH_TOOL"
+      - "VERIFY_JOB_POSTING_TOOL"
+      - "STAGE_B_TOOLS"
+      - "LOCAL_TOOL_HANDLERS"
+      - "verifyJobPostingHandler"
+      - "runToolUseLoop"
+    description: "Anthropic Tools API integration (m3, first project use): hosted web_search_20250305 (Block D) + local verify_job_posting handler backed by pageScraper (Block G); multi-turn tool-use loop with cross-round usage aggregation, pause_turn handling, server_tool_use.web_search_requests tracking, max-rounds cap, content sanitization on echo-back"
 created_at: "2026-04-22"
 updated_at: "2026-05-05"

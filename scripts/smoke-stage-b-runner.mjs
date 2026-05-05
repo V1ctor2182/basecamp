@@ -460,6 +460,69 @@ await test('defaultWriteReport rejects malformed jobId', async () => {
   }
 });
 
+// ── m3: Tools API integration ───────────────────────────────────────────
+await test('m3: web_search_requests propagates from usage → cost record + result', async () => {
+  const costRecords = [];
+  const r = await evaluateJobsStageB([makeJob()], PREFS, {
+    cvBundle: CV_BUNDLE,
+    _client: makeMockClient(() => ({
+      ...makeOkResponse(),
+      usage: { ...SAMPLE_USAGE, server_tool_use: { web_search_requests: 2 } },
+    })),
+    _recordCost: async (rec) => { costRecords.push(rec); },
+    _sleep: fastSleep(),
+    _writeReport: async (jobId) => `data/career/reports/${jobId}.md`,
+  });
+  assert.equal(r.evaluated, 1);
+  assert.equal(r.results[0].web_search_requests, 2);
+  assert.equal(costRecords[0].web_search_requests, 2);
+  assert.equal(costRecords[0].tool_rounds_used, 1);
+});
+
+await test('m3: verify_job_posting handler invoked via _toolHandlers DI', async () => {
+  let handlerInvocations = 0;
+  // Mock client that does ONE tool_use round → handler runs → end_turn
+  let callIdx = 0;
+  const r = await evaluateJobsStageB([makeJob()], PREFS, {
+    cvBundle: CV_BUNDLE,
+    _client: {
+      messages: {
+        async create(_params) {
+          callIdx++;
+          if (callIdx === 1) {
+            return {
+              stop_reason: 'tool_use',
+              content: [
+                {
+                  type: 'tool_use',
+                  id: 'toolu_99',
+                  name: 'verify_job_posting',
+                  input: { url: 'https://example.com/jobs/1' },
+                },
+              ],
+              usage: SAMPLE_USAGE,
+            };
+          }
+          return makeOkResponse();
+        },
+      },
+    },
+    _recordCost: async () => {},
+    _sleep: fastSleep(),
+    _writeReport: async (jobId) => `data/career/reports/${jobId}.md`,
+    _toolHandlers: {
+      verify_job_posting: async (input) => {
+        handlerInvocations++;
+        assert.match(input.url, /example\.com/);
+        return { ok: true, body_excerpt: 'Active posting' };
+      },
+    },
+  });
+  assert.equal(r.evaluated, 1);
+  assert.equal(handlerInvocations, 1);
+  assert.equal(r.results[0].tool_rounds_used, 2);
+});
+
 // ── Real atomic-write path coverage (review fix L12) ────────────────────
 await test('defaultWriteReport actually writes data/career/reports/{jobId}.md', async () => {
   const path = await import('node:path');

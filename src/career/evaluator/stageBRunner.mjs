@@ -37,6 +37,11 @@ import {
 } from './stageBPrompt.mjs';
 import { computeCostUsd } from '../lib/anthropicPricing.mjs';
 import { loadCvBundle } from './cvBundle.mjs';
+import {
+  STAGE_B_TOOLS,
+  LOCAL_TOOL_HANDLERS,
+  runToolUseLoop,
+} from './stageBTools.mjs';
 
 const STAGE_B_CALLER = 'evaluator:stage-b';
 
@@ -54,6 +59,7 @@ const DEFAULT_DEPS = Object.freeze({
   recordCost: defaultRecordCost,
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   writeReport: defaultWriteReport,
+  toolHandlers: LOCAL_TOOL_HANDLERS,
 });
 
 // Stage B status enum. NO 'archived' — see file header.
@@ -72,6 +78,8 @@ function mergeDeps(opts) {
     recordCost: opts._recordCost ?? DEFAULT_DEPS.recordCost,
     sleep: opts._sleep ?? DEFAULT_DEPS.sleep,
     writeReport: opts._writeReport ?? DEFAULT_DEPS.writeReport,
+    toolHandlers: opts._toolHandlers ?? DEFAULT_DEPS.toolHandlers,
+    maxToolRounds: opts._maxToolRounds, // undefined → use default in stageBTools
   };
 }
 
@@ -157,12 +165,20 @@ async function evaluateOneJob(job, prefs, cvBundle, client, deps) {
     return { jobId, skipped: true };
   }
 
-  const params = buildStageBPrompt(job, prefs, cvBundle);
+  // Build base params from m1 + attach tools (m3). System block stays
+  // byte-identical across loop rounds → cache hits on rounds 2..N. Tools
+  // listed first so a future builder-emitted `tools` field can override.
+  const built = buildStageBPrompt(job, prefs, cvBundle);
+  const params = { tools: STAGE_B_TOOLS, ...built };
 
   let response;
   try {
     response = await callWithRetry(
-      () => client.messages.create(params),
+      () =>
+        runToolUseLoop(client, params, {
+          handlers: deps.toolHandlers,
+          maxRounds: deps.maxToolRounds,
+        }),
       deps.sleep
     );
   } catch (e) {
@@ -174,6 +190,9 @@ async function evaluateOneJob(job, prefs, cvBundle, client, deps) {
   // Guard against NaN from unknown-model / malformed-usage paths so the
   // batch-level total_cost_usd never propagates NaN.
   const costUsd = Number.isFinite(rawCost) ? rawCost : 0;
+  // Hosted web_search server-tool count. Pricing (~$0.025/search) deferred
+  // to 04-budget-gate; tracked here for visibility + UI counters.
+  const webSearchRequests = Number(usage?.server_tool_use?.web_search_requests) || 0;
 
   // Always record cost — we paid Anthropic regardless of downstream success.
   // Failure to record cost should NOT fail the per-job evaluation.
@@ -185,6 +204,8 @@ async function evaluateOneJob(job, prefs, cvBundle, client, deps) {
       output_tokens: usage.output_tokens ?? 0,
       cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
       cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
+      web_search_requests: webSearchRequests,
+      tool_rounds_used: response?._toolRoundsUsed ?? 0,
       cost_usd: costUsd,
       job_id: jobId,
     });
@@ -260,6 +281,8 @@ async function evaluateOneJob(job, prefs, cvBundle, client, deps) {
     report_path: reportPath,
     model: params.model,
     cost_usd: costUsd,
+    web_search_requests: webSearchRequests,
+    tool_rounds_used: response?._toolRoundsUsed ?? 0,
     status: STATUS.EVALUATED,
   };
 }

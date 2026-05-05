@@ -128,7 +128,7 @@ milestones:
 
   - id: "m3-tools-websearch-playwright"
     name: "Anthropic Tools API: hosted WebSearch + local Playwright handler"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/evaluator/stageBTools.mjs"
       - "src/career/evaluator/stageBRunner.mjs"
@@ -376,8 +376,16 @@ commits:
       - "intent-stage-b-sonnet-001 (anchors extended: stageBRunner + cvBundle modules)"
     milestones_affected:
       - "m2-stage-b-runner-cost-reports (→ completed)"
+  - hash: "PENDING"  # filled by m3 followup
+    date: "2026-05-05"
+    message: "[04-career-system/06-evaluator/02-stage-b-sonnet] m3: stageBTools + tool-use loop (smoke 19+20)"
+    files_changed: 4
+    specs_affected:
+      - "intent-stage-b-sonnet-001 (anchors extended: stageBTools.mjs)"
+    milestones_affected:
+      - "m3-tools-websearch-playwright (→ completed)"
 
 current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-status_note: "🟢 m2 complete (2/5). stageBRunner.mjs (~360) + cvBundle.mjs (~110) + smoke-stage-b-runner 18 + smoke-cv-bundle 13 (31 new asserts; 33 m1 still green). Worker-pool concurrency=3, DI seam (_client/_recordCost/_sleep/_writeReport/cvBundle), atomic tmp+rename writes, idempotent skip, NEVER throws. Plan-agent review: applied 4 HIGH/CRITICAL (degenerate response → STATUS.ERROR, jobId path-traversal validation, exported concatTextBlocks for parser-writer single source of truth, NaN cost guard) + 4 MEDIUM (hoisted getClient fail-fast, forward-slash report_path, tmp cleanup on rename failure, wrapped loadCvBundle for non-ENOENT). Codex CLI still quota-blocked. All 23 smoke files green + vite build clean. 02-stage-b-sonnet 20% → 40%. 下一个: m3 (Tools API: web_search + verify_job_posting — first project use of Anthropic Tools)."
+status_note: "🟢 m3 complete (3/5). stageBTools.mjs (~280) — first project use of Anthropic Tools API. Hosted web_search_20250305 (Block D) + local verify_job_posting handler backed by pageScraper.mjs (Block G, 30s Promise.race timeout). Multi-turn loop: stop_reason='tool_use'|'pause_turn' → execute local handlers in parallel via Promise.all → echo sanitized assistant content + user(tool_result) → re-call. Aggregates usage cross-round (server_tool_use.web_search_requests + token totals); mutates final resp.usage in-place. maxRounds=5 cap. Runner integration: paramsWithTools, _toolHandlers + _maxToolRounds DI seams, web_search_requests + tool_rounds_used threaded into result + cost record. 19 new tools smoke + 2 runner integration smoke (33+18+15+19+13=98 stage-b asserts; m2 still green). Plan-agent review: applied 5 HIGH (pause_turn loop continuation, web_search_tool_result NOT echoed back, is_error defaults true on malformed handler return, tool_use id validation, tools spread order) + 1 MEDIUM (tool_rounds_used ?? 0 instead of ?? 1). Codex still quota-blocked. All 24 smoke files green + vite build clean. 02-stage-b-sonnet 40% → 60%. 下一个: m4 (Job.evaluation.stage_b schema + POST /evaluate/stage-b endpoint + 6-way pipelineMutex + GET /results /report)."
 last_updated: "2026-05-05"
