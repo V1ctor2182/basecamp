@@ -368,9 +368,9 @@ commits:
       - "constraint-stage-b-sonnet-001 (anchors added: forced-on / cache / parser / fallback)"
     milestones_affected:
       - "m1-stage-b-prompt-module (→ completed)"
-  - hash: "PENDING"  # filled by m2 followup
+  - hash: "148bb8f"
     date: "2026-05-05"
-    message: "[04-career-system/06-evaluator/02-stage-b-sonnet] m2: stageBRunner + cvBundle + 32 smokes"
+    message: "[04-career-system/06-evaluator/02-stage-b-sonnet] m2: stageBRunner + cvBundle + 31 smokes"
     files_changed: 5
     specs_affected:
       - "intent-stage-b-sonnet-001 (anchors extended: stageBRunner + cvBundle modules)"
