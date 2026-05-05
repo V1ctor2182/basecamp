@@ -71,7 +71,7 @@ milestones:
 
   - id: "m2-stage-b-runner-cost-reports"
     name: "evaluateJobsStageB worker-pool + cost recording + reports/ writer"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/evaluator/stageBRunner.mjs"
       - "scripts/smoke-stage-b-runner.mjs"
@@ -368,8 +368,16 @@ commits:
       - "constraint-stage-b-sonnet-001 (anchors added: forced-on / cache / parser / fallback)"
     milestones_affected:
       - "m1-stage-b-prompt-module (→ completed)"
+  - hash: "PENDING"  # filled by m2 followup
+    date: "2026-05-05"
+    message: "[04-career-system/06-evaluator/02-stage-b-sonnet] m2: stageBRunner + cvBundle + 32 smokes"
+    files_changed: 5
+    specs_affected:
+      - "intent-stage-b-sonnet-001 (anchors extended: stageBRunner + cvBundle modules)"
+    milestones_affected:
+      - "m2-stage-b-runner-cost-reports (→ completed)"
 
 current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-status_note: "🟢 m1 complete (1/5). stageBPrompt.mjs (~360) + smoke 33/33. Plan-agent review applied 4 HIGH fixes (mid-line total → anchored full-line, decimal denom .0 leak, bold-wrapped headers, colon dash variant) + H3 fallback. Codex CLI quota-blocked. All 21 smoke files green + vite build clean. 02-stage-b-sonnet 0% → 20%. 下一个: m2-stage-b-runner-cost-reports (worker-pool concurrency=3 + atomic reports/ writer + cost recording)."
-last_updated: "2026-05-04"
+status_note: "🟢 m2 complete (2/5). stageBRunner.mjs (~360) + cvBundle.mjs (~110) + smoke-stage-b-runner 18 + smoke-cv-bundle 13 (31 new asserts; 33 m1 still green). Worker-pool concurrency=3, DI seam (_client/_recordCost/_sleep/_writeReport/cvBundle), atomic tmp+rename writes, idempotent skip, NEVER throws. Plan-agent review: applied 4 HIGH/CRITICAL (degenerate response → STATUS.ERROR, jobId path-traversal validation, exported concatTextBlocks for parser-writer single source of truth, NaN cost guard) + 4 MEDIUM (hoisted getClient fail-fast, forward-slash report_path, tmp cleanup on rename failure, wrapped loadCvBundle for non-ENOENT). Codex CLI still quota-blocked. All 23 smoke files green + vite build clean. 02-stage-b-sonnet 20% → 40%. 下一个: m3 (Tools API: web_search + verify_job_posting — first project use of Anthropic Tools)."
+last_updated: "2026-05-05"

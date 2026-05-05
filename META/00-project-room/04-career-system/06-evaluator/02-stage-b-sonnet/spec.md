@@ -23,12 +23,12 @@ Block B 和 Block E 必须始终启用（下游依赖） + prompt caching 必开
 - [intent-stage-b-sonnet-001](specs/intent-stage-b-sonnet-001.yaml) — Sonnet 深评（Stage B）：完整 A-G Block 报告 + 总分 + prompt caching
 - [constraint-stage-b-sonnet-001](specs/constraint-stage-b-sonnet-001.yaml) — Block B 和 Block E 必须始终启用（下游依赖） + prompt caching 必开
 
-## 当前进度 — m1/5 done (2026-05-04, 20%)
+## 当前进度 — m2/5 done (2026-05-05, 40%)
 
 5 milestones, ~1530 行. 11 OQs all locked at recommended values. **First project use of Anthropic Tools API** (m3).
 
 - ✅ **m1-stage-b-prompt-module** (~360 + smoke ~390, **33/33 green**) — `stageBPrompt.mjs`: STAGE_B_MODEL=claude-sonnet-4-6, BLOCK_KEYS frozen A-G, FORCED_ON_BLOCKS=[A,B,E], `buildSystemBlock` with cache_control:ephemeral, `buildUserMessage` JD-only, `extractBlocks` regex-tolerant of em/en/hyphen/colon dash + bold-wrap + H3, `parseStageBResponse` ignores tool_use blocks. Plan-agent review applied 4 HIGH fixes (anchored total-line / decimal denom / bold headers / colon variant) + H3 fallback. Codex quota-blocked.
-- ⏳ **m2-stage-b-runner-cost-reports** (~300) — `stageBRunner.mjs` worker-pool concurrency=3 + retry + atomic-write `data/career/reports/{jobId}.md` + cost via shared `computeCostUsd` + smoke 12
+- ✅ **m2-stage-b-runner-cost-reports** (~360 + cvBundle ~110 + smokes 18 + 13, **all green**) — `stageBRunner.mjs`: worker-pool concurrency=3, DI seam (`_client`/`_recordCost`/`_sleep`/`_writeReport`/`cvBundle`), atomic tmp+rename writer, idempotent skip, retry on 5xx/429/408, NEVER throws. Rejects degenerate Sonnet responses (missing total_score or forced-on blocks). `cvBundle.mjs`: graceful loader for default resume + narrative + proof-points + identity + last 5 qa-bank entries. Plan-agent review applied 4 HIGH/CRITICAL (degenerate→error, jobId path-traversal validation, exported `concatTextBlocks` for parser-writer single source of truth, NaN cost guard) + 4 MEDIUM (hoisted getClient fail-fast, forward-slash report_path, tmp cleanup on rename failure, wrapped loadCvBundle for non-ENOENT).
 - ⏳ **m3-tools-websearch-playwright** (~350) — `stageBTools.mjs`: hosted `web_search_20250305` (Block D, ~$0.025/search) + local `verify_job_posting` handler (Block G, backed by `pageScraper.mjs` from m2-jd-enrich) + multi-turn tool-use loop + smoke 10
 - ⏳ **m4-schema-and-endpoint** (~250) — `Job.evaluation.stage_b` schema (sibling to stage_a, spread-mutation preserves both) + POST `/api/career/evaluate/stage-b` (6-way pipelineMutex) + GET `/results` projection + GET `/report/:jobId` markdown serving + smoke 7
 - ⏳ **m5-stage-b-ui-and-room-complete** (~280) — `<StageBBatch />` Pipeline-tab panel + `<ReportViewer />` modal + Preferences UI updated to canonical A-G block labels (B/E locked-on with "Required by Tailor" badge) + ROOM COMPLETE → 06-evaluator parent 20% → 40%

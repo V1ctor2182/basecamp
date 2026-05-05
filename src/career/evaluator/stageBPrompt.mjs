@@ -32,7 +32,7 @@ export const BLOCK_CONFIG = Object.freeze({
 // score; Block E (Personalization Plan) is the Tailor Engine input. Block A
 // is always rendered (no toggle exists for it). Other blocks come from
 // prefs.evaluator_strategy.stage_b.blocks.
-const FORCED_ON_BLOCKS = ['A', 'B', 'E'];
+export const FORCED_ON_BLOCKS = Object.freeze(['A', 'B', 'E']);
 
 const STAGE_B_INSTRUCTIONS_HEAD = [
   'You are a senior career evaluator producing a deep-fit analysis report',
@@ -258,7 +258,12 @@ export class ParseError extends Error {
 // Concatenate text-type blocks from an Anthropic API content[] array.
 // tool_use blocks are intentionally skipped — m3's tool-use loop handles
 // those separately. v1 only consumes the FINAL text response.
-function concatenateText(content) {
+//
+// Exported so stageBRunner can write the same text to disk that the parser
+// consumed — single source of truth, prevents drift if the join semantics
+// change later (e.g. m3 might want '\n\n' to preserve markdown boundaries
+// across tool rounds).
+export function concatTextBlocks(content) {
   if (!Array.isArray(content)) return '';
   return content
     .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
@@ -343,7 +348,7 @@ export function extractBlocks(text) {
 // valid text are NOT errors — graceful degradation per Stage B's tool-
 // failure semantics.
 export function parseStageBResponse(content) {
-  const text = concatenateText(content);
+  const text = concatTextBlocks(content);
   if (!text.trim()) {
     throw new ParseError('response yielded no text content', '');
   }
