@@ -64,5 +64,17 @@ anchors:
       - "JOB_ID_PATH_RE"
       - "STAGE_B_REPORTS_DIR"
     description: "Stage B HTTP endpoints (m4): POST /api/career/evaluate/stage-b (6-way pipelineMutex; threshold gate; jobIds bypass) + GET /results (projection) + GET /report/:jobId (path-traversal-safe disk read built from validated jobId)"
+  - file: "src/career/evaluator/StageBBatch.tsx"
+    symbols:
+      - "default"
+    description: "StageBBatch Pipeline-tab panel (m5): pending count, Run Stage B button, per-row score+blocks+tools chips, View Report opens ReportViewer modal. 30s polling with abort-on-unmount."
+  - file: "src/career/evaluator/ReportViewer.tsx"
+    symbols:
+      - "default"
+    description: "ReportViewer modal (m5): GETs /report/:jobId, renders markdown via react-markdown + remark-gfm. role=dialog + aria-modal + Esc dismiss + click-outside-to-close."
+  - file: "src/career/Pipeline.tsx"
+    description: "Mounts <StageBBatch /> below <StageABatch /> in the Pipeline tab (m5)."
+  - file: "src/career/settings/Preferences.tsx"
+    description: "BLOCK_META updated to canonical A-G (Block A info-only 'Always rendered'; B/E locked 'Required by Tailor'; D/F/G toolHint badges); load-time coercion forces saved block_b/block_e to true. (m5)"
 created_at: "2026-04-22"
 updated_at: "2026-05-05"

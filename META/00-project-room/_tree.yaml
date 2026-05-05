@@ -338,7 +338,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/06-evaluator/02-stage-b-sonnet"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: backend
       parent: "00-project-room/04-career-system/06-evaluator"
       children: []

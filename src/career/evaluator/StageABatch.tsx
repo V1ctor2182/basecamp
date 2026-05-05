@@ -216,7 +216,7 @@ export default function StageABatch() {
                     type="button"
                     className="sab-force-sonnet"
                     disabled
-                    title="Force Sonnet override — ships in 02-stage-b-sonnet"
+                    title="Force Sonnet override on a single job — wires up in 06-evaluator/05-pipeline-ui"
                   >
                     Force Sonnet
                   </button>

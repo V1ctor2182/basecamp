@@ -57,13 +57,28 @@ type Preferences = {
 const CURRENCY_OPTIONS = ['USD', 'EUR', 'GBP', 'CAD', 'CNY']
 const SENIORITY_OPTIONS = ['IC1', 'IC2', 'IC3', 'IC4', 'IC5', 'IC6', 'Senior', 'Staff', 'Principal', 'Manager', 'Director', 'VP']
 
-const BLOCK_META: { key: keyof Blocks; title: string; desc: string; required?: boolean }[] = [
-  { key: 'block_b', title: 'Block B — Summary', desc: '岗位 TL;DR + 为什么值得考虑 (Tailor 依赖)', required: true },
-  { key: 'block_c', title: 'Block C — Fit Analysis', desc: '技能 / 经验 / 背景逐项匹配打分' },
-  { key: 'block_d', title: 'Block D — Comp & Location', desc: '薪资区间估算 + 地点 / remote policy 判定' },
-  { key: 'block_e', title: 'Block E — Resume Hooks', desc: 'Tailor 用的改写建议 (Tailor 依赖)', required: true },
-  { key: 'block_f', title: 'Block F — Risk Flags', desc: '红旗 + 文化警告 + 签证难点' },
-  { key: 'block_g', title: 'Block G — Company Research', desc: '公司近况 / 新闻 / 融资 (可选深调研)' },
+// Canonical Stage B block labels per 06-evaluator/02-stage-b-sonnet spec.
+// Block A is always-on (no toggle, info-only — not in schema). Blocks B and E
+// are forced-on (Tailor Engine consumes Block E; Block B is total-score core).
+// C/D/F/G are user-toggleable. The hint badges hint at runtime cost: D uses
+// hosted web_search, F seeds from qa-bank, G uses local Playwright via the
+// verify_job_posting tool.
+const BLOCK_META: {
+  key?: keyof Blocks
+  letter: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G'
+  title: string
+  desc: string
+  required?: boolean
+  alwaysOn?: boolean
+  toolHint?: string
+}[] = [
+  { letter: 'A', title: 'Block A — Role Summary', desc: '岗位简述 + 关键要求摘要 (Sonnet 始终输出)', alwaysOn: true },
+  { key: 'block_b', letter: 'B', title: 'Block B — CV Match', desc: '简历匹配现状 + 总分核心依据 (Tailor 依赖)', required: true },
+  { key: 'block_c', letter: 'C', title: 'Block C — Level & Strategy', desc: 'Leveling 推断 + 申请策略 / referral 路径' },
+  { key: 'block_d', letter: 'D', title: 'Block D — Comp & Demand', desc: '薪资区间 + 市场需求 (Levels.fyi / Glassdoor)', toolHint: 'Uses web_search' },
+  { key: 'block_e', letter: 'E', title: 'Block E — Personalization Plan', desc: 'CV 改写建议 → Tailor Engine 消费', required: true },
+  { key: 'block_f', letter: 'F', title: 'Block F — Interview Plan', desc: '6-10 STAR+R 故事 + 题型预测', toolHint: 'Uses qa-bank few-shot' },
+  { key: 'block_g', letter: 'G', title: 'Block G — Posting Legitimacy', desc: '岗位活跃度 + 招聘是否真实', toolHint: 'Uses verify_job_posting' },
 ]
 
 const SCORING_LABELS: { key: keyof ScoringWeights; label: string }[] = [
@@ -174,7 +189,19 @@ export default function Preferences() {
   useEffect(() => {
     fetch('/api/career/preferences')
       .then(r => r.json())
-      .then(data => { if (data) setPrefs(deepMerge(BLANK(), data)); setLoaded(true) })
+      .then(data => {
+        if (data) {
+          const merged = deepMerge(BLANK(), data) as Preferences
+          // Forced-on Block B / E: Tailor Engine consumes Block E and Block B
+          // is the total-score core. Coerce stale saves (from before the
+          // forced-on policy was introduced) so the disabled toggle never
+          // shows + persists `false`.
+          merged.evaluator_strategy.stage_b.blocks.block_b = true
+          merged.evaluator_strategy.stage_b.blocks.block_e = true
+          setPrefs(merged)
+        }
+        setLoaded(true)
+      })
       .catch(() => setLoaded(true))
   }, [])
 
@@ -542,30 +569,42 @@ export default function Preferences() {
 
         <div className="af-field">
           <label className="af-label">Stage B Blocks</label>
-          <span className="af-help-text">6 Block 各自可 toggle — Block B / E 是 Tailor 依赖，强制开启。</span>
+          <span className="af-help-text">
+            7 Blocks (A-G) — Block A 始终输出 (info-only)；Block B / E 是 Tailor 依赖，
+            UI 强制锁定开启；C / D / F / G 可自由 toggle。
+          </span>
           <div className="af-block-card-grid">
-            {BLOCK_META.map(({ key, title, desc, required }) => {
-              const on = prefs.evaluator_strategy.stage_b.blocks[key]
-              const cls = `af-block-card${on ? ' af-block-card-on' : ''}${required ? ' af-block-card-disabled' : ''}`
+            {BLOCK_META.map(({ key, letter, title, desc, required, alwaysOn, toolHint }) => {
+              // Block A is info-only (no schema key, no toggle). B/E are
+              // required (toggle disabled, always rendered as on).
+              const on = key ? prefs.evaluator_strategy.stage_b.blocks[key] : true
+              const locked = alwaysOn || required
+              const cls = `af-block-card${on ? ' af-block-card-on' : ''}${locked ? ' af-block-card-disabled' : ''}`
               return (
-                <div className={cls} key={key}>
+                <div className={cls} key={letter}>
                   <div className="af-block-card-title">
                     <span>{title}</span>
-                    <button type="button"
+                    <button
+                      type="button"
                       className={`af-toggle${on ? ' af-toggle-on' : ''}`}
-                      disabled={required}
-                      onClick={() => patch('evaluator_strategy', {
-                        ...prefs.evaluator_strategy,
-                        stage_b: {
-                          ...prefs.evaluator_strategy.stage_b,
-                          blocks: { ...prefs.evaluator_strategy.stage_b.blocks, [key]: !on },
-                        },
-                      })}
+                      disabled={locked}
+                      onClick={() => {
+                        if (!key) return
+                        patch('evaluator_strategy', {
+                          ...prefs.evaluator_strategy,
+                          stage_b: {
+                            ...prefs.evaluator_strategy.stage_b,
+                            blocks: { ...prefs.evaluator_strategy.stage_b.blocks, [key]: !on },
+                          },
+                        })
+                      }}
                       aria-label={`Toggle ${title}`}
                     />
                   </div>
                   <p className="af-block-card-desc">{desc}</p>
+                  {alwaysOn && <span className="af-block-card-badge">Always rendered</span>}
                   {required && <span className="af-block-card-badge">Required by Tailor</span>}
+                  {toolHint && <span className="af-block-card-hint">{toolHint}</span>}
                 </div>
               )
             })}

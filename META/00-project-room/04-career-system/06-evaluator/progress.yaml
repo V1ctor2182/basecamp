@@ -1,12 +1,12 @@
 milestones: []
 current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-completion: 36  # avg(100, 80, 0, 0, 0) = 36 across 5 features (1 ROOM ✅ + 1 in-progress 4/5)
+completion: 40  # avg(100, 100, 0, 0, 0) = 40 across 5 features (2 ROOMs ✅)
 children_completion:
   "01-stage-a-haiku": 100  # ✅ ROOM COMPLETE (4/4 milestones, ~2300 行)
-  "02-stage-b-sonnet": 80  # 🔄 m4/5 done (prompt + runner + cvBundle + tools + schema/endpoint, ~1300 行 + 113 smoke asserts)
+  "02-stage-b-sonnet": 100  # 🎉 ROOM COMPLETE (5/5 milestones, ~1900 行 + 119 smoke asserts; first project use of Anthropic Tools API)
   "03-block-toggles": 0
   "04-budget-gate": 0
   "05-pipeline-ui": 0
-status_note: "06-evaluator 36% (1 ROOM ✅ + 1 in-progress 4/5). 02-stage-b-sonnet m4/5 done — schema + endpoint + 6-way mutex + path-traversal-safe report serving. 下一个: m5 (UI + Preferences A-G toggles + ROOM COMPLETE → 06-evaluator 36% → 40%)."
+status_note: "🎉 06-evaluator 40% (2/5 ROOMs ✅). 02-stage-b-sonnet COMPLETE — Stage B Sonnet deep-eval pipeline shipped end-to-end: prompt module + worker-pool runner + Anthropic Tools API loop + schema/endpoint + UI panel + ReportViewer modal + canonical A-G block toggles. 下一个: 03-block-toggles (extends Preferences) / 04-budget-gate (consumes web_search_requests + cost records) / 05-pipeline-ui (extends Pipeline tab + wires Force Sonnet)."
 last_updated: "2026-05-05"
