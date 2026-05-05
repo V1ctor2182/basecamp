@@ -392,7 +392,7 @@ commits:
       - "intent-stage-b-sonnet-001 (anchors extended: server.mjs Stage B endpoint + EvaluationStageBSchema)"
     milestones_affected:
       - "m4-schema-and-endpoint (→ completed)"
-  - hash: "PENDING"  # filled by m5 followup
+  - hash: "2346b03"
     date: "2026-05-05"
     message: "[04-career-system/06-evaluator/02-stage-b-sonnet] m5: StageBBatch UI + ReportViewer + Prefs A-G + ROOM COMPLETE"
     files_changed: 8
