@@ -285,7 +285,7 @@ commits:
       - "intent-tailor-engine-001 (anchors added: tailorPrompt.mjs)"
     milestones_affected:
       - "m1-tailor-prompt-module (→ completed)"
-  - hash: "PENDING"  # filled by m2 followup
+  - hash: "79354c3"
     date: "2026-05-05"
     message: "[04-career-system/03-cv-engine/05-tailor-engine] m2: tailorRunner + tailorBundle (smoke 17/17)"
     files_changed: 3
