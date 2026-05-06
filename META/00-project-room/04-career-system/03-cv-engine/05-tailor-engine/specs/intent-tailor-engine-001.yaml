@@ -17,6 +17,17 @@ provenance:
   confidence: 0.9
   source_ref: "career-architecture/02-cv-engine.md#2.7-tailor-engine"
 relations: []
-anchors: []
+anchors:
+  - file: "src/career/cv/tailorPrompt.mjs"
+    symbols:
+      - "TAILOR_MODEL"
+      - "NO_FABRICATION_INSTRUCTION"
+      - "buildSystemBlock"
+      - "buildUserMessage"
+      - "buildTailorPrompt"
+      - "extractBlockEFromReport"
+      - "parseTailorResponse"
+      - "ParseError"
+    description: "Tailor prompt builder + parser (m1): cache_control:ephemeral system block leading with CONSTRAINT #1 (no-fabrication verbatim per constraint-tailor-engine-001) + base.md + proof-points.md + emphasize. User message carries JD + Block E + optional userHint. Reuses stageBPrompt.extractBlocks for Block E pull. Local concatMarkdownBlocks uses \\n\\n for paragraph preservation."
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-05"

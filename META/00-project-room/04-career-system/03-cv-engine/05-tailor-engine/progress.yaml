@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-tailor-prompt-module"
     name: "tailorPrompt.mjs — prompt builder + parser + no-fabrication system block"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/cv/tailorPrompt.mjs"
       - "scripts/smoke-tailor-prompt.mjs"
@@ -276,9 +276,17 @@ milestones:
       里明显反映 Block E 的建议（关键词注入 / 排序 / Summary 改写），但
       所有指标和经历都能在 base.md 里找到出处").
 
-commits: []
+commits:
+  - hash: "PENDING"  # filled by m1 followup
+    date: "2026-05-05"
+    message: "[04-career-system/03-cv-engine/05-tailor-engine] m1: tailorPrompt + parser (smoke 25/25)"
+    files_changed: 2
+    specs_affected:
+      - "intent-tailor-engine-001 (anchors added: tailorPrompt.mjs)"
+    milestones_affected:
+      - "m1-tailor-prompt-module (→ completed)"
 
 current_sprint: "Sprint 7 — Tailor Engine"
 blockers: []
-status_note: "Plan 完成 (2026-05-05). 4 milestones, ~1000 LOC source + ~900 smoke. 4 OQs all locked at recommended: (1) react-diff-viewer-continued for diff UI, (2) proof-points.md in cached system block, (3) hint history deferred, (4) overwrite policy on re-run. Depends on 06-evaluator/02-stage-b-sonnet ✅ (just merged in PR #22). Closing this Room takes 03-cv-engine 80% → 100%."
+status_note: "🟢 m1 complete (1/4). tailorPrompt.mjs (~190) + smoke 25/25. Single-turn Sonnet prompt builder mirroring Stage B m1 shape; cache_control:ephemeral system block leads with CONSTRAINT #1 (NO_FABRICATION verbatim per spec) + base.md + proof-points.md + emphasize hints. User message carries JD + Block E + optional userHint. Reuses extractBlocks from stageBPrompt for Block E pull. Plan-agent review applied 3 HIGH + 1 MEDIUM + 1 LOW: (1) whitespace-only userHint suppression, (2) safer empty-baseMd sentinel, (3) tailor-local concatMarkdownBlocks with \\n\\n paragraph join (vs Stage B's single-\\n collapse), (4) emphasize separator ' | ' instead of ', ' to handle comma-containing names, (5) reordered TAILOR_INSTRUCTIONS_HEAD so CONSTRAINT #1 leads. Codex still quota-blocked. All 27 smoke files green + vite build clean. 03-cv-engine/05-tailor-engine 0% → 25%. 下一个: m2 (tailorRunner.mjs + tailorBundle.mjs — single-job orchestrator with atomic-write output/{jobId}-{resumeId}.md)."
 last_updated: "2026-05-05"
