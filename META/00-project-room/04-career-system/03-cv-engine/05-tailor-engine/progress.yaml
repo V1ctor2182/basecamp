@@ -66,7 +66,7 @@ milestones:
 
   - id: "m2-tailor-runner"
     name: "tailorRunner.mjs — single-job orchestrator + loadTailorBundle"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/cv/tailorRunner.mjs"
       - "src/career/cv/tailorBundle.mjs"
@@ -285,8 +285,16 @@ commits:
       - "intent-tailor-engine-001 (anchors added: tailorPrompt.mjs)"
     milestones_affected:
       - "m1-tailor-prompt-module (→ completed)"
+  - hash: "PENDING"  # filled by m2 followup
+    date: "2026-05-05"
+    message: "[04-career-system/03-cv-engine/05-tailor-engine] m2: tailorRunner + tailorBundle (smoke 17/17)"
+    files_changed: 3
+    specs_affected:
+      - "intent-tailor-engine-001 (anchors extended: tailorRunner.mjs + tailorBundle.mjs)"
+    milestones_affected:
+      - "m2-tailor-runner (→ completed)"
 
 current_sprint: "Sprint 7 — Tailor Engine"
 blockers: []
-status_note: "🟢 m1 complete (1/4). tailorPrompt.mjs (~190) + smoke 25/25. Single-turn Sonnet prompt builder mirroring Stage B m1 shape; cache_control:ephemeral system block leads with CONSTRAINT #1 (NO_FABRICATION verbatim per spec) + base.md + proof-points.md + emphasize hints. User message carries JD + Block E + optional userHint. Reuses extractBlocks from stageBPrompt for Block E pull. Plan-agent review applied 3 HIGH + 1 MEDIUM + 1 LOW: (1) whitespace-only userHint suppression, (2) safer empty-baseMd sentinel, (3) tailor-local concatMarkdownBlocks with \\n\\n paragraph join (vs Stage B's single-\\n collapse), (4) emphasize separator ' | ' instead of ', ' to handle comma-containing names, (5) reordered TAILOR_INSTRUCTIONS_HEAD so CONSTRAINT #1 leads. Codex still quota-blocked. All 27 smoke files green + vite build clean. 03-cv-engine/05-tailor-engine 0% → 25%. 下一个: m2 (tailorRunner.mjs + tailorBundle.mjs — single-job orchestrator with atomic-write output/{jobId}-{resumeId}.md)."
+status_note: "🟢 m2 complete (2/4). tailorRunner.mjs (~265) + tailorBundle.mjs (~95) + smoke 17/17. Single-job orchestrator (NOT batch — Tailor is user-driven per-Job); DI seam (_client/_recordCost/_sleep/_writeOutput/bundle); callWithRetry on 5xx/429/408/APIConnectionError; atomic tmp+rename to data/career/output/{jobId}-{resumeId}.md; NEVER throws. NO idempotency gate (re-run with hint IS the path). NO mutex (output uniquely keyed by (jobId,resumeId)). loadTailorBundle reads base.md + proof-points + identity + emphasize + Block E (via extractBlockEFromReport), all graceful on missing/parse-fail. Cost recording uses caller='cv-tailor' + job_id + resume_id. Plan-agent review applied 1 HIGH: early jobId+resumeId regex validation BEFORE bundle load + API call (defends against ~$0.01 wasted Anthropic call per malformed id from corrupted pipeline.json or numeric jobMeta.id) + 1 new smoke verifying non-string ids → no API call. Codex still quota-blocked. All 28 smoke files green + vite build clean. 03-cv-engine/05-tailor-engine 25% → 50%. 下一个: m3 (POST /api/career/cv/tailor + GET /output/:jobId/:resumeId + Auto-Select fallback + 412 on missing stage_b)."
 last_updated: "2026-05-05"

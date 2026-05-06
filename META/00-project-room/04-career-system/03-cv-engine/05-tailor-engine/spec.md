@@ -23,12 +23,12 @@ MUST NOT 捏造经历或指标；产出后必须显示 diff 给用户审
 - [intent-tailor-engine-001](specs/intent-tailor-engine-001.yaml) — 读 base.md + Block E 改写建议 → 定制 markdown + 渲染 PDF
 - [constraint-tailor-engine-001](specs/constraint-tailor-engine-001.yaml) — MUST NOT 捏造经历或指标；产出后必须显示 diff 给用户审
 
-## 当前进度 — m1/4 done (2026-05-05, 25%)
+## 当前进度 — m2/4 done (2026-05-05, 50%)
 
 4 milestones, ~1000 LOC source + ~900 smoke. 4 OQs all locked at recommended values. **Depends on 06-evaluator/02-stage-b-sonnet ✅** (just merged PR #22 — Block E from `data/career/reports/{jobId}.md` is the primary input). Closing this Room takes **03-cv-engine 80% → 100%**.
 
 - ✅ **m1-tailor-prompt-module** (~190 + smoke ~340, **25/25 green**) — `tailorPrompt.mjs`: TAILOR_MODEL=claude-sonnet-4-6, NO_FABRICATION_INSTRUCTION verbatim per constraint-spec, `buildSystemBlock` with cache_control:ephemeral leading with CONSTRAINT #1 + base.md + proof-points + emphasize (no identity — renderer's job), `buildUserMessage` carries JD + Block E + optional userHint, `parseTailorResponse` with local concatMarkdownBlocks (`\n\n` paragraph join, differs from Stage B's `\n` block separator), `extractBlockEFromReport` reuses stageBPrompt.extractBlocks. Plan-agent review applied 3 HIGH (whitespace-only userHint suppression, safer empty-baseMd sentinel, paragraph-preserving concat) + 1 MEDIUM (' | ' emphasize separator vs ', ') + 1 LOW (CONSTRAINT #1 leads system block).
-- ⏳ **m2-tailor-runner** (~250) — `tailorRunner.mjs` + `tailorBundle.mjs`: single-job orchestrator (no batch — user-driven per-Job). DI seam, retry, atomic-write `output/{jobId}-{resumeId}.md`, NEVER throws. jobId+resumeId path-traversal validation in `defaultWriteOutput`. + smoke 12
+- ✅ **m2-tailor-runner** (~265 + bundle ~95 + smoke ~410, **17/17 green**) — `tailorRunner.mjs` + `tailorBundle.mjs`: single-job orchestrator (no batch — user-driven). DI seam (`_client`/`_recordCost`/`_sleep`/`_writeOutput`/`bundle`), retry on 5xx/429/408, atomic tmp+rename, NEVER throws. **Early jobId+resumeId regex validation** before bundle load + API call (review fix HIGH — defends ~$0.01 wasted Anthropic call per malformed id). NO idempotency / NO mutex. `loadTailorBundle` reads 5 sources gracefully. Cost record carries `caller='cv-tailor'` + `job_id` + `resume_id`. Plan-agent review applied 1 HIGH (early id validation) + 1 new smoke verifying non-string ids skip the API entirely.
 - ⏳ **m3-schema-and-endpoint** (~200) — `POST /api/career/cv/tailor` (Auto-Select fallback for resumeId; 412 if no stage_b; returns base_markdown for diff display) + `GET /output/:jobId/:resumeId` (path-traversal-safe disk read built from validated ids). No mutex needed. + smoke 10
 - ⏳ **m4-ui-and-room-complete** (~300) — `<TailorPanel />` modal + `<DiffViewer />` (react-diff-viewer-continued) + Pipeline integration (Tailor button per StageBBatch row) + Approve→PDF / Reject→hint+rerun + ROOM COMPLETE rollups. + smoke 5
 
