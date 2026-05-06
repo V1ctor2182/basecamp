@@ -1,5 +1,284 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-tailor-prompt-module"
+    name: "tailorPrompt.mjs — prompt builder + parser + no-fabrication system block"
+    status: pending
+    estimated_files:
+      - "src/career/cv/tailorPrompt.mjs"
+      - "scripts/smoke-tailor-prompt.mjs"
+    estimated_lines: 250
+    depends_on: []
+    complexity_flags: ["external_api", "prompt_engineering", "design_decisions"]
+    open_questions: []
+    description: |
+      Tailor prompt module. System block (cache_control:ephemeral) carries:
+      identity.yml + base.md + proof-points.md (full fact-source corpus per
+      OQ-2) + metadata.yml.emphasize + the hard NO-FABRICATION instruction:
+        "If a metric or claim is not in the source base.md or proof-points.md,
+         DO NOT invent it. Only reorganize or rephrase existing content."
+      User message carries JD body + Block E text (Personalization Plan) +
+      optional userHint.
+
+      Files:
+        - src/career/cv/tailorPrompt.mjs (~200 lines):
+          · TAILOR_MODEL = 'claude-sonnet-4-6' (matches MODEL_PRICING)
+          · NO_FABRICATION_INSTRUCTION const — exact prompt text per
+            constraint-tailor-engine-001 spec
+          · buildSystemBlock(bundle) — ONE text block with cache_control
+            (single source-of-truth caching pattern from Stage B m1)
+          · buildUserMessage(jobMeta, blockEText, userHint?) — JD body
+            (trim 12000 chars) + Block E + optional hint
+          · buildTailorPrompt(jobMeta, bundle, blockEText, userHint?) →
+            { model, max_tokens: 4096, system, messages } (no tools — this
+            is single-turn, no Anthropic Tools API needed)
+          · parseTailorResponse(content) — concatenates text-type blocks
+            (reuses concatTextBlocks from stageBPrompt for drift defense
+            if m3+ tailoring ever adds tool_use) → returns { markdown }
+          · ParseError class + empty-text guard
+          · Use stageBPrompt.extractBlocks() to pull Block E from
+            data/career/reports/{jobId}.md (consumer side; m2 calls this
+            via bundle helper)
+
+        - scripts/smoke-tailor-prompt.mjs (~250 lines, ~14 assertions):
+          · Module shape (TAILOR_MODEL, exports)
+          · buildSystemBlock: ONE block with cache_control:ephemeral
+          · System block contains all 4 sources (identity / base / proof / emphasize)
+          · NO_FABRICATION_INSTRUCTION verbatim in system block
+          · empty bundle → graceful placeholders, no throw
+          · buildUserMessage: JD + Block E + optional hint render
+          · userHint=undefined skips hint section
+          · JD body trim to 12000
+          · Block E text trim to 4000 (defensive against absurd Block E)
+          · buildTailorPrompt model+max_tokens+no-tools shape
+          · parseTailorResponse extracts markdown from text-type content[]
+          · parseTailorResponse throws ParseError on empty
+          · parseTailorResponse ignores tool_use blocks (forward-compat)
+          · ParseError exported
+
+      Locked design (Phase 2.5 OQ lock-ins):
+        - OQ-2 = yes: proof-points.md included in cached system block
+          alongside base.md (full fact-source corpus for safety constraint)
+        - Single cache_control block per Stage B m1 pattern
+        - Reuse stageBPrompt's concatTextBlocks (single source of truth)
+        - Reuse stageBPrompt's extractBlocks for Block E extraction (m2
+          consumer; m1 just exports the prompt builder)
+
+      验收: smoke 14/14 PASS; tsc + vite build clean.
+
+  - id: "m2-tailor-runner"
+    name: "tailorRunner.mjs — single-job orchestrator + loadTailorBundle"
+    status: pending
+    estimated_files:
+      - "src/career/cv/tailorRunner.mjs"
+      - "src/career/cv/tailorBundle.mjs"
+      - "scripts/smoke-tailor-runner.mjs"
+    estimated_lines: 250
+    depends_on: ["m1-tailor-prompt-module"]
+    complexity_flags: ["external_api", "error_handling_heavy"]
+    open_questions: []
+    description: |
+      Tailor orchestrator mirroring stageBRunner shape (DI seam, callWithRetry
+      on 5xx/429/408, NEVER throws). Single-job — no batch (per spec, tailor
+      runs one Job at a time on user click). Atomic-write output.
+
+      Files:
+        - src/career/cv/tailorBundle.mjs (~80 lines):
+          · loadTailorBundle(resumeId, jobId) → { identity, baseMd,
+            proofPoints, emphasize, blockEText }
+          · Reads resumes/{resumeId}/base.md + resumes/{resumeId}/metadata.yml
+          · Reads data/career/proof-points.md + identity.yml (graceful fallback)
+          · Reads data/career/reports/{jobId}.md → extractBlocks → blocks.E
+          · ALL graceful on ENOENT (missing file → ''); YAML parse fail → {}
+          · Reuses cvBundle.mjs read patterns (deferred to its own module
+            for reuse; not extending cvBundle which is Stage-B-bundle-shaped)
+
+        - src/career/cv/tailorRunner.mjs (~170 lines):
+          · TAILOR_CALLER = 'cv-tailor'
+          · OUTPUT_DIR = data/career/output
+          · RESUME_ID_RE = /^[a-z0-9-]{1,40}$/ (matches existing)
+          · JOB_ID_RE = /^[a-f0-9]{12}$/
+          · DEFAULT_DEPS: { client, recordCost, sleep, writeOutput }
+          · defaultRecordCost — appends to llm-costs.jsonl with
+            caller='cv-tailor' (NO web_search / tool_rounds — single-turn)
+          · defaultWriteOutput(jobId, resumeId, content) — validates BOTH
+            ids against regex (path-traversal defense per Stage B review
+            lessons), atomic tmp+rename, returns
+            'data/career/output/{jobId}-{resumeId}.md' (forward-slash)
+          · isRetryableError + callWithRetry copy from stageBRunner
+            (could refactor to shared helper; defer to cleanup pass)
+          · tailorOneJob(jobMeta, resumeId, userHint, deps) — full lifecycle:
+            shouldRun guard → loadTailorBundle → buildTailorPrompt →
+            callWithRetry(client.messages.create) → record cost → parse →
+            write output atomically → return { jobId, resumeId,
+            tailored_markdown, output_path, model, cost_usd, status:
+            'tailored'|'error', error? }
+          · NEVER throws; per-call errors absorbed
+          · Idempotency: NONE (per OQ-4 = overwrite; user-driven re-run
+            with hint is the expected path; output is uniquely keyed by
+            (jobId, resumeId) so concurrent re-runs are safe-overwrite)
+
+        - scripts/smoke-tailor-runner.mjs (~200 lines, ~12 assertions):
+          DI-driven: empty hint / happy path / 429 retry / 5xx retry /
+          408 retry / 401 fast-fail / parse error → cost recorded /
+          writeOutput throw → cost recorded / cost record carries
+          caller='cv-tailor' / cost record throw → eval still succeeds /
+          jobId path-traversal blocked / resumeId path-traversal blocked
+
+      Locked design:
+        - No batch — tailor is per-Job, user-driven (different from Stage A/B)
+        - No mutex — output file uniquely keyed by (jobId, resumeId);
+          concurrent re-runs just overwrite (atomic rename guarantees
+          on-disk consistency)
+        - OQ-4 = overwrite policy: re-run replaces previous tailored
+          markdown; user can save approved version externally
+        - Cost recording via shared computeCostUsd from anthropicPricing;
+          claude-sonnet-4-6 already in MODEL_PRICING
+
+      验收: smoke 12/12 PASS.
+
+  - id: "m3-schema-and-endpoint"
+    name: "POST /api/career/cv/tailor + GET output endpoint"
+    status: pending
+    estimated_files:
+      - "server.mjs"
+      - "scripts/smoke-tailor-endpoint.mjs"
+    estimated_lines: 200
+    depends_on: ["m2-tailor-runner"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      HTTP surface. Endpoint integrates Auto-Select fallback for resumeId.
+      Single-call orchestration; no pipelineMutex needed (read-only on
+      pipeline.json; output file uniquely keyed).
+
+      Files:
+        - server.mjs (+~150 lines):
+          · TailorRequestSchema = z.object({
+              jobId: z.string().regex(JOB_ID_RE),
+              resumeId: z.string().regex(RESUME_ID_RE).optional(),
+              userHint: z.string().max(2000).optional(),
+            })
+          · TAILOR_OUTPUT_DIR = path.resolve('data','career','output')
+          · POST /api/career/cv/tailor:
+            - 400 on zod validation fail
+            - 404 if pipeline.json missing OR jobId not found in pipeline
+            - 412 (Precondition Failed) if job has no stage_b report
+              (cannot tailor without Block E)
+            - Resolve resumeId via Auto-Select fallback when missing:
+              call existing scoreResumeAgainstJd against job.description
+              + role; pick top match (or default fallback)
+            - Validate resumeId exists in resume index (404 otherwise)
+            - Call tailorOneJob → return { tailored_markdown,
+              base_markdown, output_path, cost_usd, model, picked_resume_id,
+              picked_reason }
+            - On runner error → 502 (Bad Gateway) with error detail; cost
+              record already written by runner
+          · GET /api/career/cv/tailor/output/:jobId/:resumeId:
+            - Validate BOTH ids against regex (path traversal guard)
+            - Build path from validated ids (NOT stored path) — same
+              defense pattern as Stage B m4 /report endpoint
+            - Read content from disk; 404 if missing
+            - Return { content, jobId, resumeId }
+          · No mutex — single-job, output uniquely keyed; UI prevents
+            concurrent clicks with a 'running' state
+
+        - scripts/smoke-tailor-endpoint.mjs (~250 lines, ~10 assertions):
+          server-spawn pattern with MOCK_ANTHROPIC=1. Cases:
+          - Happy path: explicit resumeId → tailored markdown returned
+          - resumeId omitted → Auto-Select fallback resolves it
+          - 400 invalid body / 404 missing pipeline / 404 jobId not found /
+            412 job has no stage_b / 404 resumeId not in index
+          - GET /output/:jobId/:resumeId 200 with content
+          - GET /output/:jobId/:resumeId 400 on malformed jobId or resumeId
+          - GET /output/:jobId/:resumeId 404 when file missing on disk
+          - Path-traversal: pipeline.json with malicious jobId/resumeId
+            does NOT escape OUTPUT_DIR
+
+      Locked design:
+        - 412 Precondition Failed when job has no stage_b — Tailor depends
+          on Block E from Stage B's report
+        - resumeId resolution: explicit > auto-select > default fallback
+        - Path-traversal defense: build paths from validated ids only
+        - Per-call response includes base_markdown so UI can render diff
+          without a second fetch
+
+      验收: smoke 10/10 PASS.
+
+  - id: "m4-ui-and-room-complete"
+    name: "TailorPanel + DiffViewer + Pipeline integration + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "src/career/cv/TailorPanel.tsx"
+      - "src/career/cv/DiffViewer.tsx"
+      - "src/career/cv/tailorPanel.css"
+      - "src/career/evaluator/StageBBatch.tsx"
+      - "package.json"
+      - "scripts/smoke-tailor-ui.mjs"
+    estimated_lines: 300
+    depends_on: ["m3-schema-and-endpoint"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Pipeline tab StageBBatch row gets a 'Tailor' button per evaluated row.
+      Click opens TailorPanel modal: resume picker (default = Auto-Select),
+      Block E preview, optional user hint, Run Tailor → DiffViewer renders
+      base vs tailored markdown side-by-side. Approve → POST /render/pdf,
+      download. Reject → hint textarea, re-run. ROOM COMPLETE rollups.
+
+      Files:
+        - package.json (+1 dep): react-diff-viewer-continued ~30KB gz
+          (OQ-1 = a; polished side-by-side diff, syntax highlight, worth
+          the dep for fabrication-detection UX)
+
+        - src/career/cv/TailorPanel.tsx (~180 lines):
+          · Modal (role=dialog + aria-modal + Esc dismiss + click-outside,
+            same a11y pattern as ReportViewer from 02-stage-b-sonnet/m5)
+          · Resume picker (defaults to Auto-Select picked_resume_id)
+          · Block E preview (collapsible, shows blockEText fetched on open)
+          · userHint textarea (shown after first Reject)
+          · Run Tailor button → POST /api/career/cv/tailor → DiffViewer
+          · Approve button → POST /api/career/render/pdf with tailored
+            markdown → download blob
+          · Reject button → reveal hint textarea + Re-Run button
+          · Loading + error states; cost display
+
+        - src/career/cv/DiffViewer.tsx (~80 lines):
+          · Wraps react-diff-viewer-continued
+          · Side-by-side mode; line-numbers; syntax highlighting via
+            existing rehype-highlight (already in deps)
+
+        - src/career/cv/tailorPanel.css (~80 lines):
+          · Modal overlay + panel styling (sbb- prefix style scope)
+          · Diff frame container
+
+        - src/career/evaluator/StageBBatch.tsx (+~15 lines):
+          · Add 'Tailor' button per row (disabled if !report_path)
+          · Open TailorPanel(jobId) modal on click
+
+        - scripts/smoke-tailor-ui.mjs (~100 lines, ~5 assertions):
+          GET endpoint shape verification only (UI itself manual via dev
+          server, matches Stage B m5 smoke pattern)
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml synced
+        - 03-cv-engine parent progress: 80% → 100% 🎉 (5/5 ROOMs ✅)
+        - 04-career-system: 65% → 67%
+
+      下游 unblocked:
+        - 07-applier: tailored PDF feeds the Applier upload flow
+        - 08-human-gate-tracker: tailor-approved diffs enter the human-gate
+          audit log
+        - Future feedback Room: hint-history persistence (currently OQ-3
+          deferred)
+
+      验收: smoke 5/5 PASS; manual UI test passes (acceptance criteria
+      from spec: "对 shortlist 4.0+ 的一个岗位跑 tailor，产出 markdown
+      里明显反映 Block E 的建议（关键词注入 / 排序 / Summary 改写），但
+      所有指标和经历都能在 base.md 里找到出处").
+
+commits: []
+
+current_sprint: "Sprint 7 — Tailor Engine"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "Plan 完成 (2026-05-05). 4 milestones, ~1000 LOC source + ~900 smoke. 4 OQs all locked at recommended: (1) react-diff-viewer-continued for diff UI, (2) proof-points.md in cached system block, (3) hint history deferred, (4) overwrite policy on re-run. Depends on 06-evaluator/02-stage-b-sonnet ✅ (just merged in PR #22). Closing this Room takes 03-cv-engine 80% → 100%."
+last_updated: "2026-05-05"

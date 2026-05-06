@@ -23,6 +23,37 @@ MUST NOT 捏造经历或指标；产出后必须显示 diff 给用户审
 - [intent-tailor-engine-001](specs/intent-tailor-engine-001.yaml) — 读 base.md + Block E 改写建议 → 定制 markdown + 渲染 PDF
 - [constraint-tailor-engine-001](specs/constraint-tailor-engine-001.yaml) — MUST NOT 捏造经历或指标；产出后必须显示 diff 给用户审
 
+## 当前进度 — Plan 完成 (2026-05-05)
+
+4 milestones, ~1000 LOC source + ~900 smoke. 4 OQs all locked at recommended values. **Depends on 06-evaluator/02-stage-b-sonnet ✅** (just merged PR #22 — Block E from `data/career/reports/{jobId}.md` is the primary input). Closing this Room takes **03-cv-engine 80% → 100%**.
+
+- ⏳ **m1-tailor-prompt-module** (~250) — `tailorPrompt.mjs`: cache_control system block (identity + base + proof-points + emphasize + NO_FABRICATION instruction) + JD/BlockE/userHint user message + parser. Reuses `concatTextBlocks` + `extractBlocks` from stageBPrompt for drift defense. + smoke 14
+- ⏳ **m2-tailor-runner** (~250) — `tailorRunner.mjs` + `tailorBundle.mjs`: single-job orchestrator (no batch — user-driven per-Job). DI seam, retry, atomic-write `output/{jobId}-{resumeId}.md`, NEVER throws. jobId+resumeId path-traversal validation in `defaultWriteOutput`. + smoke 12
+- ⏳ **m3-schema-and-endpoint** (~200) — `POST /api/career/cv/tailor` (Auto-Select fallback for resumeId; 412 if no stage_b; returns base_markdown for diff display) + `GET /output/:jobId/:resumeId` (path-traversal-safe disk read built from validated ids). No mutex needed. + smoke 10
+- ⏳ **m4-ui-and-room-complete** (~300) — `<TailorPanel />` modal + `<DiffViewer />` (react-diff-viewer-continued) + Pipeline integration (Tailor button per StageBBatch row) + Approve→PDF / Reject→hint+rerun + ROOM COMPLETE rollups. + smoke 5
+
+### Locked design (long-term-best, all defaults)
+
+| Decision | Choice |
+|----------|--------|
+| Diff library (OQ-1) | `react-diff-viewer-continued` ~30KB gz; polished side-by-side, worth the dep for fabrication-detection UX |
+| Cached corpus (OQ-2) | `base.md` + `proof-points.md` BOTH in cached system block (full fact-source for safety constraint) |
+| Hint history (OQ-3) | deferred — v1 ephemeral hint per run; persistence in future feedback Room |
+| Re-run policy (OQ-4) | overwrite — output uniquely keyed by (jobId, resumeId); user saves approved version externally |
+| Model | `claude-sonnet-4-6` (Stage B pricing tier; cache_control on system) |
+| Cost recording | shared `computeCostUsd` + `llm-costs.jsonl` with `caller: 'cv-tailor'` |
+| Mutex | none — read-only on pipeline.json; output uniquely keyed |
+| Idempotency | none — user-driven; re-run with hint is the expected path |
+| Path-traversal defense | both jobId and resumeId regex-validated; built from validated ids in endpoint AND runner (defense in depth) |
+| 412 on missing stage_b | Tailor depends on Block E; can't run without it |
+| Diff vs PDF gate | UI MUST show diff before render (constraint #1); Approve enables PDF download |
+
+### 下游 contracts
+
+- **`07-applier`**: tailored PDFs feed the Applier upload flow
+- **`08-human-gate-tracker`**: tailor-approved diffs enter the human-gate audit log
+- **Future feedback Room**: hint-history persistence (OQ-3 deferred)
+
 ---
 
-_Generated 2026-04-22 by room-init._
+_Generated 2026-04-22 by room-init. Plan refined 2026-05-05 by plan-milestones._
