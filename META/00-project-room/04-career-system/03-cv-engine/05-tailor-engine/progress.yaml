@@ -277,7 +277,7 @@ milestones:
       所有指标和经历都能在 base.md 里找到出处").
 
 commits:
-  - hash: "PENDING"  # filled by m1 followup
+  - hash: "2ee8414"
     date: "2026-05-05"
     message: "[04-career-system/03-cv-engine/05-tailor-engine] m1: tailorPrompt + parser (smoke 25/25)"
     files_changed: 2
