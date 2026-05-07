@@ -23,6 +23,34 @@ daily_budget_usd + 实时成本条 + 超预算自动暂停 Stage B
 - [intent-budget-gate-001](specs/intent-budget-gate-001.yaml) — daily_budget_usd + 实时成本条 + 超预算自动暂停 Stage B
 - [constraint-budget-gate-001](specs/constraint-budget-gate-001.yaml) — 超预算只暂停 Stage B，不暂停 Stage A；banner 显式提示不静默
 
+## 当前进度 — Plan 完成 (2026-05-07)
+
+3 milestones, ~580 LOC source + ~550 smoke. **Reuses existing cost-log infrastructure** ([server.mjs:1140-1242](server.mjs#L1140-L1242) — `appendCostRecord` / `readCostRecords` / `aggregateCosts` / GET `/api/career/llm-costs` already shipped, including local-timezone day-start handling per constraint #4). All 9 OQs locked at recommended values. Closing this Room takes **06-evaluator 40% → 60%** (3/5 ROOMs ✅).
+
+- ⏳ **m1-schema-and-budget-endpoint** (~150) — Add `daily_budget_usd` to PreferencesSchema (default 10) + GET `/api/career/evaluate/budget` returning `{today_total_usd, daily_budget_usd, paused, warning, by_caller, day_start}` projection. Pure read; no mutations. + smoke 10
+- ⏳ **m2-pre-call-gate** (~150) — `checkBudgetGate()` helper + pre-call gate at POST `/evaluate/stage-b` and `/cv/tailor`; 402 Payment Required when paused; `body.force=true` overrides but cost still records. Stage A NEVER gated (Haiku is cheap, constraint #1). + smoke 12
+- ⏳ **m3-ui-banner-and-room-complete** (~280) — `<BudgetBanner />` 30s-polling 3-state component (red paused / yellow warning / gray normal) mounted at Pipeline tab top + Preferences `daily_budget_usd` numeric input + ROOM COMPLETE rollups. Force-Sonnet UI button deferred to 05-pipeline-ui. + smoke 6
+
+### Locked design (long-term-best, all defaults)
+
+| Decision | Choice |
+|----------|--------|
+| Default budget | $10/day per spec (~30 Sonnet calls) |
+| Warning threshold | 80% (yellow at $8 of $10) |
+| Budget covers | Total daily cost (incl. Haiku); gate predicate is `total >= budget` |
+| Gated endpoints | `/evaluate/stage-b` AND `/cv/tailor` (both Sonnet); Stage A always open |
+| Force override | `body.force === true` bypasses gate; cost STILL recorded (constraint #3) |
+| HTTP status | 402 Payment Required (semantic clarity) |
+| Banner mount | Pipeline tab top (not App-wide; matches user's mental model) |
+| Banner dismiss | sessionStorage per-state; re-emerges on state transition / hard refresh |
+| Force-Sonnet UI button | Deferred to 05-pipeline-ui Room (this Room ships only backend `force` flag) |
+
+### 下游 contracts
+
+- **`05-pipeline-ui`**: wires the per-row Force-Sonnet button using the backend `force` flag this Room ships
+- **`03-block-toggles`**: may extend Preferences UI with per-block cost preview / disable-on-budget hints
+- **Tailor / Stage B**: now budget-aware; banner is the canonical user surface for "why is X paused"
+
 ---
 
 _Generated 2026-04-22 by room-init._
