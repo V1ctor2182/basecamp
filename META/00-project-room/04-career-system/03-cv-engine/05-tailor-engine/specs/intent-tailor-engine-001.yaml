@@ -17,6 +17,46 @@ provenance:
   confidence: 0.9
   source_ref: "career-architecture/02-cv-engine.md#2.7-tailor-engine"
 relations: []
-anchors: []
+anchors:
+  - file: "src/career/cv/tailorPrompt.mjs"
+    symbols:
+      - "TAILOR_MODEL"
+      - "NO_FABRICATION_INSTRUCTION"
+      - "buildSystemBlock"
+      - "buildUserMessage"
+      - "buildTailorPrompt"
+      - "extractBlockEFromReport"
+      - "parseTailorResponse"
+      - "ParseError"
+    description: "Tailor prompt builder + parser (m1): cache_control:ephemeral system block leading with CONSTRAINT #1 (no-fabrication verbatim per constraint-tailor-engine-001) + base.md + proof-points.md + emphasize. User message carries JD + Block E + optional userHint. Reuses stageBPrompt.extractBlocks for Block E pull. Local concatMarkdownBlocks uses \\n\\n for paragraph preservation."
+  - file: "src/career/cv/tailorRunner.mjs"
+    symbols:
+      - "tailorOneJob"
+      - "STATUS"
+      - "defaultWriteOutput"
+      - "TAILOR_CALLER"
+    description: "Tailor single-job orchestrator (m2): DI seam, callWithRetry on 5xx/429/408, atomic-write data/career/output/{jobId}-{resumeId}.md, NEVER throws. Early jobId+resumeId regex validation before bundle load + API call (path-traversal AND wasted-API-call defense)."
+  - file: "src/career/cv/tailorBundle.mjs"
+    symbols:
+      - "loadTailorBundle"
+    description: "Tailor bundle loader (m2): reads base.md + metadata.yml.emphasize + proof-points.md + identity.yml + Block E from reports/{jobId}.md. All reads graceful on ENOENT / yaml parse fail. Identity included for downstream renderer call (m4)."
+  - file: "server.mjs"
+    symbols:
+      - "TailorRequestSchema"
+      - "TAILOR_OUTPUT_DIR"
+      - "TAILOR_BASE_MD_MAX_BYTES"
+      - "resolveResumeIdForTailor"
+      - "readResumeBaseMd"
+    description: "Tailor HTTP endpoints (m3): POST /api/career/cv/tailor (Auto-Select fallback for resumeId via scoreResumeAgainstJd; 412 on missing/error stage_b; 404 on missing resume index; per-resume readResumeMetadata wrapped in try/catch so malformed YAML degrades to score=0 instead of 500; pre-loads base.md with 256KB size cap to defend OOM; returns 502 on runner error / 200 with base_markdown for diff display) + GET /output/:jobId/:resumeId (path-traversal-safe disk read built from validated ids only, defense-in-depth startsWith check)"
+  - file: "src/career/cv/TailorPanel.tsx"
+    symbols:
+      - "default"
+    description: "TailorPanel modal (m4): resume picker (defaults Auto-Select), optional userHint textarea (revealed after Reject), Run Tailor → DiffViewer side-by-side base vs tailored, Approve→POST /render/pdf+download / Reject→hint+rerun. role=dialog + aria-modal + Esc dismiss + click-outside (downloadingPdf guard). Constraint #2 enforcement: Approve gated by `result != null` AND inside `{result && (...)}` AND approveAndDownload early-returns on !result."
+  - file: "src/career/cv/DiffViewer.tsx"
+    symbols:
+      - "default"
+    description: "DiffViewer (m4): wraps react-diff-viewer-continued ^4.2.2 in side-by-side word-level mode (DiffMethod.WORDS — readable for resume markdown). Left=base.md, right=tailored — preserves before-vs-after mental model."
+  - file: "src/career/evaluator/StageBBatch.tsx"
+    description: "Modified in m4 — Tailor button per row (disabled if !report_path or status='error'); click mounts <TailorPanel jobId={...} jobRole jobCompany onClose={...} />."
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-07"

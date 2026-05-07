@@ -34,6 +34,7 @@ import { startScheduler, stopScheduler } from './src/career/finder/scheduler.mjs
 import { MODEL_PRICING, computeCostUsd } from './src/career/lib/anthropicPricing.mjs';
 import { evaluateJobsStageA } from './src/career/evaluator/stageARunner.mjs';
 import { evaluateJobsStageB } from './src/career/evaluator/stageBRunner.mjs';
+import { tailorOneJob, STATUS as TAILOR_STATUS } from './src/career/cv/tailorRunner.mjs';
 import {
   readCadenceState,
   cadenceToMs,
@@ -3583,6 +3584,247 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
     res.status(500).json({ error: e.message });
   } finally {
     releasePipelineEnrichLock();
+  }
+});
+
+// ─── CV Tailor: POST /api/career/cv/tailor + GET /output ────────────────
+// Tailor takes a Job (with Block E from its Stage B report), a chosen
+// resume (or Auto-Select fallback), and produces a tailored markdown
+// resume in data/career/output/{jobId}-{resumeId}.md.
+//
+// Single-job, user-driven. NO pipelineMutex — Tailor reads pipeline.json
+// read-only and writes only to its own output dir (uniquely keyed). No
+// mutation of pipeline.json (Tailor does not record evaluation state).
+//
+// Path-traversal defense pattern matches Stage B m4: GET /output reads
+// content from a path BUILT FROM validated jobId+resumeId — never from
+// any stored field. Defense-in-depth startsWith check on the resolved path.
+
+const TAILOR_OUTPUT_DIR = path.resolve('data', 'career', 'output');
+
+const TailorRequestSchema = z.object({
+  jobId: z.string().regex(JOB_ID_PATH_RE),
+  resumeId: z.string().regex(RESUME_ID_RE).optional(),
+  userHint: z.string().max(2000).optional(),
+});
+
+// Resolve which resumeId to use:
+//   1. explicit body.resumeId → validate exists in resume index → 404 if not
+//   2. missing → Auto-Select via scoreResumeAgainstJd against job.description
+//      + job.role; pick top (ties broken by is_default → created_at)
+//   3. resume index empty → throw RESUME_INDEX_EMPTY for caller to 404
+//
+// Returns { resumeId, picked_reason, picked_via }.
+const RESUME_INDEX_EMPTY = Symbol('resume_index_empty');
+const RESUME_NOT_FOUND = Symbol('resume_not_found');
+
+async function resolveResumeIdForTailor(body, job) {
+  const idx = await readResumeIndex();
+  if (!idx.resumes || idx.resumes.length === 0) {
+    const e = new Error('No resumes registered');
+    e.code = RESUME_INDEX_EMPTY;
+    throw e;
+  }
+
+  if (body.resumeId) {
+    const found = idx.resumes.find((r) => r && r.id === body.resumeId);
+    if (!found) {
+      const e = new Error(`resumeId not in index: ${body.resumeId}`);
+      e.code = RESUME_NOT_FOUND;
+      throw e;
+    }
+    return {
+      resumeId: body.resumeId,
+      picked_reason: 'explicit (caller-supplied)',
+      picked_via: 'explicit',
+    };
+  }
+
+  // Auto-Select fallback — re-uses scoreResumeAgainstJd from 04-auto-select.
+  // Wrap each readResumeMetadata in try/catch — malformed YAML or transient
+  // EACCES/EISDIR from one resume's metadata.yml MUST NOT 500 the whole
+  // tailor request. Treat as score=0 (resume still rankable, just no
+  // keyword signal), so Auto-Select can still produce a winner.
+  const jdText = typeof job?.description === 'string' ? job.description : '';
+  const role = typeof job?.role === 'string' ? job.role : '';
+  const rankings = [];
+  for (const r of idx.resumes) {
+    let md;
+    try {
+      md = await readResumeMetadata(r.id);
+    } catch (err) {
+      console.warn(
+        '[tailor] readResumeMetadata failed for',
+        r.id, '— ranking with score=0:',
+        String(err?.message ?? err).slice(0, 200)
+      );
+      md = {};
+    }
+    const { score, matched } = scoreResumeAgainstJd(md, jdText, role);
+    rankings.push({
+      id: r.id,
+      score,
+      matched,
+      is_default: r.is_default,
+      created_at: r.created_at,
+    });
+  }
+  rankings.sort((a, b) => {
+    if (a.score !== b.score) return b.score - a.score;
+    if (a.is_default !== b.is_default) return a.is_default ? -1 : 1;
+    return a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0;
+  });
+  const top = rankings[0];
+  return {
+    resumeId: top.id,
+    picked_reason: buildPickReason(top),
+    picked_via: 'auto-select',
+  };
+}
+
+// Cap on base.md size returned in the response. Defends against an
+// attacker (or accidentally) huge base.md OOM'ing the JSON response or
+// hanging the diff render. 256KB ~= ~50K markdown lines, well above any
+// reasonable resume size.
+const TAILOR_BASE_MD_MAX_BYTES = 256 * 1024;
+
+async function readResumeBaseMd(resumeId) {
+  const baseFile = path.join(resolveResumeDir(resumeId), 'base.md');
+  if (!existsSync(baseFile)) return '';
+  try {
+    // Stat first to short-circuit oversized reads without loading them.
+    const stat = await fs.stat(baseFile);
+    if (stat.size > TAILOR_BASE_MD_MAX_BYTES) {
+      console.warn(
+        '[tailor] base.md exceeds size cap',
+        TAILOR_BASE_MD_MAX_BYTES,
+        'for',
+        resumeId,
+        '— truncating'
+      );
+      const fh = await fs.open(baseFile, 'r');
+      try {
+        const buf = Buffer.alloc(TAILOR_BASE_MD_MAX_BYTES);
+        await fh.read(buf, 0, TAILOR_BASE_MD_MAX_BYTES, 0);
+        return buf.toString('utf-8') + '\n\n[...truncated; resume base.md exceeds size cap]';
+      } finally {
+        await fh.close();
+      }
+    }
+    const raw = await fs.readFile(baseFile, 'utf-8');
+    return typeof raw === 'string' ? raw : '';
+  } catch (err) {
+    console.warn(
+      '[tailor] readResumeBaseMd failed for',
+      resumeId, ':',
+      String(err?.message ?? err).slice(0, 200)
+    );
+    return '';
+  }
+}
+
+app.post('/api/career/cv/tailor', async (req, res) => {
+  let body;
+  try {
+    body = TailorRequestSchema.parse(req.body ?? {});
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid body', details: e.issues });
+  }
+
+  if (!existsSync(PIPELINE_FILE)) {
+    return res.status(404).json({ error: 'pipeline.json does not exist' });
+  }
+  let pipeline;
+  try {
+    pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+  } catch {
+    return res.status(500).json({ error: 'pipeline.json unparseable' });
+  }
+  const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+  const job = jobs.find((j) => j && j.id === body.jobId);
+  if (!job) return res.status(404).json({ error: `jobId not found: ${body.jobId}` });
+
+  // 412 — Tailor requires a successfully-evaluated Stage B report (Block E
+  // is the primary input). Error-status stage_b doesn't have a usable report.
+  const stageB = job.evaluation?.stage_b;
+  if (!stageB || stageB.status !== 'evaluated') {
+    return res.status(412).json({
+      error: 'job has no successfully-evaluated Stage B report (Block E required for tailor)',
+      stage_b_status: stageB?.status ?? null,
+    });
+  }
+
+  // Resolve resumeId (explicit or Auto-Select)
+  let picked;
+  try {
+    picked = await resolveResumeIdForTailor(body, job);
+  } catch (e) {
+    if (e?.code === RESUME_INDEX_EMPTY) {
+      return res.status(404).json({ error: 'No resumes registered — add a resume first' });
+    }
+    if (e?.code === RESUME_NOT_FOUND) {
+      return res.status(404).json({ error: e.message });
+    }
+    return res.status(500).json({ error: e.message });
+  }
+
+  // Pre-load base.md so the response can return it for diff display
+  // without forcing the UI to make a second fetch.
+  const baseMarkdown = await readResumeBaseMd(picked.resumeId);
+
+  // Run the tailor — single-job, NEVER throws (errors land in result.status)
+  const result = await tailorOneJob(job, picked.resumeId, body.userHint, {});
+
+  if (result.status === TAILOR_STATUS.ERROR) {
+    return res.status(502).json({
+      error: result.error ?? 'tailor failed',
+      jobId: result.jobId,
+      resumeId: result.resumeId,
+      cost_usd: result.cost_usd ?? 0,
+      picked_resume_id: picked.resumeId,
+      picked_reason: picked.picked_reason,
+      picked_via: picked.picked_via,
+    });
+  }
+
+  res.json({
+    tailored_markdown: result.tailored_markdown,
+    base_markdown: baseMarkdown,
+    output_path: result.output_path,
+    cost_usd: result.cost_usd,
+    model: result.model,
+    picked_resume_id: picked.resumeId,
+    picked_reason: picked.picked_reason,
+    picked_via: picked.picked_via,
+    status: result.status,
+  });
+});
+
+// GET tailor output — reads disk content for the diff UI on demand.
+// Validates ids, builds path from validated ids only (NOT from any stored
+// field), defense-in-depth startsWith check (Stage B m4 critical-fix
+// pattern).
+app.get('/api/career/cv/tailor/output/:jobId/:resumeId', async (req, res) => {
+  const jobId = req.params?.jobId;
+  const resumeId = req.params?.resumeId;
+  if (typeof jobId !== 'string' || !JOB_ID_PATH_RE.test(jobId)) {
+    return res.status(400).json({ error: 'invalid jobId' });
+  }
+  if (typeof resumeId !== 'string' || !RESUME_ID_RE.test(resumeId)) {
+    return res.status(400).json({ error: 'invalid resumeId' });
+  }
+  try {
+    const outputFile = path.join(TAILOR_OUTPUT_DIR, `${jobId}-${resumeId}.md`);
+    if (!outputFile.startsWith(TAILOR_OUTPUT_DIR + path.sep)) {
+      return res.status(400).json({ error: 'invalid output path' });
+    }
+    if (!existsSync(outputFile)) {
+      return res.status(404).json({ error: 'tailor output missing on disk' });
+    }
+    const content = await fs.readFile(outputFile, 'utf-8');
+    res.json({ content, jobId, resumeId });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
