@@ -293,7 +293,7 @@ commits:
       - "intent-tailor-engine-001 (anchors extended: tailorRunner.mjs + tailorBundle.mjs)"
     milestones_affected:
       - "m2-tailor-runner (→ completed)"
-  - hash: "PENDING"  # filled by m3 followup
+  - hash: "1350dc3"
     date: "2026-05-07"
     message: "[04-career-system/03-cv-engine/05-tailor-engine] m3: schema + endpoints + Auto-Select fallback (smoke 16/16)"
     files_changed: 2
