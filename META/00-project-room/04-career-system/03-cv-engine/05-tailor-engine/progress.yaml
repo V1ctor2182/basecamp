@@ -301,7 +301,7 @@ commits:
       - "intent-tailor-engine-001 (anchors extended: server.mjs Tailor endpoints + helpers)"
     milestones_affected:
       - "m3-schema-and-endpoint (→ completed)"
-  - hash: "PENDING"  # filled by m4 followup
+  - hash: "c27de79"
     date: "2026-05-07"
     message: "[04-career-system/03-cv-engine/05-tailor-engine] m4: TailorPanel + DiffViewer + ROOM COMPLETE (smoke 5/5)"
     files_changed: 7
