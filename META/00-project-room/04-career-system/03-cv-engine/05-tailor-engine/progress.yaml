@@ -137,7 +137,7 @@ milestones:
 
   - id: "m3-schema-and-endpoint"
     name: "POST /api/career/cv/tailor + GET output endpoint"
-    status: pending
+    status: completed
     estimated_files:
       - "server.mjs"
       - "scripts/smoke-tailor-endpoint.mjs"
@@ -293,8 +293,16 @@ commits:
       - "intent-tailor-engine-001 (anchors extended: tailorRunner.mjs + tailorBundle.mjs)"
     milestones_affected:
       - "m2-tailor-runner (→ completed)"
+  - hash: "PENDING"  # filled by m3 followup
+    date: "2026-05-07"
+    message: "[04-career-system/03-cv-engine/05-tailor-engine] m3: schema + endpoints + Auto-Select fallback (smoke 16/16)"
+    files_changed: 2
+    specs_affected:
+      - "intent-tailor-engine-001 (anchors extended: server.mjs Tailor endpoints + helpers)"
+    milestones_affected:
+      - "m3-schema-and-endpoint (→ completed)"
 
 current_sprint: "Sprint 7 — Tailor Engine"
 blockers: []
-status_note: "🟢 m2 complete (2/4). tailorRunner.mjs (~265) + tailorBundle.mjs (~95) + smoke 17/17. Single-job orchestrator (NOT batch — Tailor is user-driven per-Job); DI seam (_client/_recordCost/_sleep/_writeOutput/bundle); callWithRetry on 5xx/429/408/APIConnectionError; atomic tmp+rename to data/career/output/{jobId}-{resumeId}.md; NEVER throws. NO idempotency gate (re-run with hint IS the path). NO mutex (output uniquely keyed by (jobId,resumeId)). loadTailorBundle reads base.md + proof-points + identity + emphasize + Block E (via extractBlockEFromReport), all graceful on missing/parse-fail. Cost recording uses caller='cv-tailor' + job_id + resume_id. Plan-agent review applied 1 HIGH: early jobId+resumeId regex validation BEFORE bundle load + API call (defends against ~$0.01 wasted Anthropic call per malformed id from corrupted pipeline.json or numeric jobMeta.id) + 1 new smoke verifying non-string ids → no API call. Codex still quota-blocked. All 28 smoke files green + vite build clean. 03-cv-engine/05-tailor-engine 25% → 50%. 下一个: m3 (POST /api/career/cv/tailor + GET /output/:jobId/:resumeId + Auto-Select fallback + 412 on missing stage_b)."
-last_updated: "2026-05-05"
+status_note: "🟢 m3 complete (3/4). server.mjs +~250 (POST /api/career/cv/tailor + GET /output/:jobId/:resumeId + helpers) + smoke 16/16. POST validates body, 404 on missing pipeline / jobId, 412 (Block E required) when no successfully-evaluated stage_b, resolves resumeId via explicit > Auto-Select (reuses scoreResumeAgainstJd from 04-auto-select; ties broken by is_default → created_at) > 404 if index empty / explicit not found, pre-loads base.md (with size cap) so response includes base_markdown for diff display, calls tailorOneJob, returns 502 on runner error / 200 on success. GET /output validates BOTH ids (regex), builds path from validated ids only (NOT stored field — Stage B m4 critical-fix lesson), defense-in-depth startsWith check. NO mutex / NO pipeline.json mutation. Plan-agent review applied 2 HIGH fixes: (1) try/catch around per-resume readResumeMetadata in Auto-Select loop (malformed YAML on one resume MUST NOT 500 the whole tailor request — degrades to score=0), (2) base.md size cap 256KB via fs.stat short-circuit + truncated-read fallback (defends OOM on attacker/accidental huge base.md). + 2 new smokes verify both fixes. Codex still quota-blocked. All 29 smoke files green + vite build clean. 03-cv-engine/05-tailor-engine 50% → 75%. 下一个: m4 (TailorPanel + DiffViewer + Pipeline integration + ROOM COMPLETE → 03-cv-engine 80% → 100%)."
+last_updated: "2026-05-07"

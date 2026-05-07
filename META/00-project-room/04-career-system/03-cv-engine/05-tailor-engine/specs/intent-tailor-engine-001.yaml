@@ -40,5 +40,13 @@ anchors:
     symbols:
       - "loadTailorBundle"
     description: "Tailor bundle loader (m2): reads base.md + metadata.yml.emphasize + proof-points.md + identity.yml + Block E from reports/{jobId}.md. All reads graceful on ENOENT / yaml parse fail. Identity included for downstream renderer call (m4)."
+  - file: "server.mjs"
+    symbols:
+      - "TailorRequestSchema"
+      - "TAILOR_OUTPUT_DIR"
+      - "TAILOR_BASE_MD_MAX_BYTES"
+      - "resolveResumeIdForTailor"
+      - "readResumeBaseMd"
+    description: "Tailor HTTP endpoints (m3): POST /api/career/cv/tailor (Auto-Select fallback for resumeId via scoreResumeAgainstJd; 412 on missing/error stage_b; 404 on missing resume index; per-resume readResumeMetadata wrapped in try/catch so malformed YAML degrades to score=0 instead of 500; pre-loads base.md with 256KB size cap to defend OOM; returns 502 on runner error / 200 with base_markdown for diff display) + GET /output/:jobId/:reesumeId (path-traversal-safe disk read built from validated ids only, defense-in-depth startsWith check)"
 created_at: "2026-04-22"
-updated_at: "2026-05-05"
+updated_at: "2026-05-07"
