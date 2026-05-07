@@ -47,6 +47,16 @@ anchors:
       - "TAILOR_BASE_MD_MAX_BYTES"
       - "resolveResumeIdForTailor"
       - "readResumeBaseMd"
-    description: "Tailor HTTP endpoints (m3): POST /api/career/cv/tailor (Auto-Select fallback for resumeId via scoreResumeAgainstJd; 412 on missing/error stage_b; 404 on missing resume index; per-resume readResumeMetadata wrapped in try/catch so malformed YAML degrades to score=0 instead of 500; pre-loads base.md with 256KB size cap to defend OOM; returns 502 on runner error / 200 with base_markdown for diff display) + GET /output/:jobId/:reesumeId (path-traversal-safe disk read built from validated ids only, defense-in-depth startsWith check)"
+    description: "Tailor HTTP endpoints (m3): POST /api/career/cv/tailor (Auto-Select fallback for resumeId via scoreResumeAgainstJd; 412 on missing/error stage_b; 404 on missing resume index; per-resume readResumeMetadata wrapped in try/catch so malformed YAML degrades to score=0 instead of 500; pre-loads base.md with 256KB size cap to defend OOM; returns 502 on runner error / 200 with base_markdown for diff display) + GET /output/:jobId/:resumeId (path-traversal-safe disk read built from validated ids only, defense-in-depth startsWith check)"
+  - file: "src/career/cv/TailorPanel.tsx"
+    symbols:
+      - "default"
+    description: "TailorPanel modal (m4): resume picker (defaults Auto-Select), optional userHint textarea (revealed after Reject), Run Tailor → DiffViewer side-by-side base vs tailored, Approve→POST /render/pdf+download / Reject→hint+rerun. role=dialog + aria-modal + Esc dismiss + click-outside (downloadingPdf guard). Constraint #2 enforcement: Approve gated by `result != null` AND inside `{result && (...)}` AND approveAndDownload early-returns on !result."
+  - file: "src/career/cv/DiffViewer.tsx"
+    symbols:
+      - "default"
+    description: "DiffViewer (m4): wraps react-diff-viewer-continued ^4.2.2 in side-by-side word-level mode (DiffMethod.WORDS — readable for resume markdown). Left=base.md, right=tailored — preserves before-vs-after mental model."
+  - file: "src/career/evaluator/StageBBatch.tsx"
+    description: "Modified in m4 — Tailor button per row (disabled if !report_path or status='error'); click mounts <TailorPanel jobId={...} jobRole jobCompany onClose={...} />."
 created_at: "2026-04-22"
 updated_at: "2026-05-07"

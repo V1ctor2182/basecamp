@@ -205,7 +205,7 @@ milestones:
 
   - id: "m4-ui-and-room-complete"
     name: "TailorPanel + DiffViewer + Pipeline integration + ROOM COMPLETE"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/cv/TailorPanel.tsx"
       - "src/career/cv/DiffViewer.tsx"
@@ -301,8 +301,16 @@ commits:
       - "intent-tailor-engine-001 (anchors extended: server.mjs Tailor endpoints + helpers)"
     milestones_affected:
       - "m3-schema-and-endpoint (→ completed)"
+  - hash: "PENDING"  # filled by m4 followup
+    date: "2026-05-07"
+    message: "[04-career-system/03-cv-engine/05-tailor-engine] m4: TailorPanel + DiffViewer + ROOM COMPLETE (smoke 5/5)"
+    files_changed: 7
+    specs_affected:
+      - "intent-tailor-engine-001 (anchors extended: TailorPanel.tsx, DiffViewer.tsx)"
+    milestones_affected:
+      - "m4-ui-and-room-complete (→ completed)"
 
 current_sprint: "Sprint 7 — Tailor Engine"
 blockers: []
-status_note: "🟢 m3 complete (3/4). server.mjs +~250 (POST /api/career/cv/tailor + GET /output/:jobId/:resumeId + helpers) + smoke 16/16. POST validates body, 404 on missing pipeline / jobId, 412 (Block E required) when no successfully-evaluated stage_b, resolves resumeId via explicit > Auto-Select (reuses scoreResumeAgainstJd from 04-auto-select; ties broken by is_default → created_at) > 404 if index empty / explicit not found, pre-loads base.md (with size cap) so response includes base_markdown for diff display, calls tailorOneJob, returns 502 on runner error / 200 on success. GET /output validates BOTH ids (regex), builds path from validated ids only (NOT stored field — Stage B m4 critical-fix lesson), defense-in-depth startsWith check. NO mutex / NO pipeline.json mutation. Plan-agent review applied 2 HIGH fixes: (1) try/catch around per-resume readResumeMetadata in Auto-Select loop (malformed YAML on one resume MUST NOT 500 the whole tailor request — degrades to score=0), (2) base.md size cap 256KB via fs.stat short-circuit + truncated-read fallback (defends OOM on attacker/accidental huge base.md). + 2 new smokes verify both fixes. Codex still quota-blocked. All 29 smoke files green + vite build clean. 03-cv-engine/05-tailor-engine 50% → 75%. 下一个: m4 (TailorPanel + DiffViewer + Pipeline integration + ROOM COMPLETE → 03-cv-engine 80% → 100%)."
+status_note: "🎉 ROOM COMPLETE (4/4). m4 landed: <TailorPanel /> modal + <DiffViewer /> (react-diff-viewer-continued ^4.2.2, side-by-side word-level diff) + Pipeline integration via Tailor button per StageBBatch row + Approve→PDF / Reject→hint+rerun + ROOM COMPLETE rollups. role=dialog + aria-modal + Esc dismiss + click-outside (with downloadingPdf guard) + 1280px modal sized for diff frame. Constraint #2 enforcement triple-gated: Approve button only renders inside `{result && (...)}` AND `canApprove = result != null && !downloadingPdf` AND approveAndDownload early-returns if !result. Constraint #4 (only Approve triggers PDF render) verified — single call site to /render/pdf. Plan-agent review applied 2 HIGH (deferred URL.revokeObjectURL via setTimeout to avoid Safari/slow-disk download cancellation; resume-list fetch failure now surfaces as inline error rather than silent empty list) + 2 MEDIUM (cost_usd ?? 0 defense against contract drift, smoke comment clarification re: recover-endpoint future use). 3 deferred a11y items (focus trap, autofocus on open, unsaved-hint warn) consistent with ReportViewer baseline; can address in cross-cutting a11y pass. Codex still quota-blocked. 5 new UI smoke + all 30 smoke files individually green + vite build clean. 03-cv-engine/05-tailor-engine 75% → 100% 🎉. 03-cv-engine 80% → 100% 🎉 EPIC NODE COMPLETE. 04-career-system 65% → 67%. Downstream unblocked: 07-applier (tailored PDFs feed Applier upload), 08-human-gate-tracker (tailor-approved diffs into audit log), feedback Room (hint history persistence — OQ-3 deferred)."
 last_updated: "2026-05-07"

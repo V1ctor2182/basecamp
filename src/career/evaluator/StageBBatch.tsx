@@ -9,8 +9,10 @@ import {
   Loader2,
   FileText,
   Globe,
+  Wand2,
 } from 'lucide-react'
 import ReportViewer from './ReportViewer'
+import TailorPanel from '../cv/TailorPanel'
 import './stageBBatch.css'
 
 type StageBStatus = 'evaluated' | 'error'
@@ -58,6 +60,7 @@ export default function StageBBatch() {
   const [running, setRunning] = useState(false)
   const [actionMessage, setActionMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [viewingJobId, setViewingJobId] = useState<string | null>(null)
+  const [tailoringRow, setTailoringRow] = useState<EvaluatedRow | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   async function fetchResults(signal?: AbortSignal) {
@@ -269,6 +272,19 @@ export default function StageBBatch() {
                   >
                     <FileText size={12} /> Report
                   </button>
+                  <button
+                    type="button"
+                    className="sbb-tailor-btn"
+                    disabled={!row.report_path || row.status === 'error'}
+                    onClick={() => setTailoringRow(row)}
+                    title={
+                      row.report_path
+                        ? 'Tailor a resume for this job (uses Block E)'
+                        : 'Tailor unavailable — Stage B did not produce a report'
+                    }
+                  >
+                    <Wand2 size={12} /> Tailor
+                  </button>
                 </td>
               </tr>
             ))}
@@ -278,6 +294,14 @@ export default function StageBBatch() {
 
       {viewingJobId && (
         <ReportViewer jobId={viewingJobId} onClose={() => setViewingJobId(null)} />
+      )}
+      {tailoringRow && (
+        <TailorPanel
+          jobId={tailoringRow.id}
+          jobRole={tailoringRow.role}
+          jobCompany={tailoringRow.company}
+          onClose={() => setTailoringRow(null)}
+        />
       )}
     </div>
   )
