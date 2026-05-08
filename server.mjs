@@ -3359,6 +3359,10 @@ app.post('/api/career/evaluate/stage-a', async (req, res) => {
 // to data/career/reports/{jobId}.md before returning.
 const EvaluateStageBBodySchema = z.object({
   jobIds: z.array(z.string().min(1)).optional().nullable(),
+  // 04-budget-gate m2: explicit override of the daily-budget gate. Strict
+  // boolean — Zod rejects 'truthy-string' / 1 / null. Cost STILL records
+  // on force runs (constraint #3 — no white-label channel).
+  force: z.boolean().optional(),
 });
 
 // Threshold default lives in prefs.thresholds.consider; if missing or
@@ -3505,6 +3509,22 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
       return res.status(400).json({ error: 'Invalid body', details: e.issues });
     }
 
+    // 04-budget-gate m2: pre-call gate. Inserted AFTER body parse (so 400
+    // zod errors take precedence) and BEFORE pipeline.json read (no I/O
+    // waste when paused). body.force === true bypasses; cost still records
+    // via runner (constraint #3 — no white-label channel).
+    if (body.force !== true) {
+      const gate = await checkBudgetGate();
+      if (gate.paused) {
+        return res.status(402).json({
+          error: 'daily_budget_usd reached for Stage B',
+          banner_message: gate.banner_message,
+          today_total_usd: gate.today_total_usd,
+          daily_budget_usd: gate.daily_budget_usd,
+        });
+      }
+    }
+
     if (!existsSync(PIPELINE_FILE)) {
       return res.status(404).json({ error: 'pipeline.json does not exist' });
     }
@@ -3608,6 +3628,39 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
 // shape; this endpoint exists so the UI banner has a stable poll target.
 const BUDGET_WARNING_RATIO = 0.8;
 
+// Pre-call gate consumed by POST /evaluate/stage-b and POST /cv/tailor.
+// Returns the same paused/total/budget shape the GET /budget endpoint
+// publishes, plus a banner_message for UI use. Stage A endpoint does NOT
+// call this — Haiku is too cheap to limit per constraint #1.
+//
+// Reads disk on every call (~50ms): readCostRecords + readPreferences.
+// Caching deferred per Room plan (accuracy > speed for cost gates).
+async function checkBudgetGate() {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const filterStart = todayStart.toISOString();
+
+  const records = await readCostRecords({ start: filterStart });
+  const totalAgg = aggregateCosts(records);
+  const todayTotal = Math.round((totalAgg.total_cost ?? 0) * 10000) / 10000;
+
+  let dailyBudget;
+  try {
+    const prefs = await readPreferences();
+    const v = prefs?.evaluator_strategy?.stage_b?.daily_budget_usd;
+    dailyBudget = typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 10;
+  } catch {
+    dailyBudget = 10;
+  }
+
+  const paused = todayTotal >= dailyBudget;
+  const banner_message = paused
+    ? `今日 Sonnet+Tailor 预算 $${dailyBudget.toFixed(2)} 用尽 (已用 $${todayTotal.toFixed(4)}) — 明天继续，或去 Settings 提高上限`
+    : '';
+
+  return { paused, today_total_usd: todayTotal, daily_budget_usd: dailyBudget, banner_message };
+}
+
 app.get('/api/career/evaluate/budget', async (_req, res) => {
   try {
     const now = new Date();
@@ -3672,6 +3725,9 @@ const TailorRequestSchema = z.object({
   jobId: z.string().regex(JOB_ID_PATH_RE),
   resumeId: z.string().regex(RESUME_ID_RE).optional(),
   userHint: z.string().max(2000).optional(),
+  // 04-budget-gate m2: explicit override of the daily-budget gate.
+  // Same strict-boolean contract as Stage B. Cost STILL records.
+  force: z.boolean().optional(),
 });
 
 // Resolve which resumeId to use:
@@ -3795,6 +3851,21 @@ app.post('/api/career/cv/tailor', async (req, res) => {
     body = TailorRequestSchema.parse(req.body ?? {});
   } catch (e) {
     return res.status(400).json({ error: 'Invalid body', details: e.issues });
+  }
+
+  // 04-budget-gate m2: pre-call gate. AFTER body parse (so 400 zod
+  // errors take precedence) and BEFORE pipeline.json read. body.force
+  // === true bypasses; cost still records via tailorOneJob runner.
+  if (body.force !== true) {
+    const gate = await checkBudgetGate();
+    if (gate.paused) {
+      return res.status(402).json({
+        error: 'daily_budget_usd reached for Tailor',
+        banner_message: gate.banner_message,
+        today_total_usd: gate.today_total_usd,
+        daily_budget_usd: gate.daily_budget_usd,
+      });
+    }
   }
 
   if (!existsSync(PIPELINE_FILE)) {

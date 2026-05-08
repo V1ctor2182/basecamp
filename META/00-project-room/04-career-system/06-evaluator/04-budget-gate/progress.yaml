@@ -62,7 +62,7 @@ milestones:
 
   - id: "m2-pre-call-gate"
     name: "checkBudgetGate + Stage B/Tailor pre-call gate + Force override"
-    status: pending
+    status: completed
     estimated_files:
       - "server.mjs"
       - "scripts/smoke-budget-gate.mjs"
@@ -218,8 +218,17 @@ commits:
       - "intent-budget-gate-001 (anchors added: PreferencesSchema.daily_budget_usd + GET /api/career/evaluate/budget)"
     milestones_affected:
       - "m1-schema-and-budget-endpoint (→ completed)"
+  - hash: "PENDING"  # filled by m2 followup
+    date: "2026-05-07"
+    message: "[04-career-system/06-evaluator/04-budget-gate] m2: checkBudgetGate + 2-endpoint pre-call gate + force flag (smoke 12/12)"
+    files_changed: 2
+    specs_affected:
+      - "intent-budget-gate-001 (anchors extended: checkBudgetGate + EvaluateStageBBodySchema.force + TailorRequestSchema.force)"
+      - "constraint-budget-gate-001 (anchors added: gate enforcement points; constraints #1, #2, #3 enforced via 402 + cost-record-on-force)"
+    milestones_affected:
+      - "m2-pre-call-gate (→ completed)"
 
 current_sprint: "Sprint 8 — Budget Gate"
 blockers: []
-status_note: "🟢 m1 complete (1/3). PreferencesSchema.evaluator_strategy.stage_b adds daily_budget_usd: z.number().nonnegative().default(10) + GET /api/career/evaluate/budget read-only projection {today_total_usd, daily_budget_usd, paused, warning, by_caller, day_start}. Pure projection over existing infrastructure (server.mjs:1140-1242 readCostRecords / aggregateCosts already shipped, local-tz day-start handling per constraint #4 already correct). 11/11 smoke green (default budget / threshold transitions / by-caller breakdown / day-boundary exclusion / live-update of prefs / corrupt-prefs fallback / Zod accept+reject). Plan-agent review: 0 CRITICAL + 0 HIGH actionable; 19 probes all non-issue (timezone, DST, prefs fallback, $0-budget edge, mutual exclusivity all verified). All 31 smoke files individually green + vite build clean. 04-budget-gate 0% → 33%. 下一个: m2 (checkBudgetGate + pre-call gate at /evaluate/stage-b + /cv/tailor + force override flag)."
+status_note: "🟢 m2 complete (2/3). server.mjs +~75 (checkBudgetGate helper + force:bool field on EvaluateStageBBodySchema + TailorRequestSchema + gate calls at POST /evaluate/stage-b + POST /cv/tailor) + smoke 12/12. Gate inserted AFTER body parse + BEFORE pipeline.json read at both endpoints — 400 zod errors take precedence (force:'truthy-string' rejected); paused state returns 402 Payment Required with {error, banner_message, today_total_usd, daily_budget_usd} (UI banner contract); body.force === true bypasses gate; cost STILL records via existing runner (constraint #3 — no white-label). Stage A endpoint UNCHANGED (constraint #1, Haiku unlimited). Plan-agent review: 0 CRITICAL + 0 HIGH actionable; 16 probes all verified (mutex release on 402 path, force semantics, $0-budget edge, jobIds-path interaction, 402 vs 412 ordering, no race-against-cost-write, prefs fallback). All 32 smoke files individually green + vite build clean. 04-budget-gate 33% → 67%. 下一个: m3 (BudgetBanner UI + Preferences input + ROOM COMPLETE → 06-evaluator 40% → 60%)."
 last_updated: "2026-05-07"
