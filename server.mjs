@@ -1439,6 +1439,12 @@ const EvaluatorStrategySchema = z.object({
       block_f: z.boolean(),
       block_g: z.boolean(),
     }),
+    // Daily Sonnet+Tailor budget cap. 04-budget-gate enforces this:
+    // when today's total cost (incl. Haiku) reaches this threshold,
+    // Stage B and Tailor endpoints return 402 Payment Required.
+    // Default $10/day = ~30 Sonnet calls. Stage A (Haiku) is never
+    // gated regardless. See spec.md constraint #1.
+    daily_budget_usd: z.number().nonnegative().default(10),
   }),
 });
 
@@ -1510,6 +1516,7 @@ function defaultPreferences() {
       stage_b: {
         enabled: true,
         model: 'claude-sonnet-4-6',
+        daily_budget_usd: 10,
         blocks: {
           block_b: true,
           block_c: false,
@@ -3584,6 +3591,65 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
     res.status(500).json({ error: e.message });
   } finally {
     releasePipelineEnrichLock();
+  }
+});
+
+// ─── Budget Gate: GET /api/career/evaluate/budget ──────────────────────
+// Returns today's cost aggregate + budget threshold + paused/warning
+// flags. Pure projection over the cost-log infrastructure shipped by
+// 01-foundation/03-llm-cost-observability (readCostRecords,
+// aggregateCosts) plus the daily_budget_usd field added to
+// PreferencesSchema by 04-budget-gate m1.
+//
+// Today-mode reads (no query params on readCostRecords): local-tz day
+// start, satisfies constraint #4 (no UTC-rollover surprise at 11pm).
+//
+// m2 will add a checkBudgetGate() helper sharing the same prefs+aggregate
+// shape; this endpoint exists so the UI banner has a stable poll target.
+const BUDGET_WARNING_RATIO = 0.8;
+
+app.get('/api/career/evaluate/budget', async (_req, res) => {
+  try {
+    const now = new Date();
+    // Local-tz today 00:00 — same construction as GET /api/career/llm-costs
+    // default mode (line 1232ish). Keep in sync if that changes.
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const filterStart = todayStart.toISOString();
+
+    const records = await readCostRecords({ start: filterStart });
+    const totalAgg = aggregateCosts(records);
+    const byCallerAgg = aggregateCosts(records, 'caller');
+
+    let dailyBudget;
+    try {
+      const prefs = await readPreferences();
+      const v = prefs?.evaluator_strategy?.stage_b?.daily_budget_usd;
+      // Schema default kicks in when prefs.yml has the file but no field;
+      // when prefs.yml is missing entirely, readPreferences returns the
+      // defaultPreferences() shape which already includes daily_budget_usd:10.
+      // Defensive fallback handles the corrupt-prefs path.
+      dailyBudget = typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 10;
+    } catch {
+      // Prefs unparseable — fall back to default; banner will still show
+      // current cost, just against the default threshold. m2's gate will
+      // do the same thing.
+      dailyBudget = 10;
+    }
+
+    const todayTotal = totalAgg.total_cost ?? 0;
+    const paused = todayTotal >= dailyBudget;
+    const warning = !paused && todayTotal >= BUDGET_WARNING_RATIO * dailyBudget;
+
+    res.json({
+      today_total_usd: Math.round(todayTotal * 10000) / 10000,
+      daily_budget_usd: dailyBudget,
+      paused,
+      warning,
+      by_caller: byCallerAgg,
+      day_start: filterStart,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

@@ -23,11 +23,11 @@ daily_budget_usd + 实时成本条 + 超预算自动暂停 Stage B
 - [intent-budget-gate-001](specs/intent-budget-gate-001.yaml) — daily_budget_usd + 实时成本条 + 超预算自动暂停 Stage B
 - [constraint-budget-gate-001](specs/constraint-budget-gate-001.yaml) — 超预算只暂停 Stage B，不暂停 Stage A；banner 显式提示不静默
 
-## 当前进度 — Plan 完成 (2026-05-07)
+## 当前进度 — m1/3 done (2026-05-07, 33%)
 
 3 milestones, ~580 LOC source + ~550 smoke. **Reuses existing cost-log infrastructure** ([server.mjs:1140-1242](server.mjs#L1140-L1242) — `appendCostRecord` / `readCostRecords` / `aggregateCosts` / GET `/api/career/llm-costs` already shipped, including local-timezone day-start handling per constraint #4). All 9 OQs locked at recommended values. Closing this Room takes **06-evaluator 40% → 60%** (3/5 ROOMs ✅).
 
-- ⏳ **m1-schema-and-budget-endpoint** (~150) — Add `daily_budget_usd` to PreferencesSchema (default 10) + GET `/api/career/evaluate/budget` returning `{today_total_usd, daily_budget_usd, paused, warning, by_caller, day_start}` projection. Pure read; no mutations. + smoke 10
+- ✅ **m1-schema-and-budget-endpoint** (server.mjs +75 + Preferences.tsx type sync + smoke ~290, **11/11 green**) — `daily_budget_usd: z.number().nonnegative().default(10)` added to `PreferencesSchema.evaluator_strategy.stage_b`. GET `/api/career/evaluate/budget` returns `{today_total_usd, daily_budget_usd, paused, warning, by_caller, day_start}` — pure projection over the existing `readCostRecords` + `aggregateCosts` helpers from 01-foundation/03-llm-cost-observability. Local-tz day-start (constraint #4 ✓). Plan-agent review: 0 CRITICAL + 0 HIGH actionable; 19 probes all non-issue.
 - ⏳ **m2-pre-call-gate** (~150) — `checkBudgetGate()` helper + pre-call gate at POST `/evaluate/stage-b` and `/cv/tailor`; 402 Payment Required when paused; `body.force=true` overrides but cost still records. Stage A NEVER gated (Haiku is cheap, constraint #1). + smoke 12
 - ⏳ **m3-ui-banner-and-room-complete** (~280) — `<BudgetBanner />` 30s-polling 3-state component (red paused / yellow warning / gray normal) mounted at Pipeline tab top + Preferences `daily_budget_usd` numeric input + ROOM COMPLETE rollups. Force-Sonnet UI button deferred to 05-pipeline-ui. + smoke 6
 

@@ -17,6 +17,12 @@ provenance:
   confidence: 0.9
   source_ref: "career-architecture/05-evaluator.md#成本监控 + dashboard-顶部"
 relations: []
-anchors: []
+anchors:
+  - file: "server.mjs"
+    symbols:
+      - "PreferencesSchema"
+      - "EvaluatorStrategySchema"
+      - "BUDGET_WARNING_RATIO"
+    description: "Budget Gate (m1): adds daily_budget_usd: z.number().nonnegative().default(10) to PreferencesSchema.evaluator_strategy.stage_b + new GET /api/career/evaluate/budget endpoint (pure projection over readCostRecords + aggregateCosts; returns today_total_usd / daily_budget_usd / paused / warning / by_caller / day_start in local-tz)"
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-07"

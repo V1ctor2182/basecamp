@@ -29,7 +29,9 @@ type Thresholds = { strong: number; worth: number; consider: number; skip_below:
 type Blocks = { block_b: boolean; block_c: boolean; block_d: boolean; block_e: boolean; block_f: boolean; block_g: boolean }
 type EvaluatorStrategy = {
   stage_a: { enabled: boolean; model: string; threshold: number }
-  stage_b: { enabled: boolean; model: string; blocks: Blocks }
+  // daily_budget_usd added by 04-budget-gate m1: caps total daily Sonnet+
+  // Tailor spend (incl. Haiku in the count). Stage A never gated.
+  stage_b: { enabled: boolean; model: string; blocks: Blocks; daily_budget_usd: number }
 }
 type HardFilters = {
   source_filter: { blocked_sources: string[] }
@@ -121,7 +123,7 @@ function BLANK(): Preferences {
     evaluator_strategy: {
       stage_a: { enabled: true, model: 'claude-haiku-4-5', threshold: 3.5 },
       stage_b: {
-        enabled: true, model: 'claude-sonnet-4-6',
+        enabled: true, model: 'claude-sonnet-4-6', daily_budget_usd: 10,
         blocks: { block_b: true, block_c: false, block_d: false, block_e: true, block_f: false, block_g: false },
       },
     },

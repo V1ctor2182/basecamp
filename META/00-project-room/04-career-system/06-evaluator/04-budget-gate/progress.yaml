@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-schema-and-budget-endpoint"
     name: "daily_budget_usd schema + GET /api/career/evaluate/budget projection"
-    status: pending
+    status: completed
     estimated_files:
       - "server.mjs"
       - "src/career/settings/Preferences.tsx"
@@ -209,9 +209,17 @@ milestones:
       验收: smoke 6/6 PASS; manual UI test passes (banner displays in
       all 3 states; budget edit live-updates; ROOM COMPLETE rollups).
 
-commits: []
+commits:
+  - hash: "PENDING"  # filled by m1 followup
+    date: "2026-05-07"
+    message: "[04-career-system/06-evaluator/04-budget-gate] m1: schema + GET /budget endpoint (smoke 11/11)"
+    files_changed: 3
+    specs_affected:
+      - "intent-budget-gate-001 (anchors added: PreferencesSchema.daily_budget_usd + GET /api/career/evaluate/budget)"
+    milestones_affected:
+      - "m1-schema-and-budget-endpoint (→ completed)"
 
 current_sprint: "Sprint 8 — Budget Gate"
 blockers: []
-status_note: "Plan 完成 (2026-05-07). 3 milestones, ~580 LOC source + ~550 smoke. Reuses existing cost-log infrastructure (server.mjs:1140-1242 — appendCostRecord / readCostRecords / aggregateCosts / GET /llm-costs are already shipped, including local-timezone day-start handling per constraint #4). 9 OQs locked at recommended in Phase 2.5. Force-Sonnet UI button explicitly deferred to 05-pipeline-ui Room. Closing this Room takes 06-evaluator 40% → 60% (3/5 ROOMs ✅)."
+status_note: "🟢 m1 complete (1/3). PreferencesSchema.evaluator_strategy.stage_b adds daily_budget_usd: z.number().nonnegative().default(10) + GET /api/career/evaluate/budget read-only projection {today_total_usd, daily_budget_usd, paused, warning, by_caller, day_start}. Pure projection over existing infrastructure (server.mjs:1140-1242 readCostRecords / aggregateCosts already shipped, local-tz day-start handling per constraint #4 already correct). 11/11 smoke green (default budget / threshold transitions / by-caller breakdown / day-boundary exclusion / live-update of prefs / corrupt-prefs fallback / Zod accept+reject). Plan-agent review: 0 CRITICAL + 0 HIGH actionable; 19 probes all non-issue (timezone, DST, prefs fallback, $0-budget edge, mutual exclusivity all verified). All 31 smoke files individually green + vite build clean. 04-budget-gate 0% → 33%. 下一个: m2 (checkBudgetGate + pre-call gate at /evaluate/stage-b + /cv/tailor + force override flag)."
 last_updated: "2026-05-07"
