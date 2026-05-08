@@ -1,5 +1,184 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-fine-grained-subtoggles"
+    name: "Fine-grained sub-toggles: schema + prompt wiring (D websearch, F story_count, G playwright)"
+    status: pending
+    estimated_files:
+      - "server.mjs"
+      - "src/career/settings/Preferences.tsx"
+      - "src/career/evaluator/stageBPrompt.mjs"
+      - "scripts/smoke-block-subtoggles.mjs"
+    estimated_lines: 180
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Extend the Stage B block toggle infrastructure (already shipped in
+      02-stage-b-sonnet + Preferences UI) with 3 fine-grained sub-toggles.
+      All flat keys on the same nesting level as block_b/c/d/e/f/g — no
+      nested object structure, since flat preserves YAML migrations as
+      simple default-fills.
+
+      Schema additions (server.mjs EvaluatorStrategySchema.stage_b.blocks):
+        - block_d_websearch: z.boolean().default(true)
+            (when false: D enabled but skips web_search → JD-inference only,
+             saves ~$0.05/call)
+        - block_f_story_count: z.number().int().min(3).max(20).default(8)
+            (controls Block F STAR+R story count)
+        - block_g_playwright: z.boolean().default(true)
+            (when false: G enabled but skips verify_job_posting tool,
+             relies on posted_at heuristic only)
+
+      defaultPreferences() in server.mjs + BLANK() in Preferences.tsx:
+        - Add the 3 new fields with the documented defaults
+
+      stageBPrompt.mjs wiring:
+        - NEW resolveStageBToolPolicy(prefs) returns
+          {websearch_for_d, playwright_for_g} both booleans, reading from
+          the new flat keys with safe defaults (true) on missing
+        - F instructions: inject `${story_count}` into Block F description
+          (default 8 when missing); replace hardcoded "6-10 STAR + Reflection"
+        - D instructions: when websearch_for_d=false, append override line
+          "Web tool deliberately disabled by user — base entirely on JD
+           inference + general market knowledge"
+        - G instructions: when playwright_for_g=false, append override line
+          "verify_job_posting tool disabled — base legitimacy on posted_at
+           recency + JD signals only"
+
+      Smoke (~110 lines, ~10 asserts): schema accepts new fields with valid
+      values + rejects out-of-range story_count + default-fills missing keys
+      + resolveStageBToolPolicy returns correct shape + F prompt injects N
+      stories + D prompt switches to JD-only when websearch off + G prompt
+      switches to heuristic when playwright off + existing block_d toggle
+      precedence (block_d=false overrides block_d_websearch — disabled
+      block doesn't run web_search regardless).
+
+      验收: smoke 10/10; manual UI test deferred to m3 (this milestone is
+      backend-only — UI changes ship in m3).
+
+  - id: "m2-block-cost-estimates-module"
+    name: "Block cost estimates module: pure constants + estimateStageBCost helper"
+    status: pending
+    estimated_files:
+      - "src/career/evaluator/blockCostEstimates.mjs"
+      - "scripts/smoke-block-cost-estimates.mjs"
+    estimated_lines: 140
+    depends_on: ["m1-fine-grained-subtoggles"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Pure ESM module of constants + helper, no new HTTP endpoint, no
+      runtime dependencies on llm-costs.jsonl history. Cost estimates are
+      illustrative defaults derived from observed Stage B runs in
+      02-stage-b-sonnet; the UI will label them as estimates.
+
+      NEW src/career/evaluator/blockCostEstimates.mjs (~110 lines):
+
+        BLOCK_TOKEN_ESTIMATES = Object.freeze({
+          A: { output: 80   },   // Role Summary — 1 paragraph
+          B: { output: 600  },   // CV Match — requirement table (largest)
+          C: { output: 200  },   // Level & Strategy — strategy memo
+          D: { output: 250  },   // Comp & Demand — compact figures
+          E: { output: 350  },   // Personalization — bullet edits
+          F: { output_per_story: 90 },  // F scales w/ story_count
+          G: { output: 120  },   // Posting Legitimacy — short verdict
+        })
+
+        TOOL_COST_ADD = Object.freeze({
+          web_search:        0.05,    // per call hosted, paid each Stage B call when D enables it
+          verify_job_posting: 0,      // local Playwright, $0 marginal
+        })
+
+        CACHED_SYSTEM_INPUT_TOKENS_EST = 14000  // CV+narrative+proof+identity+qa-bank
+        SONNET_OUTPUT_OVERHEAD_TOKENS = 100     // total-score line + preamble + headers
+
+        estimateStageBCost(prefs) →
+          {
+            per_block: { A: {tokens, cost_usd}, ... G: {...} },
+            cached_input: { write_cost_first_call, read_cost_subsequent },
+            total_per_call_current: $X,
+            total_per_call_all_on: $Y,    // baseline assuming all enabled
+            delta_savings_usd: Y - X,
+            delta_savings_pct: ((Y-X)/Y * 100).toFixed(0)
+          }
+
+      Pricing reads from anthropicPricing.mjs (already shipped, has
+      claude-sonnet-4-6 input/output rates with cache_read discount).
+
+      Forced-on (A/B/E) blocks contribute to baseline AND current
+      regardless of toggle state. Disabled C/D/F/G blocks contribute 0
+      output cost (instructions still tell Sonnet to skip).
+
+      Smoke (~50 lines, ~6 asserts): all-on baseline matches sum of all
+      block costs + tools + cached-read; D off saves $0.05 (web_search
+      skipped) + ~$0.0X (250 output tokens skipped); F story_count=8
+      vs 12 changes output tokens by 4*90=360; F disabled drops all F
+      cost; cache write only counted on first call.
+
+      验收: smoke 6/6; module exports compile; vite build clean.
+
+  - id: "m3-preferences-ui-cost-preview-and-room-complete"
+    name: "Preferences UI: per-block cost badges + sub-toggles + projection summary + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "src/career/settings/Preferences.tsx"
+      - "src/career/settings/ats-form.css"
+      - "scripts/smoke-block-toggles-prefs.mjs"
+    estimated_lines: 230
+    depends_on: ["m2-block-cost-estimates-module"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Wire the m2 estimateStageBCost into Preferences.tsx Stage B Blocks
+      section + add 3 sub-controls + bottom-of-section projection card.
+      Closes the Room.
+
+      Preferences.tsx changes (~180 lines):
+
+        - Import estimateStageBCost from m2 module
+        - useMemo over prefs to compute costs (cheap; constant-time arith)
+        - Each BLOCK_META card augmented with cost badge:
+          · Enabled: "+$0.0090 / call" in green-monospace
+          · Disabled: "$0.0090 saved" in muted-strikethrough green
+          · Always-on (A): "Always rendered (~$0.0012 fixed)"
+        - Sub-controls inside the 3 cards:
+          · D card: "Allow web search" checkbox bound to block_d_websearch
+             (only enabled when block_d=true); shows "(saves ~$0.05/call when off)"
+          · F card: "Stories per response" number input, min 3 max 20,
+             bound to block_f_story_count; recomputes cost live
+          · G card: "Verify URL via Playwright" checkbox bound to
+             block_g_playwright (only enabled when block_g=true)
+        - Cost Projection summary card BELOW the block grid:
+          · "Per call: $0.XX (vs all-on $0.YY)"
+          · "Save $0.ZZ per call (NN%)"
+          · One-line caveat: "Estimates only — actual cost recorded in
+             llm-costs.jsonl + Pipeline budget banner."
+
+      ats-form.css additions (~30 lines):
+        - .af-block-cost (badge styling)
+        - .af-block-subcontrol (indented sub-toggle)
+        - .af-cost-projection (summary card)
+
+      Smoke (~30 lines, ~3 asserts):
+        - vite build clean (no TS errors)
+        - schema round-trip with all 3 new fields populated
+        - prefs save+reload preserves new fields
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml synced (planning → active for 03-block-toggles)
+        - 06-evaluator parent progress: 80% → 100% (5/5 ROOMs ✅)
+        - 04-career-system: 74% → 78%
+
+      下游 unblocked:
+        - 06-evaluator sub-epic 100% closed (4 of 8 sub-epics done in
+          04-career-system)
+        - 07-applier remains the next flagship sub-epic
+
+      验收: smoke 3/3 + manual UI test (toggle D off → cost drops in projection
+      summary; F story_count change recomputes; sub-toggles disabled when
+      parent block disabled); ROOM COMPLETE.
+
+current_sprint: "Sprint 10 — Block Toggles"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "📋 Plan locked: 3 milestones, ~550 LOC + ~250 smoke. Builds on already-shipped infra (BLOCK_META UI grid + EvaluatorStrategySchema.blocks + resolveEnabledBlocks in prompt builder + anthropicPricing). m1 adds 3 flat sub-toggle keys (block_d_websearch / block_f_story_count / block_g_playwright) + wires them into Stage B prompt. m2 ships pure-constants cost estimates module + estimateStageBCost helper. m3 wires UI: per-block cost badges + sub-controls + total projection summary + ROOM COMPLETE rollups. 0 open questions. 单方案路径 (no Plan B) — pattern is clear from 04-budget-gate / 05-pipeline-ui. Closes 06-evaluator at 100% (5/5 ROOMs ✅)."
+last_updated: "2026-05-08"
