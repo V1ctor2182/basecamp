@@ -227,7 +227,7 @@ commits:
       - "constraint-budget-gate-001 (anchors added: enforcement points)"
     milestones_affected:
       - "m2-pre-call-gate (→ completed)"
-  - hash: "PENDING"  # filled by m3 followup
+  - hash: "48c5005"
     date: "2026-05-08"
     message: "[04-career-system/06-evaluator/04-budget-gate] m3: BudgetBanner + Preferences input + ROOM COMPLETE (smoke 6/6)"
     files_changed: 6
