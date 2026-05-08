@@ -1,0 +1,206 @@
+/* Shortlist page — sl- prefix scopes
+ * Mirrors stageBBatch table/chip language but with chip filter strip on top
+ * and click-to-navigate row affordance. Warm palette + Lucide. */
+
+.sl-error,
+.sl-empty,
+.sl-stale {
+  padding: 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-top: 12px;
+}
+.sl-error {
+  display: flex; align-items: center; gap: 6px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+.sl-empty {
+  text-align: center;
+  color: #78716c;
+  background: #fafaf9;
+}
+.sl-stale {
+  display: flex; align-items: center; gap: 6px;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.sl-link {
+  color: #1c1917;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.sl-link:hover { color: #5b21b6; }
+
+/* ── Manual-paste nudge (preserved from prior stub) ─────────────────── */
+.sl-manual-nudge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  margin: 12px 0;
+  color: #92400e;
+}
+.sl-manual-nudge-text {
+  flex: 1;
+  font-size: 13px;
+}
+.sl-manual-nudge-link {
+  color: #92400e;
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 13px;
+}
+.sl-manual-nudge-link:hover { text-decoration: underline; }
+
+/* ── Toolbar (chips + refresh) ─────────────────────────────────────── */
+.sl-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+.sl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+.sl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 5px 12px;
+  border: 1px solid #e7e5e4;
+  background: #fff;
+  color: #57534e;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.sl-chip:hover { background: #fafaf9; color: #1c1917; }
+.sl-chip-active {
+  background: #1c1917;
+  border-color: #1c1917;
+  color: #fff;
+}
+.sl-chip-active:hover { background: #292524; color: #fff; }
+.sl-chip-count {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.sl-refresh {
+  background: transparent;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  color: #57534e;
+}
+.sl-refresh:hover { background: #fafaf9; color: #1c1917; }
+
+/* ── Table ─────────────────────────────────────────────────────────── */
+.sl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.sl-table th,
+.sl-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f5f5f4;
+  vertical-align: top;
+}
+.sl-table th {
+  color: #78716c;
+  font-weight: 500;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sl-table tbody tr:last-child td { border-bottom: none; }
+
+.sl-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.sl-row:hover { background: #fafaf9; }
+.sl-row:focus-visible {
+  outline: 2px solid #1c1917;
+  outline-offset: -2px;
+}
+
+.sl-role { font-weight: 500; color: #1c1917; }
+.sl-meta { color: #78716c; font-size: 12px; margin-top: 2px; }
+
+.sl-stage-a {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  color: #57534e;
+}
+
+.sl-blocks { display: flex; flex-wrap: wrap; gap: 4px; max-width: 220px; }
+.sl-block-chip {
+  display: inline-flex; align-items: center;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px; font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #e7e5e4;
+  color: #44403c;
+}
+
+.sl-tailor-yes {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.sl-evaluated {
+  white-space: nowrap;
+}
+
+.sl-row-actions {
+  display: flex; gap: 6px; align-items: center;
+}
+.sl-btn-link {
+  display: inline-flex; align-items: center;
+  padding: 5px 8px; border: 1px solid #e7e5e4;
+  background: #fff; color: #57534e;
+  border-radius: 4px; text-decoration: none;
+}
+.sl-btn-link:hover { background: #fafaf9; color: #1c1917; }
+
+/* ── Score badges (matches sbb-score variants) ─────────────────────── */
+.sl-score {
+  display: inline-flex; align-items: center;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px; font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.sl-score-strong   { color: #14532d; background: #d1fae5; }
+.sl-score-worth    { color: #92400e; background: #fef3c7; }
+.sl-score-consider { color: #57534e; background: #e7e5e4; }
+
+.sl-footer {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #78716c;
+  text-align: right;
+}

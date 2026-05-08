@@ -55,7 +55,7 @@ milestones:
 
   - id: "m2-shortlist-page"
     name: "Shortlist page real implementation + GET /api/career/shortlist"
-    status: pending
+    status: completed
     estimated_files:
       - "server.mjs"
       - "src/career/Shortlist.tsx"
@@ -238,8 +238,16 @@ commits:
       - "intent-pipeline-ui-001 (anchors added: Force Sonnet handler in StageABatch + Force Re-eval handler in StageBBatch + force-with-jobIds pre-clear in server.mjs)"
     milestones_affected:
       - "m1-force-sonnet-wiring (→ completed)"
+  - hash: "PENDING"
+    date: "2026-05-08"
+    message: "[04-career-system/06-evaluator/05-pipeline-ui] m2: GET /api/career/shortlist + Shortlist.tsx full rewrite + scoped CSS (smoke 10/10)"
+    files_changed: 5
+    specs_affected:
+      - "intent-pipeline-ui-001 (anchors added: server.mjs shortlist endpoint, Shortlist.tsx full rewrite, shortlist.css, smoke-shortlist-endpoint.mjs)"
+    milestones_affected:
+      - "m2-shortlist-page (→ completed)"
 
 current_sprint: "Sprint 9 — Pipeline UI"
 blockers: []
-status_note: "🟢 m1 complete (1/3). Force Sonnet button in StageABatch wired (replaces disabled stub from earlier Rooms) + per-row Force Re-eval button in StageBBatch (RotateCcw amber). Both POST /evaluate/stage-b {jobIds:[id], force:true} bypassing 04-budget-gate cap; native confirm() with cost projection. Server.mjs pre-clears stage_b on candidates when {force:true && jobIds supplied} so the runner's shouldEvaluate skip-if-evaluated guard doesn't short-circuit user-requested re-eval. StageABatch poll now passes abort signal (consistency with StageBBatch — reviewer's optional polish). Plan-agent review: 0 CRITICAL + 0 HIGH actionable; probe #3 invalidated by reading runner code (errorResult always lands in result.results — pre-cleared null cannot persist to disk). All 34 smoke files individually green + vite build clean. Codex CLI still quota-blocked. 05-pipeline-ui 0% → 33%. 下一个: m2 (GET /api/career/shortlist endpoint + full Shortlist.tsx rewrite with sortable+filterable table)."
+status_note: "🟢 m2 complete (2/3, 67%). NEW GET /api/career/shortlist read-only projection over pipeline.json — filters stage_b.status==='evaluated' AND total_score >= prefs.thresholds.worth (default 4.0, live-read each request); sorts total_score desc with evaluated_at desc tiebreaker; top-100 cap; has_tailor_output derived via single readdir on data/career/output matching /^([a-f0-9]{12})-[a-z0-9-]+\\.md$/. Full Shortlist.tsx rewrite from stub: 5-chip filter strip (all / score-4.5+ / score-4.0-4.4 / pending-stage-b / has-tailor) backed by single CHIP_PREDICATES map shared by filteredResults + chipCounts useMemos so the two cannot drift; useNavigate-driven row clicks with role=link + tabIndex + keyboard handler (replaces invalid Link-wrapping-tr); manual-refresh AbortController stored in ref + aborted on unmount + on next click; polling 30s; preserved manual-paste nudge from prior stub; ScoreBadge tiers (strong/worth/consider). Scoped sl- CSS (~190 lines). Plan-agent review: 0 CRITICAL + 0 HIGH; applied 1 MEDIUM (manual refresh ctrl ref) + 1 LOW (chip count consolidation), deferred 2 LOW (forward-ref to TAILOR_OUTPUT_DIR works fine via lazy handler eval; useEffect deps empty intentionally — fetch fns capture only stable setters). All 35 smoke files individually green + vite build clean. Codex CLI still quota-blocked. 05-pipeline-ui 33% → 67%. 下一个: m3 (Reports.tsx full rewrite with Block A-G sticky sidebar + TailorPanel reuse + ROOM COMPLETE)."
 last_updated: "2026-05-08"
