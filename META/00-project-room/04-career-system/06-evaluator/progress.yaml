@@ -1,12 +1,12 @@
 milestones: []
 current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-completion: 60  # avg(100, 100, 0, 100, 0) = 60 across 5 features (3 ROOMs ✅)
+completion: 80  # avg(100, 100, 0, 100, 100) = 80 across 5 features (4 ROOMs ✅)
 children_completion:
   "01-stage-a-haiku": 100  # ✅ ROOM COMPLETE (4/4 milestones, ~2300 行)
   "02-stage-b-sonnet": 100  # 🎉 ROOM COMPLETE (5/5 milestones; first Anthropic Tools API use)
   "03-block-toggles": 0
   "04-budget-gate": 100  # 🎉 ROOM COMPLETE (3/3 milestones, ~580 LOC + 29 smoke asserts; daily_budget_usd + 402 gate + 3-state banner)
-  "05-pipeline-ui": 0
-status_note: "🎉 06-evaluator 60% (3/5 ROOMs ✅). 04-budget-gate just shipped — daily_budget_usd cap on PreferencesSchema + GET /api/career/evaluate/budget projection + checkBudgetGate pre-call gate at /evaluate/stage-b + /cv/tailor (402 Payment Required, body.force=true override) + <BudgetBanner /> 3-state UI at Pipeline tab top. Stage A NEVER gated (constraint #1). 下一个: 03-block-toggles (extends Preferences with per-block cost preview / disable-on-budget hints) / 05-pipeline-ui (will wire Force Sonnet button using the body.force flag from this Room)."
+  "05-pipeline-ui": 100  # 🎉 ROOM COMPLETE (3/3 milestones; Force Sonnet wiring + Shortlist page + Reports page with Block A-G sidebar)
+status_note: "🎉 06-evaluator 80% (4/5 ROOMs ✅). 05-pipeline-ui just shipped — Force Sonnet/Re-eval wiring (m1, consumes 04-budget-gate's body.force flag), Shortlist page full rewrite with sortable+filterable table over new GET /api/career/shortlist endpoint (m2), Reports page list+detail with Block A-G sticky sidebar nav driven by IntersectionObserver + page actions (Tailor / Open in Pipeline / Print) (m3). 下一个: 03-block-toggles (last sibling Room — extends Preferences with per-block cost preview / disable-on-budget hints)."
 last_updated: "2026-05-08"

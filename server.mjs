@@ -3435,6 +3435,99 @@ app.get('/api/career/evaluate/stage-b/results', async (_req, res) => {
   }
 });
 
+// ─── Shortlist: GET /api/career/shortlist ──────────────────────────────
+// 06-evaluator/05-pipeline-ui m2: projection over jobs with successfully-
+// evaluated stage_b at total_score >= score_floor (default
+// prefs.thresholds.worth ?? 4.0). Sorted desc by total_score with
+// evaluated_at desc as tiebreaker. Top 100 cap.
+//
+// Read-only — no mutations. Pure projection over pipeline.json + a
+// single readdir on data/career/output/ to derive `has_tailor_output`
+// per row.
+const SHORTLIST_TOP_CAP = 100;
+
+app.get('/api/career/shortlist', async (_req, res) => {
+  try {
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.json({ total: 0, score_floor: 4.0, results: [] });
+    }
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+
+    // score_floor = prefs.thresholds.worth ?? 4.0
+    let scoreFloor = 4.0;
+    try {
+      const prefs = await readPreferences();
+      const v = Number(prefs?.thresholds?.worth);
+      if (Number.isFinite(v) && v >= 0) scoreFloor = v;
+    } catch {
+      // Corrupt prefs — keep $4.0 default; same fallback as /budget
+    }
+
+    // Build a Set of jobIds that have any tailored output file. One readdir.
+    const tailoredJobIds = new Set();
+    if (existsSync(TAILOR_OUTPUT_DIR)) {
+      try {
+        const files = await fs.readdir(TAILOR_OUTPUT_DIR);
+        for (const f of files) {
+          // output/{jobId}-{resumeId}.md format
+          const m = f.match(/^([a-f0-9]{12})-[a-z0-9-]+\.md$/);
+          if (m) tailoredJobIds.add(m[1]);
+        }
+      } catch {
+        // ignore — has_tailor_output stays false
+      }
+    }
+
+    const qualifying = jobs.filter(
+      (j) =>
+        j &&
+        j.evaluation?.stage_b?.status === 'evaluated' &&
+        typeof j.evaluation.stage_b.total_score === 'number' &&
+        j.evaluation.stage_b.total_score >= scoreFloor
+    );
+
+    qualifying.sort((a, b) => {
+      const sb = b.evaluation.stage_b.total_score - a.evaluation.stage_b.total_score;
+      if (sb !== 0) return sb;
+      // evaluated_at desc tiebreaker (lexical compare on ISO strings)
+      const ea = a.evaluation.stage_b.evaluated_at ?? '';
+      const eb = b.evaluation.stage_b.evaluated_at ?? '';
+      if (eb < ea) return -1;
+      if (eb > ea) return 1;
+      return 0;
+    });
+
+    const results = qualifying.slice(0, SHORTLIST_TOP_CAP).map((j) => ({
+      id: j.id,
+      company: j.company,
+      role: j.role,
+      url: j.url,
+      location: j.location,
+      total_score: j.evaluation.stage_b.total_score,
+      blocks_emitted: j.evaluation.stage_b.blocks_emitted ?? [],
+      report_path: j.evaluation.stage_b.report_path,
+      evaluated_at: j.evaluation.stage_b.evaluated_at,
+      cost_usd: j.evaluation.stage_b.cost_usd ?? 0,
+      stage_a_score: j.evaluation?.stage_a?.score ?? null,
+      has_tailor_output: tailoredJobIds.has(j.id),
+    }));
+
+    res.json({
+      total: qualifying.length,
+      score_floor: scoreFloor,
+      results,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── Stage B: serve report markdown to the UI ──────────────────────────
 // GET /api/career/evaluate/stage-b/report/:jobId
 // Validates jobId against the canonical regex, then reads the file from
@@ -3542,10 +3635,20 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
     let candidates;
     if (Array.isArray(body.jobIds) && body.jobIds.length > 0) {
       // jobIds-supplied path: pick exactly those (skip stage_a/threshold gate
-      // — caller is explicitly requesting; runner's idempotency still skips
-      // anything already with stage_b set).
+      // — caller is explicitly requesting). When body.force is also true,
+      // clear stage_b in-memory on those candidates so the runner's
+      // shouldEvaluate skip-if-evaluated guard doesn't short-circuit a
+      // user-requested Force Re-eval (05-pipeline-ui m1). Without force,
+      // runner's idempotency still skips anything already with stage_b set.
       const wanted = new Set(body.jobIds);
       candidates = jobs.filter((j) => j && wanted.has(j.id));
+      if (body.force === true) {
+        for (const j of candidates) {
+          if (j.evaluation && j.evaluation.stage_b != null) {
+            j.evaluation = { ...j.evaluation, stage_b: null };
+          }
+        }
+      }
     } else {
       // All-pending path: stage_a evaluated AND score >= threshold AND stage_b
       // not yet set. Errored stage_a rows are excluded (their score is null).

@@ -17,6 +17,24 @@ provenance:
   confidence: 0.9
   source_ref: "career-architecture/05-evaluator.md#per-pipeline-ui-控制 + 批量操作"
 relations: []
-anchors: []
+anchors:
+  - file: "src/career/evaluator/StageABatch.tsx"
+    description: "Pipeline UI m1: Force Sonnet button replaces disabled stub. Native confirm() with cost projection (~$0.30) → POST /evaluate/stage-b {jobIds:[id], force:true} bypassing 04-budget-gate cap. Per-row forcingJobId state ensures one force-run at a time. Cost still records (constraint #3 of budget-gate). Polling now passes abort signal."
+  - file: "src/career/evaluator/StageBBatch.tsx"
+    description: "Pipeline UI m1: per-row Force Re-eval button (RotateCcw amber) re-runs Stage B on already-evaluated jobs with body.force=true. Useful when user fixed prefs/CV between runs. Server-side pre-clear of stage_b ensures runner doesn't skip via shouldEvaluate."
+  - file: "server.mjs"
+    description: "Pipeline UI m1 endpoint change: when {body.force === true && body.jobIds supplied}, the candidate-selection block pre-clears stage_b in-memory on each candidate so the runner's shouldEvaluate skip-if-evaluated guard doesn't short-circuit. Without force, runner idempotency still applies. m2: NEW GET /api/career/shortlist read-only projection over pipeline.json — filters jobs to stage_b.status==='evaluated' with total_score >= score_floor (live-read prefs.thresholds.worth ?? 4.0); sorts total_score desc + evaluated_at desc tiebreaker; top-100 cap; derives has_tailor_output via single readdir on data/career/output/ matching /^([a-f0-9]{12})-[a-z0-9-]+\\.md$/."
+  - file: "src/career/Shortlist.tsx"
+    description: "Pipeline UI m2: full rewrite of stub. 30s polling of /shortlist + side-fetch of stage-b/results pending count + preserved manual-enrich nudge (needs-manual fetch). 5-chip filter strip (all / score-4.5+ / score-4.0-4.4 / pending-stage-b / has-tailor) backed by a single CHIP_PREDICATES map shared by filteredResults useMemo + chipCounts useMemo so they cannot drift. Click row → useNavigate('/career/reports/:id') with role=link + tabIndex + keyboard handler. Manual refresh button stores its AbortController in a ref so unmount cleanup aborts the in-flight fetch and spam-clicks don't pile up requests. ScoreBadge component (strong/worth/consider tiers) + formatRelative helper."
+  - file: "src/career/shortlist/shortlist.css"
+    description: "Pipeline UI m2: NEW scoped styles with sl- prefix. Filter chip strip (inactive gray / active dark), warm score-badge tiers, sortable-table cells matching sbb- table styling, focus-visible row outline for keyboard nav, manual-paste nudge banner."
+  - file: "scripts/smoke-shortlist-endpoint.mjs"
+    description: "Pipeline UI m2 smoke: 10 server-spawn assertions (port 4588, MOCK_ANTHROPIC). Empty pipeline / score filter+sort / evaluated_at tiebreaker / score_floor live-read from prefs / top-100 cap with 110 jobs / has_tailor_output flag accuracy via readdir match / status:'error' rows excluded / per-row field contract / unparseable pipeline → 500 / stage_b:null rows excluded."
+  - file: "src/career/Reports.tsx"
+    description: "Pipeline UI m3 (ROOM COMPLETE): full rewrite of stub. Two render paths via useParams.id: list view (no id) over /evaluate/stage-b/results includes status='error' rows clickable into detail; detail view (with id) renders /report/:id markdown via react-markdown + remark-gfm. Sticky left sidebar auto-derives Block A-G nav via /^## Block ([A-G])\\b/gm on raw content; ReactMarkdown h2 component override injects id={block-X} + data-block={X} when text matches ^Block ([A-G]); IntersectionObserver tracks current section in viewport (rootMargin -80px 0px -60% 0px) and toggles .rp-toc-active. Page actions: Tailor (mounts existing <TailorPanel jobId jobRole? jobCompany? onClose>), Open in Pipeline (navigate('/career/pipeline')), Print (window.print). Header derives role+company+url from a side-fetch of /results (50-row cap acceptable). childrenToString recursive helper handles ReactMarkdown's children prop (string | ReactElement | ReactNode[])."
+  - file: "src/career/reports.css"
+    description: "Pipeline UI m3 (ROOM COMPLETE): NEW scoped styles with rp- prefix. List table cells, detail page 2-col layout (220px sticky sidebar + min-width:0 markdown article), markdown body matching sbb-modal-markdown (h2 scroll-margin-top:16px), focus-visible row outline, @media print hides topbar+sidebar for full-width content."
+  - file: "scripts/smoke-reports-page.mjs"
+    description: "Pipeline UI m3 smoke: 6 server-spawn assertions (port 4589, MOCK_ANTHROPIC). /report/:validId round-trips content+total_score+blocks_emitted / /report/:bad-id → 400 / /report/:unknown → 404 / /report/:id → 404 when on-disk file missing / /results returns errored stage_b rows with status='error' + reason / /results round-trips role+company+url for detail header derivation."
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-08"
