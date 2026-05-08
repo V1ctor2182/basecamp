@@ -190,7 +190,7 @@ commits:
       - "intent-block-toggles-001 (anchors added: blockCostEstimates.mjs module, smoke-block-cost-estimates.mjs)"
     milestones_affected:
       - "m2-block-cost-estimates-module (→ completed)"
-  - hash: "PENDING"
+  - hash: "334807c"
     date: "2026-05-08"
     message: "[04-career-system/06-evaluator/03-block-toggles] m3: Preferences UI cost preview + sub-controls + ROOM COMPLETE (smoke 3/3)"
     files_changed: 4
