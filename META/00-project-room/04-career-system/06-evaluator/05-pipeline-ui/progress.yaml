@@ -246,9 +246,9 @@ commits:
       - "intent-pipeline-ui-001 (anchors added: server.mjs shortlist endpoint, Shortlist.tsx full rewrite, shortlist.css, smoke-shortlist-endpoint.mjs)"
     milestones_affected:
       - "m2-shortlist-page (→ completed)"
-  - hash: "PENDING"
+  - hash: "2271c27"
     date: "2026-05-08"
-    message: "[04-career-system/06-evaluator/05-pipeline-ui] m3: Reports page list+detail + Block A-G sidebar + TailorPanel reuse + ROOM COMPLETE (smoke 6/6)"
+    message: "[04-career-system/06-evaluator/05-pipeline-ui] m3: Reports page + Block A-G sidebar + ROOM COMPLETE (smoke 6/6)"
     files_changed: 8
     specs_affected:
       - "intent-pipeline-ui-001 (anchors added: Reports.tsx full rewrite, reports.css, smoke-reports-page.mjs)"
