@@ -129,7 +129,7 @@ milestones:
 
   - id: "m3-ui-banner-and-room-complete"
     name: "<BudgetBanner /> + Preferences daily_budget_usd input + ROOM COMPLETE"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/evaluator/BudgetBanner.tsx"
       - "src/career/evaluator/budgetBanner.css"
@@ -224,11 +224,26 @@ commits:
     files_changed: 2
     specs_affected:
       - "intent-budget-gate-001 (anchors extended: checkBudgetGate + EvaluateStageBBodySchema.force + TailorRequestSchema.force)"
+      - "constraint-budget-gate-001 (anchors added: enforcement points)"
+    milestones_affected:
+      - "m2-pre-call-gate (→ completed)"
+  - hash: "PENDING"  # filled by m3 followup
+    date: "2026-05-08"
+    message: "[04-career-system/06-evaluator/04-budget-gate] m3: BudgetBanner + Preferences input + ROOM COMPLETE (smoke 6/6)"
+    files_changed: 6
+    specs_affected:
+      - "intent-budget-gate-001 (anchors extended: BudgetBanner.tsx + Preferences daily_budget_usd input)"
+      - "constraint-budget-gate-001 (anchors extended: paused-not-dismissible enforcement)"
+    milestones_affected:
+      - "m3-ui-banner-and-room-complete (→ completed)"
+    files_changed: 2
+    specs_affected:
+      - "intent-budget-gate-001 (anchors extended: checkBudgetGate + EvaluateStageBBodySchema.force + TailorRequestSchema.force)"
       - "constraint-budget-gate-001 (anchors added: gate enforcement points; constraints #1, #2, #3 enforced via 402 + cost-record-on-force)"
     milestones_affected:
       - "m2-pre-call-gate (→ completed)"
 
 current_sprint: "Sprint 8 — Budget Gate"
 blockers: []
-status_note: "🟢 m2 complete (2/3). server.mjs +~75 (checkBudgetGate helper + force:bool field on EvaluateStageBBodySchema + TailorRequestSchema + gate calls at POST /evaluate/stage-b + POST /cv/tailor) + smoke 12/12. Gate inserted AFTER body parse + BEFORE pipeline.json read at both endpoints — 400 zod errors take precedence (force:'truthy-string' rejected); paused state returns 402 Payment Required with {error, banner_message, today_total_usd, daily_budget_usd} (UI banner contract); body.force === true bypasses gate; cost STILL records via existing runner (constraint #3 — no white-label). Stage A endpoint UNCHANGED (constraint #1, Haiku unlimited). Plan-agent review: 0 CRITICAL + 0 HIGH actionable; 16 probes all verified (mutex release on 402 path, force semantics, $0-budget edge, jobIds-path interaction, 402 vs 412 ordering, no race-against-cost-write, prefs fallback). All 32 smoke files individually green + vite build clean. 04-budget-gate 33% → 67%. 下一个: m3 (BudgetBanner UI + Preferences input + ROOM COMPLETE → 06-evaluator 40% → 60%)."
-last_updated: "2026-05-07"
+status_note: "🎉 ROOM COMPLETE (3/3). m3 landed: <BudgetBanner /> 30s-polling 3-state component (paused red / warning yellow / normal gray inline ribbon) at Pipeline tab top + Preferences daily_budget_usd numeric input + ROOM COMPLETE rollups. role=status + aria-live=polite + AbortController propagated to interval handler. Plan-agent review applied 1 CRITICAL + 4 HIGH: (1) CRITICAL — paused state is NOT dismissible (was: dismissible — would silently hide hard-block from user, violating constraint #2; fixed: only warning is dismissible since it's a heads-up, paused is a hard block that MUST surface); (2) sessionStorage setItem/removeItem/getItem all wrapped in try/catch (Safari private mode would otherwise crash banner on first dismiss); (3) error state branch now has aria-live='polite' (screen-reader parity with other states); (4) stale-data indicator when error && data — banner shows last-known data with italic '(stale)' suffix instead of going silent; (5) lazy-init dismissedState via useState initializer reading sessionStorage synchronously — eliminates 1-frame banner flash. 6 deferred MEDIUM cosmetic items (cost precision inconsistency, polling rerender churn). Codex still quota-blocked. All 33 smoke files individually green + vite build clean. 04-budget-gate 67% → 100% 🎉. 06-evaluator 40% → 60% (3/5 ROOMs ✅). 04-career-system 68% → 71%. Lifecycle: planning → active. Downstream unblocked: 03-block-toggles (extends Preferences with per-block cost preview / disable-on-budget hints — feeds off the budget endpoint shipped here); 05-pipeline-ui (will wire Force Sonnet button using the body.force flag this Room shipped)."
+last_updated: "2026-05-08"

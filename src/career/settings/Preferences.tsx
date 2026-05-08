@@ -567,6 +567,30 @@ export default function Preferences() {
               })} />
             <div />
           </div>
+          <div className="af-field-row" style={{ marginTop: 8 }}>
+            <Field label="Daily Budget (USD)">
+              <input
+                type="number"
+                className="af-input af-input-number"
+                step={0.5}
+                min={0}
+                max={1000}
+                placeholder="10"
+                value={prefs.evaluator_strategy.stage_b.daily_budget_usd}
+                onChange={e => patch('evaluator_strategy', {
+                  ...prefs.evaluator_strategy,
+                  stage_b: {
+                    ...prefs.evaluator_strategy.stage_b,
+                    daily_budget_usd: Number(e.target.value) || 0,
+                  },
+                })} />
+            </Field>
+          </div>
+          <span className="af-help-text">
+            每日 Sonnet+Tailor 预算 (USD). 超过后 Stage B 和 Tailor 自动暂停，
+            Stage A (Haiku) 不受影响。Pipeline 顶部 banner 显示实时进度。
+            (06-evaluator/04-budget-gate)
+          </span>
         </div>
 
         <div className="af-field">
