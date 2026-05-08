@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/06-evaluator/05-pipeline-ui`  
 **Type**: feature  
-**Lifecycle**: planning  
+**Lifecycle**: active (ROOM COMPLETE 2026-05-08)  
 **Owner**: frontend  
 **Parent**: `00-project-room/04-career-system/06-evaluator`  
 
@@ -16,7 +16,7 @@ Pipeline / Shortlist 页 UI：列表 + 下拉 action + 批量 + 过滤器
 
 - [intent-pipeline-ui-001](specs/intent-pipeline-ui-001.yaml) — Pipeline / Shortlist 页 UI：列表 + 下拉 action + 批量 + 过滤器
 
-## 当前进度 — m2/3 done (2026-05-08, 67%)
+## 当前进度 — 🎉 ROOM COMPLETE (2026-05-08, 3/3 milestones, 100%)
 
 3 milestones, ~700 LOC source + ~470 smoke. **Reuses just-shipped infrastructure**: `body.force` flag from 04-budget-gate (PR #24), `/api/career/evaluate/stage-b/report/:jobId` from 02-stage-b-sonnet/m4, `<TailorPanel />` from 03-cv-engine/05-tailor-engine/m4, react-markdown + remark-gfm already in deps. All 9 OQs locked at recommended values. Closing this Room takes **06-evaluator 60% → 80%** (4/5 ROOMs ✅).
 
@@ -28,7 +28,7 @@ Pipeline / Shortlist 页 UI：列表 + 下拉 action + 批量 + 过滤器
 
 - ✅ **m1-force-sonnet-wiring** (~140 + smoke ~280, **5/5 green**) — Force Sonnet button in StageABatch wired (replaces disabled stub from earlier Rooms) + per-row Force Re-eval in StageBBatch (RotateCcw amber). Both POST `/evaluate/stage-b` `{jobIds:[id], force:true}` bypassing budget-gate cap; native `confirm()` with cost projection. Server pre-clears `stage_b` on candidates when `{force:true && jobIds}` so runner's `shouldEvaluate` doesn't short-circuit. StageABatch poll now passes abort signal (consistency with StageBBatch). Plan-agent review: 0 CRITICAL + 0 HIGH actionable; reviewer's probe #3 (pre-cleared null persists) invalidated by reading runner code (errorResult always lands in result.results).
 - ✅ **m2-shortlist-page** (~410 + smoke ~270, **10/10 green**) — `GET /api/career/shortlist` endpoint (projection over jobs with stage_b status='evaluated' AND `total_score >= prefs.thresholds.worth`, default 4.0; sort desc + evaluated_at desc tiebreaker; top-100 cap; readdir-driven `has_tailor_output`) + full Shortlist.tsx rewrite (5-chip filter strip, single CHIP_PREDICATES map shared by filteredResults useMemo + chipCounts useMemo, useNavigate-driven row clicks with role="link"+keyboard a11y, manual-refresh AbortController stored in ref + cleaned on unmount, polling 30s, manual-paste nudge preserved) + scoped sl- CSS. Plan-agent review: 0 CRITICAL + 0 HIGH; applied 1 MEDIUM (manual refresh ctrl ref/abort) + 1 LOW (chip count consolidation), 2 LOW deferred (forward-ref + esnext deps).
-- ⏳ **m3-reports-page-and-room-complete** (~250) — Reports.tsx full rewrite: list view (`/reports`) + detail view (`/reports/:id`) with Block A-G sticky sidebar nav + page actions (Tailor / Open in Pipeline / Print) + ROOM COMPLETE rollups. + smoke 6
+- ✅ **m3-reports-page-and-room-complete** (~390 + smoke ~210, **6/6 green**) — Reports.tsx full rewrite from stub. List view (no :id): table over `/evaluate/stage-b/results` including `status:'error'` rows so user can see why a deep eval failed; click → detail. Detail view (:id): `/report/:id` markdown via react-markdown + remark-gfm; sticky left sidebar auto-derives Block A-G nav via `/^## Block ([A-G])\b/gm` regex on raw content; ReactMarkdown h2 component override injects `id={block-X}` + `data-block={X}` when text matches; IntersectionObserver tracks current section (rootMargin `-80px 0px -60% 0px`); page actions: Tailor (mounts existing `<TailorPanel>`), Open in Pipeline, Print (window.print + @media print hides topbar+sidebar); header derives role+company+url from side-fetch of `/results` (50-row cap; falls back to `Report — {jobId}` when meta absent); 404 → friendly "Re-run from Pipeline" CTA. Plan-agent review: 0 CRITICAL + 0 HIGH; applied 3 fixes (consistent AbortController across both fetches; IntersectionObserver deps narrowed to [blocks]; removed dead print selectors).
 
 ### Locked design (long-term-best, all defaults)
 

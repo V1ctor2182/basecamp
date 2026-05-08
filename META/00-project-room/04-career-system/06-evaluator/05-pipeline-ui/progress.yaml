@@ -137,7 +137,7 @@ milestones:
 
   - id: "m3-reports-page-and-room-complete"
     name: "Reports page + Block A-G sidebar nav + TailorPanel reuse + ROOM COMPLETE"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/Reports.tsx"
       - "src/career/reports.css"
@@ -246,8 +246,16 @@ commits:
       - "intent-pipeline-ui-001 (anchors added: server.mjs shortlist endpoint, Shortlist.tsx full rewrite, shortlist.css, smoke-shortlist-endpoint.mjs)"
     milestones_affected:
       - "m2-shortlist-page (→ completed)"
+  - hash: "PENDING"
+    date: "2026-05-08"
+    message: "[04-career-system/06-evaluator/05-pipeline-ui] m3: Reports page list+detail + Block A-G sidebar + TailorPanel reuse + ROOM COMPLETE (smoke 6/6)"
+    files_changed: 8
+    specs_affected:
+      - "intent-pipeline-ui-001 (anchors added: Reports.tsx full rewrite, reports.css, smoke-reports-page.mjs)"
+    milestones_affected:
+      - "m3-reports-page-and-room-complete (→ completed) — ROOM COMPLETE"
 
 current_sprint: "Sprint 9 — Pipeline UI"
 blockers: []
-status_note: "🟢 m2 complete (2/3, 67%). NEW GET /api/career/shortlist read-only projection over pipeline.json — filters stage_b.status==='evaluated' AND total_score >= prefs.thresholds.worth (default 4.0, live-read each request); sorts total_score desc with evaluated_at desc tiebreaker; top-100 cap; has_tailor_output derived via single readdir on data/career/output matching /^([a-f0-9]{12})-[a-z0-9-]+\\.md$/. Full Shortlist.tsx rewrite from stub: 5-chip filter strip (all / score-4.5+ / score-4.0-4.4 / pending-stage-b / has-tailor) backed by single CHIP_PREDICATES map shared by filteredResults + chipCounts useMemos so the two cannot drift; useNavigate-driven row clicks with role=link + tabIndex + keyboard handler (replaces invalid Link-wrapping-tr); manual-refresh AbortController stored in ref + aborted on unmount + on next click; polling 30s; preserved manual-paste nudge from prior stub; ScoreBadge tiers (strong/worth/consider). Scoped sl- CSS (~190 lines). Plan-agent review: 0 CRITICAL + 0 HIGH; applied 1 MEDIUM (manual refresh ctrl ref) + 1 LOW (chip count consolidation), deferred 2 LOW (forward-ref to TAILOR_OUTPUT_DIR works fine via lazy handler eval; useEffect deps empty intentionally — fetch fns capture only stable setters). All 35 smoke files individually green + vite build clean. Codex CLI still quota-blocked. 05-pipeline-ui 33% → 67%. 下一个: m3 (Reports.tsx full rewrite with Block A-G sticky sidebar + TailorPanel reuse + ROOM COMPLETE)."
+status_note: "🎉 ROOM COMPLETE (3/3, 100%). m3: Reports.tsx full rewrite from stub — list view (no :id) over /evaluate/stage-b/results includes status='error' rows (clickable, surfaces parse errors); detail view (with :id) renders /report/:id markdown via react-markdown+remark-gfm with sticky left sidebar that auto-derives Block A-G nav via /^## Block ([A-G])\\b/gm regex on raw content + IntersectionObserver-driven highlight (rootMargin -80px 0px -60% 0px); ReactMarkdown h2 component override injects id={block-X} + data-block={X} when text matches; childrenToString recursive helper handles ReactNode tree of strings + element nodes for the regex test. Page actions: Tailor (mounts existing <TailorPanel jobId={id} jobRole?={meta.role} jobCompany?={meta.company} onClose={...} />), Open in Pipeline, Print (window.print + @media print hides topbar+sidebar). Header derives role+company+url from side-fetch of /results (50-row cap acceptable; falls back to 'Report — {jobId}' when meta missing). Loading vs error states distinct; 404 → friendly 'Re-run from Pipeline' CTA. Scoped rp- CSS (~225 lines). Plan-agent review: 0 CRITICAL + 0 HIGH; applied 3 fixes (results side-fetch AbortController for consistency with list view; IntersectionObserver useEffect deps narrowed to [blocks] only; dropped dead .rp-detail .c-page-todo print selectors). 6/6 m3 smoke green + 36/36 full regression green + vite build clean. Codex CLI still quota-blocked. 05-pipeline-ui 67% → 100%. 06-evaluator 60% → 80%. 04-career-system 71% → 74%. 下游 unblocked: 03-block-toggles (last sibling Room in 06-evaluator) + 07-applier (tailored PDF + report markdown both surfaced)."
 last_updated: "2026-05-08"

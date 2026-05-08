@@ -356,7 +356,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/06-evaluator/05-pipeline-ui"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: frontend
       parent: "00-project-room/04-career-system/06-evaluator"
       children: []
