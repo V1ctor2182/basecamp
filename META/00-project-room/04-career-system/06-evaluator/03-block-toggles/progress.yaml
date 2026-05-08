@@ -118,7 +118,7 @@ milestones:
 
   - id: "m3-preferences-ui-cost-preview-and-room-complete"
     name: "Preferences UI: per-block cost badges + sub-toggles + projection summary + ROOM COMPLETE"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/settings/Preferences.tsx"
       - "src/career/settings/ats-form.css"
@@ -190,6 +190,14 @@ commits:
       - "intent-block-toggles-001 (anchors added: blockCostEstimates.mjs module, smoke-block-cost-estimates.mjs)"
     milestones_affected:
       - "m2-block-cost-estimates-module (→ completed)"
+  - hash: "PENDING"
+    date: "2026-05-08"
+    message: "[04-career-system/06-evaluator/03-block-toggles] m3: Preferences UI cost preview + sub-controls + ROOM COMPLETE (smoke 3/3)"
+    files_changed: 4
+    specs_affected:
+      - "intent-block-toggles-001 (anchors added: Preferences.tsx cost badges + sub-controls + projection card, blockCostEstimates.d.ts type declarations, ats-form.css cost+sub-control+projection styles, smoke-block-toggles-prefs.mjs)"
+    milestones_affected:
+      - "m3-preferences-ui-cost-preview-and-room-complete (→ completed) — ROOM COMPLETE"
     files_changed: 4
     specs_affected:
       - "intent-block-toggles-001 (anchors added: server.mjs schema 3 fields, Preferences.tsx Blocks type, stageBPrompt.mjs resolveStageBToolPolicy + override injection, smoke-block-subtoggles.mjs)"
@@ -198,5 +206,5 @@ commits:
 
 current_sprint: "Sprint 10 — Block Toggles"
 blockers: []
-status_note: "🟢 m2 complete (2/3, 67%). NEW src/career/evaluator/blockCostEstimates.mjs — pure-constants ESM module: BLOCK_TOKEN_ESTIMATES (per-letter output tokens, F has output_per_story 90 — scales with story_count), TOOL_COST_ADD (web_search $0.05, verify_job_posting $0), CACHED_SYSTEM_INPUT_TOKENS_EST=14000, SONNET_OUTPUT_OVERHEAD_TOKENS=100. Deep-frozen (top-level + nested objects locked). estimateStageBCost(prefs) returns {model, pricing_available, per_block, cached_input: {tokens, write_cost_first_call, read_cost_subsequent}, total_per_call_current, total_per_call_all_on, delta_savings_usd, delta_savings_pct}. Pure function — no I/O, render-path safe. All-on baseline is FIXED reference (every block + every tool ON regardless of user sub-toggles) so turning a tool off shows as savings, not zero baseline. F story_count uses live policy.story_count for both current AND baseline (continuous knob — shrinking F still emits F). pricing_available flag surfaces missing MODEL_PRICING entry to UI for 'estimate unavailable' badge. Plan-agent review: 0 CRITICAL + 1 HIGH (shallow Object.freeze allowed nested mutation — fixed with deepFreeze helper) + 2 MEDIUM (silent pricing-miss → exposed pricing_available flag; smoke gaps → added G-disabled + G-playwright-off + empty-prefs cases). 9/9 m2 smoke + 38/38 full regression + vite build clean. Codex CLI still quota-blocked. 03-block-toggles 33% → 67%. 下一个: m3 (Preferences.tsx UI wiring — per-block cost badges + 3 sub-controls + projection summary card + ROOM COMPLETE rollups)."
+status_note: "🎉 ROOM COMPLETE (3/3, 100%). m3 wired m2's estimateStageBCost into Preferences.tsx Stage B Blocks section. Per-card cost badge (+$X.XXXX/call enabled, strikethrough $X.XXXX saved disabled) computed live via useMemo dep-narrowed to prefs.evaluator_strategy.stage_b. Three sub-controls inside D/F/G cards: D 'Allow web search' checkbox (saves ~$0.05/call when off), F 'Stories per response' integer input (3-20, default 8, onChange clamps + integer-coerces), G 'Verify URL via Playwright' checkbox (local Playwright $0 marginal). Sub-controls disabled visually + functionally when parent block off. Cost projection card below the grid: 'Per call $X.XXXX (vs all-on $Y.YYYY)' + savings line ('Save $Z.ZZZZ per call (NN%)' or '$0 savings vs all-on baseline (current selection costs the same)') + caveat about estimates only / first-call write surcharge / pricing_available warning when MODEL_PRICING missing. NEW blockCostEstimates.d.ts ships discriminated per-letter type for the .mjs constants so consumers get full TS narrowing. Plan-agent review: 0 CRITICAL + 1 HIGH (.d.ts BLOCK_TOKEN_ESTIMATES widened — fixed with discriminated per-letter type) + 3 MEDIUM (useMemo dep narrowed to stage_b only; 'all blocks on no savings' wording fixed to '$0 savings vs all-on baseline'; F input invalid-keystroke acceptable per spec) + 6 LOW (verified correct). 3/3 m3 smoke + 39/39 full regression + vite build clean. 03-block-toggles 67% → 100%. 06-evaluator 80% → 100% (5/5 ROOMs ✅). 04-career-system 74% → 78%. room.yaml lifecycle planning → active. _tree.yaml synced. 06-evaluator sub-epic CLOSED. 下游 unblocked: 07-applier remains the next flagship sub-epic; 4 of 8 sub-epics done in 04-career-system."
 last_updated: "2026-05-08"

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import TagInput from '../TagInput'
 import { deepMerge } from '../utils'
+import { estimateStageBCost } from '../evaluator/blockCostEstimates.mjs'
 import './ats-form.css'
 
 type TargetRole = { title: string; seniority: string; function?: string }
@@ -201,6 +202,15 @@ export default function Preferences() {
 
   const weightSum = sumWeights(prefs.scoring_weights)
   const weightSumOk = Math.abs(weightSum - 1.0) < 0.01
+
+  // 03-block-toggles m3: live per-block + total cost projection. Pure
+  // function — render-path safe. Dep narrowed to stage_b (where blocks +
+  // sub-toggles + story_count live) so unrelated field edits don't
+  // recompute. estimateStageBCost only reads prefs.evaluator_strategy.
+  const costEstimate = useMemo(
+    () => estimateStageBCost(prefs),
+    [prefs.evaluator_strategy.stage_b]
+  )
 
   useEffect(() => {
     fetch('/api/career/preferences')
@@ -620,6 +630,9 @@ export default function Preferences() {
               const on = key ? prefs.evaluator_strategy.stage_b.blocks[key] : true
               const locked = alwaysOn || required
               const cls = `af-block-card${on ? ' af-block-card-on' : ''}${locked ? ' af-block-card-disabled' : ''}`
+              const blockCost = costEstimate.per_block[letter]
+              const totalBlockUsd = blockCost.cost_usd + blockCost.tool_extras_usd
+              const subBlocks = prefs.evaluator_strategy.stage_b.blocks
               return (
                 <div className={cls} key={letter}>
                   <div className="af-block-card-title">
@@ -642,12 +655,134 @@ export default function Preferences() {
                     />
                   </div>
                   <p className="af-block-card-desc">{desc}</p>
+                  <span className={`af-block-cost${on ? '' : ' af-block-cost-off'}`}>
+                    {on
+                      ? `+$${totalBlockUsd.toFixed(4)}/call`
+                      : `$${totalBlockUsd.toFixed(4)} saved`}
+                    {blockCost.tool_extras_usd > 0 && on && (
+                      <span className="af-block-cost-extra">
+                        {' '}(incl. ${blockCost.tool_extras_usd.toFixed(2)} tool)
+                      </span>
+                    )}
+                  </span>
                   {alwaysOn && <span className="af-block-card-badge">Always rendered</span>}
                   {required && <span className="af-block-card-badge">Required by Tailor</span>}
                   {toolHint && <span className="af-block-card-hint">{toolHint}</span>}
+
+                  {/* Block D sub-control: web_search toggle */}
+                  {letter === 'D' && (
+                    <div className={`af-block-subcontrol${!on ? ' af-block-subcontrol-disabled' : ''}`}>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={subBlocks.block_d_websearch}
+                          disabled={!on}
+                          onChange={(e) => patch('evaluator_strategy', {
+                            ...prefs.evaluator_strategy,
+                            stage_b: {
+                              ...prefs.evaluator_strategy.stage_b,
+                              blocks: { ...subBlocks, block_d_websearch: e.target.checked },
+                            },
+                          })}
+                        />
+                        Allow web search
+                      </label>
+                      <span className="af-block-subcontrol-hint">
+                        saves ~$0.05/call when off
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Block F sub-control: story_count input */}
+                  {letter === 'F' && (
+                    <div className={`af-block-subcontrol${!on ? ' af-block-subcontrol-disabled' : ''}`}>
+                      <label>
+                        Stories per response{' '}
+                        <input
+                          type="number"
+                          min={3}
+                          max={20}
+                          step={1}
+                          className="af-input-number af-block-subcontrol-num"
+                          value={subBlocks.block_f_story_count}
+                          disabled={!on}
+                          onChange={(e) => {
+                            const n = Number(e.target.value)
+                            if (!Number.isFinite(n)) return
+                            const clamped = Math.min(20, Math.max(3, Math.round(n)))
+                            patch('evaluator_strategy', {
+                              ...prefs.evaluator_strategy,
+                              stage_b: {
+                                ...prefs.evaluator_strategy.stage_b,
+                                blocks: { ...subBlocks, block_f_story_count: clamped },
+                              },
+                            })
+                          }}
+                        />
+                      </label>
+                      <span className="af-block-subcontrol-hint">3–20 (default 8)</span>
+                    </div>
+                  )}
+
+                  {/* Block G sub-control: playwright toggle */}
+                  {letter === 'G' && (
+                    <div className={`af-block-subcontrol${!on ? ' af-block-subcontrol-disabled' : ''}`}>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={subBlocks.block_g_playwright}
+                          disabled={!on}
+                          onChange={(e) => patch('evaluator_strategy', {
+                            ...prefs.evaluator_strategy,
+                            stage_b: {
+                              ...prefs.evaluator_strategy.stage_b,
+                              blocks: { ...subBlocks, block_g_playwright: e.target.checked },
+                            },
+                          })}
+                        />
+                        Verify URL via Playwright
+                      </label>
+                      <span className="af-block-subcontrol-hint">
+                        local Playwright — $0 marginal
+                      </span>
+                    </div>
+                  )}
                 </div>
               )
             })}
+          </div>
+
+          {/* Cost projection summary (m3) */}
+          <div className="af-cost-projection">
+            <div className="af-cost-projection-row">
+              <span className="af-cost-projection-label">Per call:</span>
+              <span className="af-cost-projection-value">
+                ${costEstimate.total_per_call_current.toFixed(4)}
+                <span className="af-cost-projection-baseline">
+                  {' '}(vs all-on ${costEstimate.total_per_call_all_on.toFixed(4)})
+                </span>
+              </span>
+            </div>
+            {costEstimate.delta_savings_usd > 0 ? (
+              <div className="af-cost-projection-row af-cost-projection-savings">
+                Save <strong>${costEstimate.delta_savings_usd.toFixed(4)}</strong> per call
+                {' '}({costEstimate.delta_savings_pct}%)
+              </div>
+            ) : (
+              <div className="af-cost-projection-row af-cost-projection-savings-zero">
+                $0 savings vs all-on baseline (current selection costs the same).
+              </div>
+            )}
+            <div className="af-cost-projection-caveat">
+              Estimates only — actual cost recorded in <code>llm-costs.jsonl</code>
+              {' '}+ Pipeline budget banner. First-call cache write surcharge:
+              {' '}~${costEstimate.cached_input.write_cost_first_call.toFixed(4)} (one-time per batch).
+              {!costEstimate.pricing_available && (
+                <span className="af-cost-projection-warn">
+                  {' '}⚠ Pricing for {costEstimate.model} not in MODEL_PRICING table — figures unreliable.
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </section>
