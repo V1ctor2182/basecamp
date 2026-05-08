@@ -230,7 +230,7 @@ milestones:
       /career/reports lists all reports; ROOM COMPLETE.
 
 commits:
-  - hash: "PENDING"  # filled by m1 followup
+  - hash: "ad7e5c2"
     date: "2026-05-08"
     message: "[04-career-system/06-evaluator/05-pipeline-ui] m1: Force Sonnet wiring + Force Re-eval + endpoint pre-clear (smoke 5/5)"
     files_changed: 5
