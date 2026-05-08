@@ -179,7 +179,7 @@ milestones:
       parent block disabled); ROOM COMPLETE.
 
 commits:
-  - hash: "PENDING"
+  - hash: "b72abb9"
     date: "2026-05-08"
     message: "[04-career-system/06-evaluator/03-block-toggles] m1: fine-grained sub-toggles + Stage B prompt wiring (smoke 14/14)"
     files_changed: 4
