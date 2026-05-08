@@ -16,6 +16,45 @@ Pipeline / Shortlist 页 UI：列表 + 下拉 action + 批量 + 过滤器
 
 - [intent-pipeline-ui-001](specs/intent-pipeline-ui-001.yaml) — Pipeline / Shortlist 页 UI：列表 + 下拉 action + 批量 + 过滤器
 
+## 当前进度 — Plan 完成 (2026-05-08)
+
+3 milestones, ~700 LOC source + ~470 smoke. **Reuses just-shipped infrastructure**: `body.force` flag from 04-budget-gate (PR #24), `/api/career/evaluate/stage-b/report/:jobId` from 02-stage-b-sonnet/m4, `<TailorPanel />` from 03-cv-engine/05-tailor-engine/m4, react-markdown + remark-gfm already in deps. All 9 OQs locked at recommended values. Closing this Room takes **06-evaluator 60% → 80%** (4/5 ROOMs ✅).
+
+**Re-scoped vs original spec** based on already-shipped infrastructure:
+- **Pipeline tab**: per-stage panels (StageABatch + StageBBatch + BudgetBanner) already shipped; this Room only adds per-row Force Sonnet wiring (closes leftover TODO from earlier Rooms)
+- **Shortlist page**: from-stub to full real implementation
+- **Reports page**: from-stub to full markdown viewer + Block A-G nav
+- **Bulk multi-select / Archive / ECharts histogram**: DEFERRED — per-panel batch covers bulk; archive is net-new mutation surface; histogram is cosmetic
+
+- ⏳ **m1-force-sonnet-wiring** (~150) — Replace disabled `Force Sonnet` button in StageABatch with working POST `/evaluate/stage-b` `{jobIds:[id], force:true}` + add per-row `Force Re-eval` to StageBBatch. Native `confirm()` with cost projection. Closes leftover TODOs. + smoke 5
+- ⏳ **m2-shortlist-page** (~300) — New `GET /api/career/shortlist` endpoint (projection over jobs with `total_score >= prefs.thresholds.worth`, default 4.0; sorted desc; top 100) + full Shortlist.tsx rewrite (sortable+filterable table, 4 chips, click→/reports/:id) + scoped CSS. + smoke 10
+- ⏳ **m3-reports-page-and-room-complete** (~250) — Reports.tsx full rewrite: list view (`/reports`) + detail view (`/reports/:id`) with Block A-G sticky sidebar nav + page actions (Tailor / Open in Pipeline / Print) + ROOM COMPLETE rollups. + smoke 6
+
+### Locked design (long-term-best, all defaults)
+
+| Decision | Choice |
+|----------|--------|
+| score_floor | `prefs.thresholds.worth` (default 4.0); live-read no caching |
+| Sort | `total_score` desc, `evaluated_at` desc tiebreaker |
+| Top cap | 100 rows on Shortlist (UI shows "showing 100 of N") |
+| Filter chips | 4: Score 4.5+ / 4.0-4.4 / Stage A passers no B yet / Has tailor output |
+| Block A-G nav | Sticky left sidebar; auto-derived via `/^## Block ([A-G])/gm`; IntersectionObserver highlights current |
+| TailorPanel reuse | Imported into Reports page; signature already accepts external `jobId` + `onClose` (no refactor needed) |
+| Force Sonnet UX | Native `confirm()` with cost projection (~$0.30) |
+| Print support | `@media print` hides sidebar + actions; full-width content |
+
+### Deferred (out of scope this Room)
+
+- Pipeline-tab bulk multi-select with checkboxes (existing per-panel "Run on N pending" covers most cases)
+- Manual Archive button on Pipeline rows (needs PATCH endpoint for stage_a.status; net-new mutation surface)
+- ECharts score distribution histogram (cosmetic; sortable table covers ranking flow)
+- 7-day re-evaluate filter chip (needs Re-evaluate action; separate scope)
+
+### 下游 contracts
+
+- **`03-block-toggles`**: only sibling Room left in 06-evaluator — extends Preferences with per-block cost preview / disable-on-budget hints
+- **`07-applier`**: tailored PDF + report markdown both surfaced for Applier to consume; user clicks "Start Apply" from Reports page in a future Room
+
 ---
 
-_Generated 2026-04-22 by room-init._
+_Generated 2026-04-22 by room-init. Plan refined 2026-05-08 by plan-milestones._

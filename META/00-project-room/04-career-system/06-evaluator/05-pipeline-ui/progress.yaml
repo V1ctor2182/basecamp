@@ -1,5 +1,237 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-force-sonnet-wiring"
+    name: "Force Sonnet button + per-row force re-eval (StageABatch + StageBBatch)"
+    status: pending
+    estimated_files:
+      - "src/career/evaluator/StageABatch.tsx"
+      - "src/career/evaluator/StageBBatch.tsx"
+      - "scripts/smoke-pipeline-force.mjs"
+    estimated_lines: 150
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Closes leftover TODOs from earlier Rooms now that 04-budget-gate
+      shipped the body.force flag. Per-row Force Sonnet on StageABatch +
+      per-row Force Re-eval on StageBBatch.
+
+      Files:
+        - src/career/evaluator/StageABatch.tsx (modify ~60 lines):
+          · Replace disabled "Force Sonnet" button (line 217-222) with
+            working button: confirm() prompt → POST
+            /api/career/evaluate/stage-b {jobIds:[row.id], force:true}
+          · Refresh local + StageBBatch state after success
+          · Toast on result (cost + status)
+
+        - src/career/evaluator/StageBBatch.tsx (modify ~50 lines):
+          · Add per-row "Force Re-eval" button (RotateCcw icon) for
+            already-evaluated rows
+          · Click → confirm() → POST /evaluate/stage-b {jobIds:[row.id],
+            force:true}; refresh after success
+          · Useful when user fixed prefs/CV between runs and wants a
+            clean re-eval
+
+        - scripts/smoke-pipeline-force.mjs (~120 lines, ~5 assertions):
+          server-spawn pattern. Cases:
+          · Single-jobId + force:true bypasses budget gate → 200
+          · Single-jobId + force:false (default) when paused → 402
+          · Force re-eval on already-evaluated job — runner still
+            re-runs (no idempotency at gate level — runner has its
+            own skip-if-evaluated which jobIds bypasses)
+          · 400 on body.force = 'truthy-string' (already verified in
+            04-budget-gate; re-verify shape)
+          · jobIds:[bad-id] → still 400 from existing zod regex
+
+      Locked design:
+        - Native confirm() dialog with cost projection ("~$0.30")
+        - Force flag sent as boolean true (Zod strict)
+        - StageBBatch's force-re-eval clears stage_b before re-running
+          via existing jobIds path (server already handles via spread
+          mutation overwriting stage_b)
+        - No new endpoints; consumes existing /evaluate/stage-b
+
+      验收: smoke 5/5 PASS; manual UI test: click Force Sonnet on a Stage A
+      row, see confirmation, see new Stage B row appear in StageBBatch.
+
+  - id: "m2-shortlist-page"
+    name: "Shortlist page real implementation + GET /api/career/shortlist"
+    status: pending
+    estimated_files:
+      - "server.mjs"
+      - "src/career/Shortlist.tsx"
+      - "src/career/shortlist/shortlist.css"
+      - "scripts/smoke-shortlist-endpoint.mjs"
+    estimated_lines: 300
+    depends_on: ["m1-force-sonnet-wiring"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Replace Shortlist.tsx stub with a real sortable+filterable table of
+      stage_b-evaluated jobs. Click row → /career/reports/{jobId} (m3
+      ships the actual page; m2 just navigates).
+
+      Files:
+        - server.mjs (+~80 lines):
+          · GET /api/career/shortlist:
+            - Read pipeline.json → filter jobs where
+              evaluation?.stage_b?.status === 'evaluated' AND
+              total_score >= score_floor (default
+              prefs.thresholds.worth ?? 4.0)
+            - Sort by total_score desc, evaluated_at desc tiebreaker
+            - Top 100 cap
+            - Response: {total, score_floor, results: [{id, company, role,
+              location, url, total_score, blocks_emitted, report_path,
+              evaluated_at, cost_usd, stage_a_score, has_tailor_output}]}
+            - has_tailor_output: existsSync(output/{jobId}-{resumeId}.md)
+              for any resumeId? — defer simpler: just check if any
+              output/{jobId}-*.md exists via fs.readdir filter
+          · Read-only; no mutations
+
+        - src/career/Shortlist.tsx (full rewrite ~180 lines):
+          · 30s polling of GET /shortlist
+          · Sortable table: Score / Role+Company / Stage A score /
+            Evaluated / Tools (tailor indicator)
+          · Filter chips (mutually exclusive selection):
+            - "All" (default)
+            - "Score 4.5+"
+            - "Score 4.0-4.4"
+            - "Stage A passers, no B yet" (extra fetch from
+              /evaluate/stage-b/results pending list)
+            - "Has tailor output"
+          · Click row → react-router navigate to /career/reports/{id}
+          · ScoreBadge component extracted (reused from StageBBatch
+            via shared import — small refactor in m2 to make it shareable)
+          · Empty state: friendly message + link to Pipeline if no
+            stage_b runs yet
+
+        - src/career/shortlist/shortlist.css (NEW ~80 lines):
+          · sl- prefix scopes
+          · Filter chip styling (inactive gray / active dark)
+          · Table styling (matches StageBBatch table)
+
+        - scripts/smoke-shortlist-endpoint.mjs (~200 lines, ~10 asserts):
+          - Empty pipeline → empty results
+          - 3 stage_b-evaluated jobs at scores 4.8/4.2/3.9 → top 2
+            returned (3.9 below 4.0 floor)
+          - Sort by total_score desc verified
+          - score_floor reflects prefs.thresholds.worth (live read)
+          - Top-100 cap with 110 jobs
+          - has_tailor_output flag accurately set when output file exists
+          - 500 on pipeline.json unparseable
+          - Stage_b status='error' rows excluded (only 'evaluated')
+          - URL field round-trips for "Open job posting" link
+          - blocks_emitted preserved for UI block badges
+
+      Locked design:
+        - score_floor = prefs.thresholds.worth (default 4.0)
+        - Sort: total_score desc, evaluated_at desc tiebreaker
+        - 100-row top cap (UI displays count "showing 100 of N")
+        - 4 filter chips ship; defer 7-day re-evaluate chip (needs
+          re-evaluate action which is separate scope)
+        - has_tailor_output is a boolean derived server-side via
+          readdir match on data/career/output/{jobId}-*.md
+
+      验收: smoke 10/10 PASS; manual UI test: navigate to /career/shortlist
+      after running Stage B on 3+ jobs; verify table sorts/filters; click
+      row navigates to /career/reports/{id}.
+
+  - id: "m3-reports-page-and-room-complete"
+    name: "Reports page + Block A-G sidebar nav + TailorPanel reuse + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "src/career/Reports.tsx"
+      - "src/career/reports.css"
+      - "src/career/cv/TailorPanel.tsx"
+      - "scripts/smoke-reports-page.mjs"
+    estimated_lines: 250
+    depends_on: ["m2-shortlist-page"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Full implementation of /career/reports/:id (markdown viewer with
+      Block A-G nav + page actions) + /career/reports list page (browse
+      all reports) + ROOM COMPLETE rollups.
+
+      Files:
+        - src/career/Reports.tsx (full rewrite ~200 lines):
+          · Two render paths based on useParams:
+            - No id: list all stage_b reports (read same projection as
+              Shortlist /shortlist endpoint, but include error-status
+              rows too — user may want to see why a Stage B failed).
+              Table linking to /career/reports/{id}.
+            - With id: GET /api/career/evaluate/stage-b/report/{id}
+              (already shipped by 02-stage-b-sonnet/m4) → render markdown
+              with react-markdown + remark-gfm (already in deps)
+          · Sticky left sidebar with Block A-G anchors:
+            - Auto-derived via /^## Block ([A-G])/gm regex on content
+            - smooth-scroll to #block-{letter} on click
+            - Highlights current section on scroll (IntersectionObserver)
+          · Page actions (top-right):
+            - "Tailor for this Job" → mounts <TailorPanel jobId={id}
+              onClose={...} /> modal (refactored in m3 to accept external
+              control)
+            - "Open in Pipeline" → react-router push to /career/pipeline
+            - "Print" → window.print() (CSS handles print layout)
+          · Fallback states:
+            - id but 404 → friendly "Report not found" + link back
+            - id but stage_b errored → render the error message + link
+              to re-run from Pipeline
+          · Loading + error states inline
+
+        - src/career/reports.css (NEW ~120 lines):
+          · rp- prefix scopes
+          · 2-column layout (sidebar + content) with responsive
+            collapse
+          · Block A-G nav highlight on scroll
+          · Markdown styling (matches ReportViewer modal styles where
+            possible — could share via stageBBatch.css selectors but
+            keep separate to avoid layout coupling)
+          · @media print rules: hide sidebar + actions, full-width
+            content
+
+        - src/career/cv/TailorPanel.tsx (modify ~10 lines):
+          · No structural change — already accepts {jobId, jobRole?,
+            jobCompany?, onClose} props. m3 just imports it from a new
+            call site.
+          · Verify: when mounted from Reports page (no jobRole/
+            jobCompany context), the modal still renders cleanly with
+            placeholder header. Already does — props are optional.
+
+        - scripts/smoke-reports-page.mjs (~150 lines, ~6 assertions):
+          GET shape verification only (UI manual-tested via dev server):
+          · GET /report/:id round-trips content (re-verify; covered in
+            stage-b-endpoint smoke but lock the contract for this
+            consumer)
+          · /shortlist projection includes error-status rows when
+            requested (shortlist endpoint optionally returns errored
+            jobs — m2 default excludes; m3 might want option). Actually
+            keep separate: Reports list page calls a different shape if
+            needed; m3 reuses /shortlist as-is + augments client-side
+            to also list errored stage_b rows by calling
+            /evaluate/stage-b/results (existing endpoint, returns ALL
+            statuses). Simpler — no new endpoint.
+          · /evaluate/stage-b/results returns errored stage_b rows
+            (re-verify shape includes status:'error' rows)
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml synced
+        - 06-evaluator parent progress: 60% → 80% (4/5 ROOMs ✅)
+        - 04-career-system: 71% → 74%
+
+      下游 unblocked:
+        - 03-block-toggles: only sibling Room left in 06-evaluator —
+          extends Preferences with per-block cost preview
+        - 07-applier: tailored PDF + report markdown both surfaced for
+          Applier to consume
+
+      验收: smoke 6/6 PASS; manual UI test: navigate to /career/reports/
+      {validId} sees full markdown + sidebar nav + TailorPanel opens;
+      /career/reports lists all reports; ROOM COMPLETE.
+
+commits: []
+
+current_sprint: "Sprint 9 — Pipeline UI"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "Plan 完成 (2026-05-08). 3 milestones, ~700 LOC source + ~470 smoke. Reuses existing infrastructure: per-row Force flag from 04-budget-gate (PR #24), report markdown endpoint from 02-stage-b-sonnet/m4, TailorPanel from 03-cv-engine/05-tailor-engine/m4, react-markdown+remark-gfm already in deps. 9 OQs locked at recommended in Phase 2.5. Spec's bulk multi-select + Archive + ECharts histogram explicitly DEFERRED (per-panel batch already covers bulk; manual archive is net-new mutation surface; histogram is cosmetic). Closing this Room takes 06-evaluator 60% → 80% (4/5 ROOMs ✅)."
+last_updated: "2026-05-08"
