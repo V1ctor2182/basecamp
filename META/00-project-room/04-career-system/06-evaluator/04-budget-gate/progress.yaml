@@ -218,7 +218,7 @@ commits:
       - "intent-budget-gate-001 (anchors added: PreferencesSchema.daily_budget_usd + GET /api/career/evaluate/budget)"
     milestones_affected:
       - "m1-schema-and-budget-endpoint (→ completed)"
-  - hash: "PENDING"  # filled by m2 followup
+  - hash: "e84ceaa"
     date: "2026-05-07"
     message: "[04-career-system/06-evaluator/04-budget-gate] m2: checkBudgetGate + 2-endpoint pre-call gate + force flag (smoke 12/12)"
     files_changed: 2
