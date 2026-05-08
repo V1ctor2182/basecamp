@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-fine-grained-subtoggles"
     name: "Fine-grained sub-toggles: schema + prompt wiring (D websearch, F story_count, G playwright)"
-    status: pending
+    status: completed
     estimated_files:
       - "server.mjs"
       - "src/career/settings/Preferences.tsx"
@@ -178,7 +178,17 @@ milestones:
       summary; F story_count change recomputes; sub-toggles disabled when
       parent block disabled); ROOM COMPLETE.
 
+commits:
+  - hash: "PENDING"
+    date: "2026-05-08"
+    message: "[04-career-system/06-evaluator/03-block-toggles] m1: fine-grained sub-toggles + Stage B prompt wiring (smoke 14/14)"
+    files_changed: 4
+    specs_affected:
+      - "intent-block-toggles-001 (anchors added: server.mjs schema 3 fields, Preferences.tsx Blocks type, stageBPrompt.mjs resolveStageBToolPolicy + override injection, smoke-block-subtoggles.mjs)"
+    milestones_affected:
+      - "m1-fine-grained-subtoggles (→ completed)"
+
 current_sprint: "Sprint 10 — Block Toggles"
 blockers: []
-status_note: "📋 Plan locked: 3 milestones, ~550 LOC + ~250 smoke. Builds on already-shipped infra (BLOCK_META UI grid + EvaluatorStrategySchema.blocks + resolveEnabledBlocks in prompt builder + anthropicPricing). m1 adds 3 flat sub-toggle keys (block_d_websearch / block_f_story_count / block_g_playwright) + wires them into Stage B prompt. m2 ships pure-constants cost estimates module + estimateStageBCost helper. m3 wires UI: per-block cost badges + sub-controls + total projection summary + ROOM COMPLETE rollups. 0 open questions. 单方案路径 (no Plan B) — pattern is clear from 04-budget-gate / 05-pipeline-ui. Closes 06-evaluator at 100% (5/5 ROOMs ✅)."
+status_note: "🟢 m1 complete (1/3, 33%). Schema additions: block_d_websearch (bool, default true), block_f_story_count (int 3-20, default 8), block_g_playwright (bool, default true) — flat keys nested under prefs.evaluator_strategy.stage_b.blocks for simple YAML migration. defaultPreferences() + Preferences.tsx Blocks type + BLANK() updated. NEW resolveStageBToolPolicy(prefs) returns {websearch_for_d, playwright_for_g, story_count} with story_count clamped to [3,20] + non-integer/non-finite fallback to 8. NEW renderSubToggleOverrides() injects per-block override instructions into buildSystemBlock when sub-toggles diverge from defaults — gated on enabled.has(letter) so disabled parents skip their child overrides. Spread-conditional injection preserves byte-equality with pre-m1 prompt on the all-defaults path (preserves Anthropic prompt-cache hits). Plan-agent review: 0 CRITICAL + 1 HIGH (cache-key regression on default path — fixed via spread-conditional) + 2 MEDIUM (extended smoke clamping coverage to 0/-5/Infinity/null; YAML migration test skipped — covered by existing smoke-budget-gate PUT round-trip + resolveStageBToolPolicy reads with `?? defaults`) + 2 LOW (documented story_count exposure-without-parent-check + added dual-parents-off smoke). Codex CLI still quota-blocked. 14/14 m1 smoke + 37/37 full regression + vite build clean. 03-block-toggles 0% → 33%. 下一个: m2 (blockCostEstimates.mjs pure-constants module + estimateStageBCost helper)."
 last_updated: "2026-05-08"

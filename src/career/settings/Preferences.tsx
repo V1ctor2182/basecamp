@@ -26,7 +26,18 @@ type ScoringWeights = {
   company_match: number; growth_signal: number
 }
 type Thresholds = { strong: number; worth: number; consider: number; skip_below: number }
-type Blocks = { block_b: boolean; block_c: boolean; block_d: boolean; block_e: boolean; block_f: boolean; block_g: boolean }
+type Blocks = {
+  block_b: boolean
+  block_c: boolean
+  block_d: boolean
+  block_e: boolean
+  block_f: boolean
+  block_g: boolean
+  // 03-block-toggles m1: fine-grained sub-toggles
+  block_d_websearch: boolean
+  block_f_story_count: number
+  block_g_playwright: boolean
+}
 type EvaluatorStrategy = {
   stage_a: { enabled: boolean; model: string; threshold: number }
   // daily_budget_usd added by 04-budget-gate m1: caps total daily Sonnet+
@@ -124,7 +135,10 @@ function BLANK(): Preferences {
       stage_a: { enabled: true, model: 'claude-haiku-4-5', threshold: 3.5 },
       stage_b: {
         enabled: true, model: 'claude-sonnet-4-6', daily_budget_usd: 10,
-        blocks: { block_b: true, block_c: false, block_d: false, block_e: true, block_f: false, block_g: false },
+        blocks: {
+          block_b: true, block_c: false, block_d: false, block_e: true, block_f: false, block_g: false,
+          block_d_websearch: true, block_f_story_count: 8, block_g_playwright: true,
+        },
       },
     },
   }

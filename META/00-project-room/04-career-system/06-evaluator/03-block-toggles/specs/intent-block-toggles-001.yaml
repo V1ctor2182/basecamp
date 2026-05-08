@@ -17,6 +17,14 @@ provenance:
   confidence: 0.9
   source_ref: "career-architecture/05-evaluator.md#block-启用开关 + ui-settings-evaluator"
 relations: []
-anchors: []
+anchors:
+  - file: "server.mjs"
+    description: "Block Toggles m1 schema: EvaluatorStrategySchema.stage_b.blocks gains block_d_websearch (z.boolean().default(true)), block_f_story_count (z.number().int().min(3).max(20).default(8)), block_g_playwright (z.boolean().default(true)) — flat keys for simple YAML default-fill migration. defaultPreferences() updated with the 3 fields."
+  - file: "src/career/settings/Preferences.tsx"
+    description: "Block Toggles m1: Blocks TS type extended with block_d_websearch / block_f_story_count / block_g_playwright. BLANK() defaults updated. UI sub-controls deferred to m3."
+  - file: "src/career/evaluator/stageBPrompt.mjs"
+    description: "Block Toggles m1: NEW resolveStageBToolPolicy(prefs) returns {websearch_for_d, playwright_for_g, story_count} with story_count clamped to [3,20] + non-integer/non-finite fallback to STAGE_B_DEFAULT_STORY_COUNT=8. NEW renderSubToggleOverrides(enabledLetters, policy) injects per-block override instructions into buildSystemBlock when sub-toggles diverge from defaults — gated on enabled.has(letter) so disabled parents skip child overrides. Spread-conditional injection preserves byte-equality with pre-m1 prompt on all-defaults path (preserves Anthropic prompt-cache hits)."
+  - file: "scripts/smoke-block-subtoggles.mjs"
+    description: "Block Toggles m1 smoke: 14 pure-module asserts. Module exports / defaults on empty + undefined prefs / explicit overrides read through / clamping at 0,-5,1,100,7.5,'eight',NaN,Infinity,null / no override section when all defaults + cache-key invariance regex / dual-parents-off + sub-toggles off → no override / D enabled+websearch off → D OVERRIDE / D disabled (parent skip) / F story_count != 8 → F OVERRIDE / F story_count == 8 → no override / G enabled+playwright off → G OVERRIDE / parent precedence over sub-toggle / D+F+G combined."
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-08"
