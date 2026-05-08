@@ -40,6 +40,10 @@ export default function StageABatch() {
   const [data, setData] = useState<ResultsResp | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
+  // Per-row Force Sonnet state — tracks which jobId is currently
+  // force-running so the button can disable + show spinner. Only one
+  // force-run at a time (matches Stage B endpoint serialization).
+  const [forcingJobId, setForcingJobId] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -60,7 +64,9 @@ export default function StageABatch() {
     const ctrl = new AbortController()
     abortRef.current = ctrl
     fetchResults(ctrl.signal)
-    const t = setInterval(() => fetchResults(), REFRESH_MS)
+    // Pass abort signal to interval polls too — prevents setState-after-
+    // unmount when a poll is mid-flight on teardown (matches StageBBatch).
+    const t = setInterval(() => fetchResults(ctrl.signal), REFRESH_MS)
     return () => {
       ctrl.abort()
       clearInterval(t)
@@ -101,6 +107,56 @@ export default function StageABatch() {
       setActionMessage({ kind: 'error', text: (e as Error).message ?? 'Network error' })
     } finally {
       setRunning(false)
+    }
+  }
+
+  // Force Sonnet on a single job — bypasses the 04-budget-gate
+  // daily-budget cap via body.force=true. Cost STILL records (no
+  // white-label per constraint #3 of budget-gate). Confirm prompt shows
+  // ~$0.30 cost projection so user knows what they're spending.
+  async function forceSonnet(jobId: string, role: string, company: string) {
+    if (forcingJobId) return
+    const ok = window.confirm(
+      `Force Sonnet on this job?\n\n` +
+        `${role} @ ${company}\n\n` +
+        `Cost: ~$0.30 (charges to today's budget even if paused).\n` +
+        `Re-runs Stage B even if already evaluated.`
+    )
+    if (!ok) return
+    setForcingJobId(jobId)
+    setActionMessage(null)
+    try {
+      const r = await fetch('/api/career/evaluate/stage-b', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobIds: [jobId], force: true }),
+      })
+      const body = (await r.json().catch(() => ({}))) as {
+        evaluated?: number
+        errors?: number
+        total_cost_usd?: number
+        error?: string
+      }
+      if (!r.ok) {
+        setActionMessage({ kind: 'error', text: body?.error ?? `HTTP ${r.status}` })
+        return
+      }
+      const cost = (body.total_cost_usd ?? 0).toFixed(4)
+      setActionMessage({
+        kind: 'ok',
+        text:
+          `Force Sonnet: evaluated ${body.evaluated ?? 0}` +
+          (body.errors ? ` · ${body.errors} errors` : '') +
+          ` · $${cost}`,
+      })
+      // No need to refetch Stage A results — Force Sonnet writes to
+      // stage_b, not stage_a. StageBBatch will pick up the change on its
+      // own 30s poll. fetchResults here is harmless and keeps UI fresh.
+      await fetchResults()
+    } catch (e) {
+      setActionMessage({ kind: 'error', text: (e as Error).message ?? 'Network error' })
+    } finally {
+      setForcingJobId(null)
     }
   }
 
@@ -215,10 +271,19 @@ export default function StageABatch() {
                   <button
                     type="button"
                     className="sab-force-sonnet"
-                    disabled
-                    title="Force Sonnet override on a single job — wires up in 06-evaluator/05-pipeline-ui"
+                    disabled={forcingJobId !== null || row.status === 'error'}
+                    onClick={() => forceSonnet(row.id, row.role, row.company)}
+                    title={
+                      row.status === 'error'
+                        ? 'Stage A errored — fix that first'
+                        : 'Force Stage B Sonnet on this job (~$0.30, bypasses budget gate)'
+                    }
                   >
-                    Force Sonnet
+                    {forcingJobId === row.id ? (
+                      <><Loader2 size={11} className="sab-spin" /> Forcing…</>
+                    ) : (
+                      <>Force Sonnet</>
+                    )}
                   </button>
                 </td>
               </tr>

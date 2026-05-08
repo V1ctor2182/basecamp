@@ -206,6 +206,24 @@
   border-color: #e7e5e4;
 }
 
+.sbb-reeval-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; padding: 5px 10px;
+  border: 1px solid #92400e;
+  background: #fef3c7; color: #92400e;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.sbb-reeval-btn:hover:not(:disabled) {
+  background: #fde68a;
+  color: #78350f;
+  border-color: #78350f;
+}
+.sbb-reeval-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .sbb-score {
   display: inline-flex; align-items: center; gap: 4px;
   font-family: ui-monospace, SFMono-Regular, monospace;

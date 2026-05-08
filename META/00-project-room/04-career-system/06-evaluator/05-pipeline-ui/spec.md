@@ -16,7 +16,7 @@ Pipeline / Shortlist 页 UI：列表 + 下拉 action + 批量 + 过滤器
 
 - [intent-pipeline-ui-001](specs/intent-pipeline-ui-001.yaml) — Pipeline / Shortlist 页 UI：列表 + 下拉 action + 批量 + 过滤器
 
-## 当前进度 — Plan 完成 (2026-05-08)
+## 当前进度 — m1/3 done (2026-05-08, 33%)
 
 3 milestones, ~700 LOC source + ~470 smoke. **Reuses just-shipped infrastructure**: `body.force` flag from 04-budget-gate (PR #24), `/api/career/evaluate/stage-b/report/:jobId` from 02-stage-b-sonnet/m4, `<TailorPanel />` from 03-cv-engine/05-tailor-engine/m4, react-markdown + remark-gfm already in deps. All 9 OQs locked at recommended values. Closing this Room takes **06-evaluator 60% → 80%** (4/5 ROOMs ✅).
 
@@ -26,7 +26,7 @@ Pipeline / Shortlist 页 UI：列表 + 下拉 action + 批量 + 过滤器
 - **Reports page**: from-stub to full markdown viewer + Block A-G nav
 - **Bulk multi-select / Archive / ECharts histogram**: DEFERRED — per-panel batch covers bulk; archive is net-new mutation surface; histogram is cosmetic
 
-- ⏳ **m1-force-sonnet-wiring** (~150) — Replace disabled `Force Sonnet` button in StageABatch with working POST `/evaluate/stage-b` `{jobIds:[id], force:true}` + add per-row `Force Re-eval` to StageBBatch. Native `confirm()` with cost projection. Closes leftover TODOs. + smoke 5
+- ✅ **m1-force-sonnet-wiring** (~140 + smoke ~280, **5/5 green**) — Force Sonnet button in StageABatch wired (replaces disabled stub from earlier Rooms) + per-row Force Re-eval in StageBBatch (RotateCcw amber). Both POST `/evaluate/stage-b` `{jobIds:[id], force:true}` bypassing budget-gate cap; native `confirm()` with cost projection. Server pre-clears `stage_b` on candidates when `{force:true && jobIds}` so runner's `shouldEvaluate` doesn't short-circuit. StageABatch poll now passes abort signal (consistency with StageBBatch). Plan-agent review: 0 CRITICAL + 0 HIGH actionable; reviewer's probe #3 (pre-cleared null persists) invalidated by reading runner code (errorResult always lands in result.results).
 - ⏳ **m2-shortlist-page** (~300) — New `GET /api/career/shortlist` endpoint (projection over jobs with `total_score >= prefs.thresholds.worth`, default 4.0; sorted desc; top 100) + full Shortlist.tsx rewrite (sortable+filterable table, 4 chips, click→/reports/:id) + scoped CSS. + smoke 10
 - ⏳ **m3-reports-page-and-room-complete** (~250) — Reports.tsx full rewrite: list view (`/reports`) + detail view (`/reports/:id`) with Block A-G sticky sidebar nav + page actions (Tailor / Open in Pipeline / Print) + ROOM COMPLETE rollups. + smoke 6
 

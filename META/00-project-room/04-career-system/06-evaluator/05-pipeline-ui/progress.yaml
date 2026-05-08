@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-force-sonnet-wiring"
     name: "Force Sonnet button + per-row force re-eval (StageABatch + StageBBatch)"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/evaluator/StageABatch.tsx"
       - "src/career/evaluator/StageBBatch.tsx"
@@ -229,9 +229,17 @@ milestones:
       {validId} sees full markdown + sidebar nav + TailorPanel opens;
       /career/reports lists all reports; ROOM COMPLETE.
 
-commits: []
+commits:
+  - hash: "PENDING"  # filled by m1 followup
+    date: "2026-05-08"
+    message: "[04-career-system/06-evaluator/05-pipeline-ui] m1: Force Sonnet wiring + Force Re-eval + endpoint pre-clear (smoke 5/5)"
+    files_changed: 5
+    specs_affected:
+      - "intent-pipeline-ui-001 (anchors added: Force Sonnet handler in StageABatch + Force Re-eval handler in StageBBatch + force-with-jobIds pre-clear in server.mjs)"
+    milestones_affected:
+      - "m1-force-sonnet-wiring (→ completed)"
 
 current_sprint: "Sprint 9 — Pipeline UI"
 blockers: []
-status_note: "Plan 完成 (2026-05-08). 3 milestones, ~700 LOC source + ~470 smoke. Reuses existing infrastructure: per-row Force flag from 04-budget-gate (PR #24), report markdown endpoint from 02-stage-b-sonnet/m4, TailorPanel from 03-cv-engine/05-tailor-engine/m4, react-markdown+remark-gfm already in deps. 9 OQs locked at recommended in Phase 2.5. Spec's bulk multi-select + Archive + ECharts histogram explicitly DEFERRED (per-panel batch already covers bulk; manual archive is net-new mutation surface; histogram is cosmetic). Closing this Room takes 06-evaluator 60% → 80% (4/5 ROOMs ✅)."
+status_note: "🟢 m1 complete (1/3). Force Sonnet button in StageABatch wired (replaces disabled stub from earlier Rooms) + per-row Force Re-eval button in StageBBatch (RotateCcw amber). Both POST /evaluate/stage-b {jobIds:[id], force:true} bypassing 04-budget-gate cap; native confirm() with cost projection. Server.mjs pre-clears stage_b on candidates when {force:true && jobIds supplied} so the runner's shouldEvaluate skip-if-evaluated guard doesn't short-circuit user-requested re-eval. StageABatch poll now passes abort signal (consistency with StageBBatch — reviewer's optional polish). Plan-agent review: 0 CRITICAL + 0 HIGH actionable; probe #3 invalidated by reading runner code (errorResult always lands in result.results — pre-cleared null cannot persist to disk). All 34 smoke files individually green + vite build clean. Codex CLI still quota-blocked. 05-pipeline-ui 0% → 33%. 下一个: m2 (GET /api/career/shortlist endpoint + full Shortlist.tsx rewrite with sortable+filterable table)."
 last_updated: "2026-05-08"

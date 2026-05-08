@@ -3542,10 +3542,20 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
     let candidates;
     if (Array.isArray(body.jobIds) && body.jobIds.length > 0) {
       // jobIds-supplied path: pick exactly those (skip stage_a/threshold gate
-      // — caller is explicitly requesting; runner's idempotency still skips
-      // anything already with stage_b set).
+      // — caller is explicitly requesting). When body.force is also true,
+      // clear stage_b in-memory on those candidates so the runner's
+      // shouldEvaluate skip-if-evaluated guard doesn't short-circuit a
+      // user-requested Force Re-eval (05-pipeline-ui m1). Without force,
+      // runner's idempotency still skips anything already with stage_b set.
       const wanted = new Set(body.jobIds);
       candidates = jobs.filter((j) => j && wanted.has(j.id));
+      if (body.force === true) {
+        for (const j of candidates) {
+          if (j.evaluation && j.evaluation.stage_b != null) {
+            j.evaluation = { ...j.evaluation, stage_b: null };
+          }
+        }
+      }
     } else {
       // All-pending path: stage_a evaluated AND score >= threshold AND stage_b
       // not yet set. Errored stage_a rows are excluded (their score is null).

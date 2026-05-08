@@ -10,6 +10,7 @@ import {
   FileText,
   Globe,
   Wand2,
+  RotateCcw,
 } from 'lucide-react'
 import ReportViewer from './ReportViewer'
 import TailorPanel from '../cv/TailorPanel'
@@ -61,6 +62,10 @@ export default function StageBBatch() {
   const [actionMessage, setActionMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [viewingJobId, setViewingJobId] = useState<string | null>(null)
   const [tailoringRow, setTailoringRow] = useState<EvaluatedRow | null>(null)
+  // Per-row Force Re-eval — re-runs Stage B on an already-evaluated job
+  // (with body.force=true, bypassing the daily budget gate). Useful when
+  // user fixed prefs/CV between runs and wants a clean re-eval.
+  const [reEvalJobId, setReEvalJobId] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   async function fetchResults(signal?: AbortSignal) {
@@ -128,6 +133,49 @@ export default function StageBBatch() {
       setActionMessage({ kind: 'error', text: (e as Error).message ?? 'Network error' })
     } finally {
       setRunning(false)
+    }
+  }
+
+  // Force Re-eval — re-runs Stage B on a single already-evaluated job
+  // with body.force=true (bypasses 04-budget-gate cap). Spread mutation
+  // in server.mjs:3568 overwrites the prior stage_b cleanly. Cost STILL
+  // records (constraint #3 of budget-gate).
+  async function forceReEval(row: EvaluatedRow) {
+    if (reEvalJobId) return
+    const ok = window.confirm(
+      `Re-run Stage B on this job?\n\n` +
+        `${row.role} @ ${row.company}\n` +
+        `Current score: ${row.total_score?.toFixed(1) ?? '—'}\n\n` +
+        `Cost: ~$0.30 (charges to today's budget even if paused).\n` +
+        `Overwrites the existing report.`
+    )
+    if (!ok) return
+    setReEvalJobId(row.id)
+    setActionMessage(null)
+    try {
+      const r = await fetch('/api/career/evaluate/stage-b', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobIds: [row.id], force: true }),
+      })
+      const body = (await r.json().catch(() => ({}))) as Partial<RunResp & { error?: string }>
+      if (!r.ok) {
+        setActionMessage({ kind: 'error', text: body?.error ?? `HTTP ${r.status}` })
+        return
+      }
+      const cost = (body.total_cost_usd ?? 0).toFixed(4)
+      setActionMessage({
+        kind: 'ok',
+        text:
+          `Re-evaluated: ${body.evaluated ?? 0}` +
+          (body.errors ? ` · ${body.errors} errors` : '') +
+          ` · $${cost}`,
+      })
+      await fetchResults()
+    } catch (e) {
+      setActionMessage({ kind: 'error', text: (e as Error).message ?? 'Network error' })
+    } finally {
+      setReEvalJobId(null)
     }
   }
 
@@ -284,6 +332,19 @@ export default function StageBBatch() {
                     }
                   >
                     <Wand2 size={12} /> Tailor
+                  </button>
+                  <button
+                    type="button"
+                    className="sbb-reeval-btn"
+                    disabled={reEvalJobId !== null}
+                    onClick={() => forceReEval(row)}
+                    title="Re-run Stage B on this job (~$0.30, bypasses budget gate, overwrites report)"
+                  >
+                    {reEvalJobId === row.id ? (
+                      <><Loader2 size={11} className="sbb-spin" /> Re-eval…</>
+                    ) : (
+                      <><RotateCcw size={11} /> Re-eval</>
+                    )}
                   </button>
                 </td>
               </tr>

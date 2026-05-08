@@ -17,6 +17,12 @@ provenance:
   confidence: 0.9
   source_ref: "career-architecture/05-evaluator.md#per-pipeline-ui-控制 + 批量操作"
 relations: []
-anchors: []
+anchors:
+  - file: "src/career/evaluator/StageABatch.tsx"
+    description: "Pipeline UI m1: Force Sonnet button replaces disabled stub. Native confirm() with cost projection (~$0.30) → POST /evaluate/stage-b {jobIds:[id], force:true} bypassing 04-budget-gate cap. Per-row forcingJobId state ensures one force-run at a time. Cost still records (constraint #3 of budget-gate). Polling now passes abort signal."
+  - file: "src/career/evaluator/StageBBatch.tsx"
+    description: "Pipeline UI m1: per-row Force Re-eval button (RotateCcw amber) re-runs Stage B on already-evaluated jobs with body.force=true. Useful when user fixed prefs/CV between runs. Server-side pre-clear of stage_b ensures runner doesn't skip via shouldEvaluate."
+  - file: "server.mjs"
+    description: "Pipeline UI m1 endpoint change: when {body.force === true && body.jobIds supplied}, the candidate-selection block pre-clears stage_b in-memory on each candidate so the runner's shouldEvaluate skip-if-evaluated guard doesn't short-circuit. Without force, runner idempotency still applies."
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-08"
