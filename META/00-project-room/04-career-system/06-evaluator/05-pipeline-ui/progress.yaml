@@ -238,9 +238,9 @@ commits:
       - "intent-pipeline-ui-001 (anchors added: Force Sonnet handler in StageABatch + Force Re-eval handler in StageBBatch + force-with-jobIds pre-clear in server.mjs)"
     milestones_affected:
       - "m1-force-sonnet-wiring (→ completed)"
-  - hash: "PENDING"
+  - hash: "e6041be"
     date: "2026-05-08"
-    message: "[04-career-system/06-evaluator/05-pipeline-ui] m2: GET /api/career/shortlist + Shortlist.tsx full rewrite + scoped CSS (smoke 10/10)"
+    message: "[04-career-system/06-evaluator/05-pipeline-ui] m2: shortlist endpoint + page rewrite + scoped CSS (smoke 10/10)"
     files_changed: 5
     specs_affected:
       - "intent-pipeline-ui-001 (anchors added: server.mjs shortlist endpoint, Shortlist.tsx full rewrite, shortlist.css, smoke-shortlist-endpoint.mjs)"
