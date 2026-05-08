@@ -1,15 +1,15 @@
 milestones: []
 current_sprint: "Sprint 5 — Finder"
 blockers: []
-completion: 68  # avg(100, 100, 100, 100, 100, 40, 0, 0) = 67.5 → 68 across 8 sub-epics
+completion: 71  # avg(100, 100, 100, 100, 100, 60, 0, 0) = 70.6 → 71 across 8 sub-epics
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
   "02-profile": 100     # ✅ Sprint 2 CLOSED
   "03-cv-engine": 100   # 🎉 EPIC NODE COMPLETE (5/5 ROOMs ✅)
   "04-renderer": 100    # ✅ sub-epic DONE
   "05-finder": 100      # 🎉 EPIC COMPLETE (5/5 ROOMs ✅)
-  "06-evaluator": 40    # 🔄 2 ROOMs ✅ (stage-a + stage-b)
+  "06-evaluator": 60    # 🔄 3 ROOMs ✅ (stage-a + stage-b + budget-gate)
   "07-applier": 0
   "08-human-gate-tracker": 0
-status_note: "🎉 03-cv-engine 100% — EPIC NODE COMPLETE (5/5 ROOMs ✅). 05-tailor-engine shipped end-to-end. 04-career-system 68% (12/32 features). Available next: 06-evaluator/03-block-toggles, 06-evaluator/04-budget-gate, 06-evaluator/05-pipeline-ui (parallel-able), or 07-applier (now unblocked by tailor-engine — tailored PDFs feed Applier upload)."
-last_updated: "2026-05-07"
+status_note: "🎉 06-evaluator 60% (3/5 ROOMs ✅). 04-budget-gate just shipped — daily Sonnet budget cap, 402-gate at /evaluate/stage-b + /cv/tailor with force-override, 3-state Pipeline-top banner. 04-career-system 71% (13/32 features). Available next: 06-evaluator/03-block-toggles, 06-evaluator/05-pipeline-ui (parallel-able), or 07-applier (newly unblocked by tailor-engine + budget-gate)."
+last_updated: "2026-05-08"

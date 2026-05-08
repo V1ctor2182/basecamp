@@ -1,12 +1,12 @@
 milestones: []
 current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-completion: 40  # avg(100, 100, 0, 0, 0) = 40 across 5 features (2 ROOMs ✅)
+completion: 60  # avg(100, 100, 0, 100, 0) = 60 across 5 features (3 ROOMs ✅)
 children_completion:
   "01-stage-a-haiku": 100  # ✅ ROOM COMPLETE (4/4 milestones, ~2300 行)
-  "02-stage-b-sonnet": 100  # 🎉 ROOM COMPLETE (5/5 milestones, ~1900 行 + 119 smoke asserts; first project use of Anthropic Tools API)
+  "02-stage-b-sonnet": 100  # 🎉 ROOM COMPLETE (5/5 milestones; first Anthropic Tools API use)
   "03-block-toggles": 0
-  "04-budget-gate": 0
+  "04-budget-gate": 100  # 🎉 ROOM COMPLETE (3/3 milestones, ~580 LOC + 29 smoke asserts; daily_budget_usd + 402 gate + 3-state banner)
   "05-pipeline-ui": 0
-status_note: "🎉 06-evaluator 40% (2/5 ROOMs ✅). 02-stage-b-sonnet COMPLETE — Stage B Sonnet deep-eval pipeline shipped end-to-end: prompt module + worker-pool runner + Anthropic Tools API loop + schema/endpoint + UI panel + ReportViewer modal + canonical A-G block toggles. 下一个: 03-block-toggles (extends Preferences) / 04-budget-gate (consumes web_search_requests + cost records) / 05-pipeline-ui (extends Pipeline tab + wires Force Sonnet)."
-last_updated: "2026-05-05"
+status_note: "🎉 06-evaluator 60% (3/5 ROOMs ✅). 04-budget-gate just shipped — daily_budget_usd cap on PreferencesSchema + GET /api/career/evaluate/budget projection + checkBudgetGate pre-call gate at /evaluate/stage-b + /cv/tailor (402 Payment Required, body.force=true override) + <BudgetBanner /> 3-state UI at Pipeline tab top. Stage A NEVER gated (constraint #1). 下一个: 03-block-toggles (extends Preferences with per-block cost preview / disable-on-budget hints) / 05-pipeline-ui (will wire Force Sonnet button using the body.force flag from this Room)."
+last_updated: "2026-05-08"

@@ -1,5 +1,249 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-schema-and-budget-endpoint"
+    name: "daily_budget_usd schema + GET /api/career/evaluate/budget projection"
+    status: completed
+    estimated_files:
+      - "server.mjs"
+      - "src/career/settings/Preferences.tsx"
+      - "scripts/smoke-budget-endpoint.mjs"
+    estimated_lines: 150
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Add daily_budget_usd to prefs schema; ship read-only GET endpoint that
+      returns today's aggregate + the budget threshold + paused/warning flags.
+      Pure projection over existing infrastructure — no mutations, no gating
+      yet (m2's job).
+
+      Files:
+        - server.mjs (+~120 lines):
+          · PreferencesSchema.evaluator_strategy.stage_b adds:
+              daily_budget_usd: z.number().nonnegative().default(10)
+          · GET /api/career/evaluate/budget:
+            - readCostRecords (today-mode, local-tz day start — reuses
+              existing helper that already satisfies constraint #4)
+            - aggregateCosts(records) → today_total_usd
+            - aggregateCosts(records, 'caller') → by_caller breakdown
+            - readPreferences → daily_budget_usd (default 10)
+            - paused = today_total_usd >= daily_budget_usd
+            - warning = today_total_usd >= 0.8 * daily_budget_usd
+            - day_start = local-tz ISO string for banner display
+          · No new helpers — pure projection
+
+        - src/career/settings/Preferences.tsx (+~5 lines):
+          · TS type: stage_b adds daily_budget_usd: number
+          · BLANK() default: 10
+          · Schema mirror; UI input deferred to m3
+
+        - scripts/smoke-budget-endpoint.mjs (~150 lines, ~10 assertions):
+          · GET /budget on empty cost log → today_total=0, paused=false,
+            warning=false, by_caller={}, daily_budget_usd=10 (default)
+          · After POST /llm-costs of $5 stage-b → warning=false (50%)
+          · After POST /llm-costs of $8 stage-b → warning=true (80%)
+          · After POST /llm-costs of $10+ → paused=true
+          · Stage A and Tailor records show in by_caller separately
+          · day_start is a valid ISO string for today's local 00:00
+          · prefs.daily_budget_usd=$5 + $6 of cost → paused=true
+            (verifies prefs is read live, not cached)
+          · 500 if pipeline.json unparseable (existing pattern)
+          · PreferencesSchema accepts daily_budget_usd
+          · PreferencesSchema rejects negative daily_budget_usd
+
+      Locked design:
+        - Default $10 per spec (≈30 Sonnet calls/day)
+        - Warning at 80% (red→paused at 100%)
+        - Budget = total daily including Haiku (Stage A); gate predicate
+          remains "total >= budget" per spec banner copy
+        - Reuses existing readCostRecords + aggregateCosts (no new
+          aggregate logic; no timezone surprises — local-tz already handled)
+
+      验收: smoke 10/10 PASS; tsc + vite build clean.
+
+  - id: "m2-pre-call-gate"
+    name: "checkBudgetGate + Stage B/Tailor pre-call gate + Force override"
+    status: completed
+    estimated_files:
+      - "server.mjs"
+      - "scripts/smoke-budget-gate.mjs"
+    estimated_lines: 150
+    depends_on: ["m1-schema-and-budget-endpoint"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Pre-call gate that pauses Sonnet endpoints when today's total exceeds
+      daily budget. Stage A (Haiku) is NEVER gated (too cheap to bother per
+      constraint #1). Tailor IS gated (same cost tier as Stage B Sonnet).
+      Force override (body.force=true) bypasses gate but STILL records cost.
+
+      Files:
+        - server.mjs (+~120 lines):
+          · async checkBudgetGate(): reads today's records via readCostRecords
+            + readPreferences for daily_budget_usd. Returns:
+              {
+                paused: boolean,
+                today_total_usd: number,
+                daily_budget_usd: number,
+                banner_message: string,
+              }
+            banner_message: "今日 Sonnet 预算 $10 用尽 — 明天继续，或去 Settings 提高上限"
+          · POST /api/career/evaluate/stage-b:
+            - Acquire pipelineMutex (existing)
+            - Call checkBudgetGate BEFORE candidate filter
+            - If paused AND req.body.force !== true → 402 Payment Required
+              with { error, banner_message, today_total_usd, daily_budget_usd }
+              releasePipelineEnrichLock + return
+            - Else proceed; cost recorded as usual by m2-runner
+          · POST /api/career/cv/tailor:
+            - Call checkBudgetGate at top (after body parse, before pipeline
+              read for symmetry with stage-b)
+            - If paused AND req.body.force !== true → 402 with same shape
+            - Else proceed; cost recorded by tailor runner
+          · Update TailorRequestSchema + EvaluateStageBBodySchema:
+            both add `force: z.boolean().optional()`
+
+        - scripts/smoke-budget-gate.mjs (~250 lines, ~12 assertions):
+          server-spawn pattern; pre-load llm-costs.jsonl with fixture records.
+          - Stage B happy path (paused=false) → 200 (existing happy)
+          - Stage B paused + no force → 402 with banner_message
+          - Stage B paused + force=true → 200 (cost still recorded)
+          - Tailor paused + no force → 402
+          - Tailor paused + force=true → 200
+          - Force-recorded cost increments today_total (verifies cost
+            recording happens AFTER gate, not gated by it)
+          - Stage A NEVER gated (always 200 even when paused — verifies
+            constraint #1 — Haiku stays open)
+          - GET /budget reflects new total after force-runs (no caching)
+          - 402 response shape matches what the UI banner expects
+          - body.force = 'truthy-string' rejected (must be boolean)
+          - Mutex still held / released correctly on 402 path
+
+      Locked design (m2 OQs answered by Phase 2.5):
+        - 402 Payment Required (semantic clarity over 429/403)
+        - Force overrides are per-request (no session flag)
+        - Cost records ALWAYS land — no white-label (constraint #3)
+        - checkBudgetGate is async (reads disk); accept ~50ms overhead per
+          gated call. Caching deferred — accuracy > speed for cost gates.
+
+      验收: smoke 12/12 PASS; existing Stage B + Tailor smoke files still green.
+
+  - id: "m3-ui-banner-and-room-complete"
+    name: "<BudgetBanner /> + Preferences daily_budget_usd input + ROOM COMPLETE"
+    status: completed
+    estimated_files:
+      - "src/career/evaluator/BudgetBanner.tsx"
+      - "src/career/evaluator/budgetBanner.css"
+      - "src/career/settings/Preferences.tsx"
+      - "src/career/Pipeline.tsx"
+      - "scripts/smoke-budget-ui.mjs"
+    estimated_lines: 280
+    depends_on: ["m2-pre-call-gate"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      User-facing surfaces: persistent banner at Pipeline tab top + numeric
+      input in Preferences for the daily budget. Banner explicitly informs
+      (constraint #2 — no silent errors). Force-Sonnet UI button is
+      DEFERRED to 05-pipeline-ui Room per existing convention; this Room
+      ships only the backend force flag.
+
+      Files:
+        - src/career/evaluator/BudgetBanner.tsx (NEW ~180 lines):
+          · 30s polling of /api/career/evaluate/budget
+          · 3 visual states (CSS class drives styling):
+            - paused (red): "🚨 今日 Sonnet 预算 $X 用尽 (用了 $Y)
+              — 明天继续，或 [Edit budget →]" with link to Settings
+            - warning (yellow, ≥80%): "⚠️ Sonnet 预算还剩 $Z.ZZ (X% used)"
+            - normal (gray, inline ribbon): "Today: A×N ($X) | B×N ($Y)
+              | Tailor×N ($Z) | $W / $V budget"
+          · Dismissible — sessionStorage key 'bg-banner-dismissed-<state>';
+            re-emerges on state transition (warning→paused) or hard refresh
+          · "Edit budget" link uses react-router to /career/settings
+          · Loading + error states (compact, not noisy)
+          · Abort signal propagated to interval handler (lessons from m5
+            of stage-b-sonnet: setState-after-unmount defense)
+
+        - src/career/evaluator/budgetBanner.css (NEW ~80 lines):
+          · bg- prefix scopes selectors
+          · 3 state colors: red (paused), amber (warning), neutral (normal)
+          · Dismiss button (X icon)
+          · Compact horizontal layout for normal state; full-width banner
+            for warning/paused
+
+        - src/career/settings/Preferences.tsx (+~20 lines):
+          · daily_budget_usd numeric input under "Stage B (Sonnet 深评)"
+            card (alongside model+enabled)
+          · Help text: "每日 Sonnet+Tailor 预算 (USD). 超过后 Stage B
+            和 Tailor 自动暂停，Stage A (Haiku) 不受影响."
+          · Live-saves like other prefs fields
+
+        - src/career/Pipeline.tsx (+~3 lines):
+          · Mount <BudgetBanner /> above <SchedulerPanel /> at top of
+            Pipeline tab
+
+        - scripts/smoke-budget-ui.mjs (~150 lines, ~6 assertions):
+          GET /budget shape verification (matches Stage B m5 smoke pattern).
+          UI itself manual-tested against dev server.
+          · GET /budget normal state shape (today_total + by_caller +
+            paused=false + warning=false)
+          · GET /budget warning state (≥80% + paused=false)
+          · GET /budget paused state (≥100% + paused=true)
+          · /budget poll endpoint uses local-timezone day start (verify
+            day_start = today's local 00:00 ISO)
+          · PUT /preferences accepts daily_budget_usd update; subsequent
+            GET /budget reflects new threshold immediately (no cache)
+          · GET /budget when prefs file missing → defaults to $10 (graceful)
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml synced
+        - 06-evaluator parent progress: 40% → 60% (3/5 ROOMs ✅)
+        - 04-career-system: 68% → 71%
+
+      下游 unblocked:
+        - 03-block-toggles (extends Preferences UI further, may add
+          per-block cost preview)
+        - 05-pipeline-ui (will wire the Force-Sonnet button per-row;
+          this Room shipped the backend force flag for it to consume)
+
+      验收: smoke 6/6 PASS; manual UI test passes (banner displays in
+      all 3 states; budget edit live-updates; ROOM COMPLETE rollups).
+
+commits:
+  - hash: "faa6af6"
+    date: "2026-05-07"
+    message: "[04-career-system/06-evaluator/04-budget-gate] m1: schema + GET /budget endpoint (smoke 11/11)"
+    files_changed: 3
+    specs_affected:
+      - "intent-budget-gate-001 (anchors added: PreferencesSchema.daily_budget_usd + GET /api/career/evaluate/budget)"
+    milestones_affected:
+      - "m1-schema-and-budget-endpoint (→ completed)"
+  - hash: "e84ceaa"
+    date: "2026-05-07"
+    message: "[04-career-system/06-evaluator/04-budget-gate] m2: checkBudgetGate + 2-endpoint pre-call gate + force flag (smoke 12/12)"
+    files_changed: 2
+    specs_affected:
+      - "intent-budget-gate-001 (anchors extended: checkBudgetGate + EvaluateStageBBodySchema.force + TailorRequestSchema.force)"
+      - "constraint-budget-gate-001 (anchors added: enforcement points)"
+    milestones_affected:
+      - "m2-pre-call-gate (→ completed)"
+  - hash: "48c5005"
+    date: "2026-05-08"
+    message: "[04-career-system/06-evaluator/04-budget-gate] m3: BudgetBanner + Preferences input + ROOM COMPLETE (smoke 6/6)"
+    files_changed: 6
+    specs_affected:
+      - "intent-budget-gate-001 (anchors extended: BudgetBanner.tsx + Preferences daily_budget_usd input)"
+      - "constraint-budget-gate-001 (anchors extended: paused-not-dismissible enforcement)"
+    milestones_affected:
+      - "m3-ui-banner-and-room-complete (→ completed)"
+    files_changed: 2
+    specs_affected:
+      - "intent-budget-gate-001 (anchors extended: checkBudgetGate + EvaluateStageBBodySchema.force + TailorRequestSchema.force)"
+      - "constraint-budget-gate-001 (anchors added: gate enforcement points; constraints #1, #2, #3 enforced via 402 + cost-record-on-force)"
+    milestones_affected:
+      - "m2-pre-call-gate (→ completed)"
+
+current_sprint: "Sprint 8 — Budget Gate"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "🎉 ROOM COMPLETE (3/3). m3 landed: <BudgetBanner /> 30s-polling 3-state component (paused red / warning yellow / normal gray inline ribbon) at Pipeline tab top + Preferences daily_budget_usd numeric input + ROOM COMPLETE rollups. role=status + aria-live=polite + AbortController propagated to interval handler. Plan-agent review applied 1 CRITICAL + 4 HIGH: (1) CRITICAL — paused state is NOT dismissible (was: dismissible — would silently hide hard-block from user, violating constraint #2; fixed: only warning is dismissible since it's a heads-up, paused is a hard block that MUST surface); (2) sessionStorage setItem/removeItem/getItem all wrapped in try/catch (Safari private mode would otherwise crash banner on first dismiss); (3) error state branch now has aria-live='polite' (screen-reader parity with other states); (4) stale-data indicator when error && data — banner shows last-known data with italic '(stale)' suffix instead of going silent; (5) lazy-init dismissedState via useState initializer reading sessionStorage synchronously — eliminates 1-frame banner flash. 6 deferred MEDIUM cosmetic items (cost precision inconsistency, polling rerender churn). Codex still quota-blocked. All 33 smoke files individually green + vite build clean. 04-budget-gate 67% → 100% 🎉. 06-evaluator 40% → 60% (3/5 ROOMs ✅). 04-career-system 68% → 71%. Lifecycle: planning → active. Downstream unblocked: 03-block-toggles (extends Preferences with per-block cost preview / disable-on-budget hints — feeds off the budget endpoint shipped here); 05-pipeline-ui (will wire Force Sonnet button using the body.force flag this Room shipped)."
+last_updated: "2026-05-08"

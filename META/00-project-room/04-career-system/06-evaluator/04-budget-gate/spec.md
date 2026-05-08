@@ -23,6 +23,34 @@ daily_budget_usd + 实时成本条 + 超预算自动暂停 Stage B
 - [intent-budget-gate-001](specs/intent-budget-gate-001.yaml) — daily_budget_usd + 实时成本条 + 超预算自动暂停 Stage B
 - [constraint-budget-gate-001](specs/constraint-budget-gate-001.yaml) — 超预算只暂停 Stage B，不暂停 Stage A；banner 显式提示不静默
 
+## 当前进度 — 🎉 ROOM COMPLETE (2026-05-08, 3/3, 100%)
+
+3 milestones, ~580 LOC source + ~550 smoke. **Reuses existing cost-log infrastructure** ([server.mjs:1140-1242](server.mjs#L1140-L1242) — `appendCostRecord` / `readCostRecords` / `aggregateCosts` / GET `/api/career/llm-costs` already shipped, including local-timezone day-start handling per constraint #4). All 9 OQs locked at recommended values. Closing this Room takes **06-evaluator 40% → 60%** (3/5 ROOMs ✅).
+
+- ✅ **m1-schema-and-budget-endpoint** (server.mjs +75 + Preferences.tsx type sync + smoke ~290, **11/11 green**) — `daily_budget_usd: z.number().nonnegative().default(10)` added to `PreferencesSchema.evaluator_strategy.stage_b`. GET `/api/career/evaluate/budget` returns `{today_total_usd, daily_budget_usd, paused, warning, by_caller, day_start}` — pure projection over the existing `readCostRecords` + `aggregateCosts` helpers from 01-foundation/03-llm-cost-observability. Local-tz day-start (constraint #4 ✓). Plan-agent review: 0 CRITICAL + 0 HIGH actionable; 19 probes all non-issue.
+- ✅ **m2-pre-call-gate** (server.mjs +75 + smoke ~360, **12/12 green**) — `checkBudgetGate()` helper + `force: z.boolean().optional()` on EvaluateStageBBodySchema + TailorRequestSchema + pre-call gate at POST `/evaluate/stage-b` and POST `/cv/tailor`. Gate inserted AFTER body parse (so 400 zod errors take precedence) + BEFORE pipeline.json read (no I/O waste when paused). 402 response shape `{error, banner_message, today_total_usd, daily_budget_usd}` is the UI banner contract. `body.force === true` bypasses; cost STILL records via existing runner (constraint #3). Stage A endpoint UNCHANGED (constraint #1). Plan-agent review: 0 CRITICAL + 0 HIGH actionable; 16 probes all verified including mutex-release on 402 path, $0-budget edge, jobIds-path interaction, 402 vs 412 ordering.
+- ✅ **m3-ui-banner-and-room-complete** (BudgetBanner ~210 + css ~80 + Preferences input + Pipeline mount + smoke ~250, **6/6 green**) — `<BudgetBanner />` polls `/api/career/evaluate/budget` every 30s with AbortController; renders paused/warning/normal state derived from response. role=status + aria-live=polite. Lazy-init dismissedState (eliminates 1-frame flash). sessionStorage ops wrapped in try/catch (Safari private mode safe). Stale-data indicator when error && data. **Paused state is NOT dismissible** (constraint #2: hard block must surface — review fix CRITICAL). Warning is dismissible per-session. Preferences gets `daily_budget_usd` numeric input. Pipeline.tsx mounts banner above SchedulerPanel. Plan-agent review applied 1 CRITICAL + 4 HIGH; 6 deferred MEDIUM cosmetic.
+
+### Locked design (long-term-best, all defaults)
+
+| Decision | Choice |
+|----------|--------|
+| Default budget | $10/day per spec (~30 Sonnet calls) |
+| Warning threshold | 80% (yellow at $8 of $10) |
+| Budget covers | Total daily cost (incl. Haiku); gate predicate is `total >= budget` |
+| Gated endpoints | `/evaluate/stage-b` AND `/cv/tailor` (both Sonnet); Stage A always open |
+| Force override | `body.force === true` bypasses gate; cost STILL recorded (constraint #3) |
+| HTTP status | 402 Payment Required (semantic clarity) |
+| Banner mount | Pipeline tab top (not App-wide; matches user's mental model) |
+| Banner dismiss | sessionStorage per-state; re-emerges on state transition / hard refresh |
+| Force-Sonnet UI button | Deferred to 05-pipeline-ui Room (this Room ships only backend `force` flag) |
+
+### 下游 contracts
+
+- **`05-pipeline-ui`**: wires the per-row Force-Sonnet button using the backend `force` flag this Room ships
+- **`03-block-toggles`**: may extend Preferences UI with per-block cost preview / disable-on-budget hints
+- **Tailor / Stage B**: now budget-aware; banner is the canonical user surface for "why is X paused"
+
 ---
 
 _Generated 2026-04-22 by room-init._

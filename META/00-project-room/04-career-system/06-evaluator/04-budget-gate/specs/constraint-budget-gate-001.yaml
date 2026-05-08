@@ -17,6 +17,12 @@ provenance:
   confidence: 0.9
   source_ref: "career-architecture/05-evaluator.md#成本监控"
 relations: []
-anchors: []
+anchors:
+  - file: "server.mjs"
+    symbols:
+      - "checkBudgetGate"
+      - "EvaluateStageBBodySchema"
+      - "TailorRequestSchema"
+    description: "m2 enforcement: constraint #1 (Stage A unchanged — no gate insertion) + constraint #2 (402 response always carries banner_message — never silent) + constraint #3 (force:true bypasses gate but cost still records via existing runner appendCostRecord) + constraint #4 (gate uses local-tz day-start via same `new Date(y,m,d).toISOString()` pattern as readCostRecords today-mode). m3 adds UI enforcement of constraint #2: paused-state BudgetBanner is NOT dismissible (hard block must surface); stale-data indicator when poll fails after first success (no silent stale state)."
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-08"

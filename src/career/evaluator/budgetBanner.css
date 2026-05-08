@@ -1,0 +1,86 @@
+/* BudgetBanner — three-state status bar at Pipeline tab top.
+ * bg- prefix scopes selectors. */
+
+.bg-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  border: 1px solid;
+}
+
+.bg-banner-text {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.bg-banner-icon {
+  flex-shrink: 0;
+}
+
+.bg-banner-link {
+  color: inherit;
+  text-decoration: underline;
+  font-weight: 500;
+}
+.bg-banner-link:hover { opacity: 0.8; }
+
+.bg-banner-dismiss {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.55;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  flex-shrink: 0;
+}
+.bg-banner-dismiss:hover { opacity: 1; background: rgba(0, 0, 0, 0.06); }
+
+/* Paused (red) — over-budget */
+.bg-banner-paused {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+/* Warning (yellow) — ≥80% of budget */
+.bg-banner-warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+/* Normal (gray) — small inline ribbon, no dismiss */
+.bg-banner-normal {
+  background: #fafaf9;
+  border-color: #f5f5f4;
+  color: #57534e;
+  padding: 6px 14px; /* compact */
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.bg-banner-normal strong { color: #1c1917; font-weight: 600; }
+.bg-banner-ribbon { flex: 1; white-space: nowrap; overflow-x: auto; }
+
+/* Error state — compact, neutral. Don't dominate the page on transient
+ * fetch failures. */
+.bg-banner-error {
+  background: #fafaf9;
+  border-color: #e7e5e4;
+  color: #78716c;
+  padding: 6px 14px;
+  font-size: 12px;
+}
+
+/* Stale indicator — inline suffix when a poll fails AFTER first success
+ * (banner shows last-known data with a "stale" hint so the user knows
+ * the cost figures may be out of date). */
+.bg-banner-stale {
+  font-style: italic;
+  opacity: 0.7;
+}

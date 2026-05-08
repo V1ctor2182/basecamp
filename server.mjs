@@ -1439,6 +1439,12 @@ const EvaluatorStrategySchema = z.object({
       block_f: z.boolean(),
       block_g: z.boolean(),
     }),
+    // Daily Sonnet+Tailor budget cap. 04-budget-gate enforces this:
+    // when today's total cost (incl. Haiku) reaches this threshold,
+    // Stage B and Tailor endpoints return 402 Payment Required.
+    // Default $10/day = ~30 Sonnet calls. Stage A (Haiku) is never
+    // gated regardless. See spec.md constraint #1.
+    daily_budget_usd: z.number().nonnegative().default(10),
   }),
 });
 
@@ -1510,6 +1516,7 @@ function defaultPreferences() {
       stage_b: {
         enabled: true,
         model: 'claude-sonnet-4-6',
+        daily_budget_usd: 10,
         blocks: {
           block_b: true,
           block_c: false,
@@ -3352,6 +3359,10 @@ app.post('/api/career/evaluate/stage-a', async (req, res) => {
 // to data/career/reports/{jobId}.md before returning.
 const EvaluateStageBBodySchema = z.object({
   jobIds: z.array(z.string().min(1)).optional().nullable(),
+  // 04-budget-gate m2: explicit override of the daily-budget gate. Strict
+  // boolean — Zod rejects 'truthy-string' / 1 / null. Cost STILL records
+  // on force runs (constraint #3 — no white-label channel).
+  force: z.boolean().optional(),
 });
 
 // Threshold default lives in prefs.thresholds.consider; if missing or
@@ -3498,6 +3509,22 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
       return res.status(400).json({ error: 'Invalid body', details: e.issues });
     }
 
+    // 04-budget-gate m2: pre-call gate. Inserted AFTER body parse (so 400
+    // zod errors take precedence) and BEFORE pipeline.json read (no I/O
+    // waste when paused). body.force === true bypasses; cost still records
+    // via runner (constraint #3 — no white-label channel).
+    if (body.force !== true) {
+      const gate = await checkBudgetGate();
+      if (gate.paused) {
+        return res.status(402).json({
+          error: 'daily_budget_usd reached for Stage B',
+          banner_message: gate.banner_message,
+          today_total_usd: gate.today_total_usd,
+          daily_budget_usd: gate.daily_budget_usd,
+        });
+      }
+    }
+
     if (!existsSync(PIPELINE_FILE)) {
       return res.status(404).json({ error: 'pipeline.json does not exist' });
     }
@@ -3587,6 +3614,98 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
   }
 });
 
+// ─── Budget Gate: GET /api/career/evaluate/budget ──────────────────────
+// Returns today's cost aggregate + budget threshold + paused/warning
+// flags. Pure projection over the cost-log infrastructure shipped by
+// 01-foundation/03-llm-cost-observability (readCostRecords,
+// aggregateCosts) plus the daily_budget_usd field added to
+// PreferencesSchema by 04-budget-gate m1.
+//
+// Today-mode reads (no query params on readCostRecords): local-tz day
+// start, satisfies constraint #4 (no UTC-rollover surprise at 11pm).
+//
+// m2 will add a checkBudgetGate() helper sharing the same prefs+aggregate
+// shape; this endpoint exists so the UI banner has a stable poll target.
+const BUDGET_WARNING_RATIO = 0.8;
+
+// Pre-call gate consumed by POST /evaluate/stage-b and POST /cv/tailor.
+// Returns the same paused/total/budget shape the GET /budget endpoint
+// publishes, plus a banner_message for UI use. Stage A endpoint does NOT
+// call this — Haiku is too cheap to limit per constraint #1.
+//
+// Reads disk on every call (~50ms): readCostRecords + readPreferences.
+// Caching deferred per Room plan (accuracy > speed for cost gates).
+async function checkBudgetGate() {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const filterStart = todayStart.toISOString();
+
+  const records = await readCostRecords({ start: filterStart });
+  const totalAgg = aggregateCosts(records);
+  const todayTotal = Math.round((totalAgg.total_cost ?? 0) * 10000) / 10000;
+
+  let dailyBudget;
+  try {
+    const prefs = await readPreferences();
+    const v = prefs?.evaluator_strategy?.stage_b?.daily_budget_usd;
+    dailyBudget = typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 10;
+  } catch {
+    dailyBudget = 10;
+  }
+
+  const paused = todayTotal >= dailyBudget;
+  const banner_message = paused
+    ? `今日 Sonnet+Tailor 预算 $${dailyBudget.toFixed(2)} 用尽 (已用 $${todayTotal.toFixed(4)}) — 明天继续，或去 Settings 提高上限`
+    : '';
+
+  return { paused, today_total_usd: todayTotal, daily_budget_usd: dailyBudget, banner_message };
+}
+
+app.get('/api/career/evaluate/budget', async (_req, res) => {
+  try {
+    const now = new Date();
+    // Local-tz today 00:00 — same construction as GET /api/career/llm-costs
+    // default mode (line 1232ish). Keep in sync if that changes.
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const filterStart = todayStart.toISOString();
+
+    const records = await readCostRecords({ start: filterStart });
+    const totalAgg = aggregateCosts(records);
+    const byCallerAgg = aggregateCosts(records, 'caller');
+
+    let dailyBudget;
+    try {
+      const prefs = await readPreferences();
+      const v = prefs?.evaluator_strategy?.stage_b?.daily_budget_usd;
+      // Schema default kicks in when prefs.yml has the file but no field;
+      // when prefs.yml is missing entirely, readPreferences returns the
+      // defaultPreferences() shape which already includes daily_budget_usd:10.
+      // Defensive fallback handles the corrupt-prefs path.
+      dailyBudget = typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 10;
+    } catch {
+      // Prefs unparseable — fall back to default; banner will still show
+      // current cost, just against the default threshold. m2's gate will
+      // do the same thing.
+      dailyBudget = 10;
+    }
+
+    const todayTotal = totalAgg.total_cost ?? 0;
+    const paused = todayTotal >= dailyBudget;
+    const warning = !paused && todayTotal >= BUDGET_WARNING_RATIO * dailyBudget;
+
+    res.json({
+      today_total_usd: Math.round(todayTotal * 10000) / 10000,
+      daily_budget_usd: dailyBudget,
+      paused,
+      warning,
+      by_caller: byCallerAgg,
+      day_start: filterStart,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── CV Tailor: POST /api/career/cv/tailor + GET /output ────────────────
 // Tailor takes a Job (with Block E from its Stage B report), a chosen
 // resume (or Auto-Select fallback), and produces a tailored markdown
@@ -3606,6 +3725,9 @@ const TailorRequestSchema = z.object({
   jobId: z.string().regex(JOB_ID_PATH_RE),
   resumeId: z.string().regex(RESUME_ID_RE).optional(),
   userHint: z.string().max(2000).optional(),
+  // 04-budget-gate m2: explicit override of the daily-budget gate.
+  // Same strict-boolean contract as Stage B. Cost STILL records.
+  force: z.boolean().optional(),
 });
 
 // Resolve which resumeId to use:
@@ -3729,6 +3851,21 @@ app.post('/api/career/cv/tailor', async (req, res) => {
     body = TailorRequestSchema.parse(req.body ?? {});
   } catch (e) {
     return res.status(400).json({ error: 'Invalid body', details: e.issues });
+  }
+
+  // 04-budget-gate m2: pre-call gate. AFTER body parse (so 400 zod
+  // errors take precedence) and BEFORE pipeline.json read. body.force
+  // === true bypasses; cost still records via tailorOneJob runner.
+  if (body.force !== true) {
+    const gate = await checkBudgetGate();
+    if (gate.paused) {
+      return res.status(402).json({
+        error: 'daily_budget_usd reached for Tailor',
+        banner_message: gate.banner_message,
+        today_total_usd: gate.today_total_usd,
+        daily_budget_usd: gate.daily_budget_usd,
+      });
+    }
   }
 
   if (!existsSync(PIPELINE_FILE)) {
