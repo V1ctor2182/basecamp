@@ -210,7 +210,7 @@ milestones:
       all 3 states; budget edit live-updates; ROOM COMPLETE rollups).
 
 commits:
-  - hash: "PENDING"  # filled by m1 followup
+  - hash: "faa6af6"
     date: "2026-05-07"
     message: "[04-career-system/06-evaluator/04-budget-gate] m1: schema + GET /budget endpoint (smoke 11/11)"
     files_changed: 3
