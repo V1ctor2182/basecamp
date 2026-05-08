@@ -16,7 +16,7 @@ UI 可配的 Block A-G 启用开关 + 预估 token / 成本差实时显示
 
 - [intent-block-toggles-001](specs/intent-block-toggles-001.yaml) — UI 可配的 Block A-G 启用开关 + 预估 token / 成本差实时显示
 
-## 当前进度 — m1/3 (2026-05-08, 33%)
+## 当前进度 — m2/3 (2026-05-08, 67%)
 
 3 milestones, ~550 LOC + ~250 smoke. **复用 already-shipped infra**: `BLOCK_META` 7-card UI grid + `EvaluatorStrategySchema.stage_b.blocks` zod 校验 + `resolveEnabledBlocks(prefs)` in stageBPrompt.mjs + `anthropicPricing.mjs`. 0 open questions. 单方案路径. Closes 06-evaluator at 100% (5/5 ROOMs ✅).
 
@@ -25,7 +25,7 @@ UI 可配的 Block A-G 启用开关 + 预估 token / 成本差实时显示
 - **This Room only adds**: (1) fine-grained sub-toggles for D/F/G; (2) per-block cost estimates display; (3) total cost projection card
 
 - ✅ **m1-fine-grained-subtoggles** (~190 + smoke ~150, **14/14 green**) — 3 flat schema keys nested under `prefs.evaluator_strategy.stage_b.blocks`: `block_d_websearch` (bool, default true; off → JD inference only, saves ~$0.05/call), `block_f_story_count` (int 3-20, default 8 — controls Block F STAR+R count), `block_g_playwright` (bool, default true; off → posted_at heuristic only). NEW `resolveStageBToolPolicy(prefs)` returns `{websearch_for_d, playwright_for_g, story_count}` with clamping + non-integer fallback. NEW `renderSubToggleOverrides()` injects per-block override instructions when sub-toggles diverge from defaults — gated on `enabled.has(letter)` so disabled parents skip child overrides. Spread-conditional injection preserves byte-equality with pre-m1 prompt on the all-defaults path (preserves Anthropic prompt-cache). Plan-agent review: 0 CRITICAL + 1 HIGH (cache-key regression — fixed) + 2 MEDIUM + 2 LOW.
-- ⏳ **m2-block-cost-estimates-module** (~140 + smoke ~50) — Pure-constants ESM module `blockCostEstimates.mjs`: `BLOCK_TOKEN_ESTIMATES` per letter + `TOOL_COST_ADD` (web_search $0.05, playwright $0) + `estimateStageBCost(prefs)` helper returning `{per_block, cached_input, total_per_call_current, total_per_call_all_on, delta_savings}`. No new HTTP endpoint.
+- ✅ **m2-block-cost-estimates-module** (~165 + smoke ~210, **9/9 green**) — Pure-constants ESM module `blockCostEstimates.mjs`: deep-frozen `BLOCK_TOKEN_ESTIMATES` per letter + `TOOL_COST_ADD` (web_search $0.05, playwright $0) + `estimateStageBCost(prefs)` helper returning `{model, pricing_available, per_block, cached_input, total_per_call_current, total_per_call_all_on, delta_savings_usd, delta_savings_pct}`. Pure function — render-path safe. All-on baseline is FIXED reference (always assumes every block + tool on) so disabling a tool shows as savings. F story_count uses live policy for both current AND baseline. `pricing_available` flag surfaces missing MODEL_PRICING entry. Plan-agent review: 0 CRITICAL + 1 HIGH (shallow freeze — fixed with deepFreeze) + 2 MEDIUM (pricing miss → flag; smoke gaps → added G-disabled + G-playwright-off + empty-prefs).
 - ⏳ **m3-preferences-ui-cost-preview-and-room-complete** (~230 + smoke ~30) — Wire m2 helper into Preferences.tsx Stage B Blocks section: per-block cost badges (`+$0.XX/call` enabled, strikethrough disabled), 3 sub-controls (D websearch toggle, F story_count input, G playwright toggle), bottom-of-section projection card ("Per call: $0.XX (vs all-on $0.YY) → save $0.ZZ, NN%"). + ROOM COMPLETE rollups.
 
 ### Locked design (single recommended path)

@@ -57,7 +57,7 @@ milestones:
 
   - id: "m2-block-cost-estimates-module"
     name: "Block cost estimates module: pure constants + estimateStageBCost helper"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/evaluator/blockCostEstimates.mjs"
       - "scripts/smoke-block-cost-estimates.mjs"
@@ -182,6 +182,14 @@ commits:
   - hash: "b72abb9"
     date: "2026-05-08"
     message: "[04-career-system/06-evaluator/03-block-toggles] m1: fine-grained sub-toggles + Stage B prompt wiring (smoke 14/14)"
+  - hash: "PENDING"
+    date: "2026-05-08"
+    message: "[04-career-system/06-evaluator/03-block-toggles] m2: blockCostEstimates module + estimateStageBCost helper (smoke 9/9)"
+    files_changed: 2
+    specs_affected:
+      - "intent-block-toggles-001 (anchors added: blockCostEstimates.mjs module, smoke-block-cost-estimates.mjs)"
+    milestones_affected:
+      - "m2-block-cost-estimates-module (→ completed)"
     files_changed: 4
     specs_affected:
       - "intent-block-toggles-001 (anchors added: server.mjs schema 3 fields, Preferences.tsx Blocks type, stageBPrompt.mjs resolveStageBToolPolicy + override injection, smoke-block-subtoggles.mjs)"
@@ -190,5 +198,5 @@ commits:
 
 current_sprint: "Sprint 10 — Block Toggles"
 blockers: []
-status_note: "🟢 m1 complete (1/3, 33%). Schema additions: block_d_websearch (bool, default true), block_f_story_count (int 3-20, default 8), block_g_playwright (bool, default true) — flat keys nested under prefs.evaluator_strategy.stage_b.blocks for simple YAML migration. defaultPreferences() + Preferences.tsx Blocks type + BLANK() updated. NEW resolveStageBToolPolicy(prefs) returns {websearch_for_d, playwright_for_g, story_count} with story_count clamped to [3,20] + non-integer/non-finite fallback to 8. NEW renderSubToggleOverrides() injects per-block override instructions into buildSystemBlock when sub-toggles diverge from defaults — gated on enabled.has(letter) so disabled parents skip their child overrides. Spread-conditional injection preserves byte-equality with pre-m1 prompt on the all-defaults path (preserves Anthropic prompt-cache hits). Plan-agent review: 0 CRITICAL + 1 HIGH (cache-key regression on default path — fixed via spread-conditional) + 2 MEDIUM (extended smoke clamping coverage to 0/-5/Infinity/null; YAML migration test skipped — covered by existing smoke-budget-gate PUT round-trip + resolveStageBToolPolicy reads with `?? defaults`) + 2 LOW (documented story_count exposure-without-parent-check + added dual-parents-off smoke). Codex CLI still quota-blocked. 14/14 m1 smoke + 37/37 full regression + vite build clean. 03-block-toggles 0% → 33%. 下一个: m2 (blockCostEstimates.mjs pure-constants module + estimateStageBCost helper)."
+status_note: "🟢 m2 complete (2/3, 67%). NEW src/career/evaluator/blockCostEstimates.mjs — pure-constants ESM module: BLOCK_TOKEN_ESTIMATES (per-letter output tokens, F has output_per_story 90 — scales with story_count), TOOL_COST_ADD (web_search $0.05, verify_job_posting $0), CACHED_SYSTEM_INPUT_TOKENS_EST=14000, SONNET_OUTPUT_OVERHEAD_TOKENS=100. Deep-frozen (top-level + nested objects locked). estimateStageBCost(prefs) returns {model, pricing_available, per_block, cached_input: {tokens, write_cost_first_call, read_cost_subsequent}, total_per_call_current, total_per_call_all_on, delta_savings_usd, delta_savings_pct}. Pure function — no I/O, render-path safe. All-on baseline is FIXED reference (every block + every tool ON regardless of user sub-toggles) so turning a tool off shows as savings, not zero baseline. F story_count uses live policy.story_count for both current AND baseline (continuous knob — shrinking F still emits F). pricing_available flag surfaces missing MODEL_PRICING entry to UI for 'estimate unavailable' badge. Plan-agent review: 0 CRITICAL + 1 HIGH (shallow Object.freeze allowed nested mutation — fixed with deepFreeze helper) + 2 MEDIUM (silent pricing-miss → exposed pricing_available flag; smoke gaps → added G-disabled + G-playwright-off + empty-prefs cases). 9/9 m2 smoke + 38/38 full regression + vite build clean. Codex CLI still quota-blocked. 03-block-toggles 33% → 67%. 下一个: m3 (Preferences.tsx UI wiring — per-block cost badges + 3 sub-controls + projection summary card + ROOM COMPLETE rollups)."
 last_updated: "2026-05-08"
