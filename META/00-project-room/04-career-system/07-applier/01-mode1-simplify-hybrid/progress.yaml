@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-drafts-store-module"
     name: "drafts/{jobId}.json schema + atomic store module"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/draftsStore.mjs"
       - "scripts/smoke-drafts-store.mjs"
@@ -373,7 +373,17 @@ milestones:
       see status transition to Applied + history.jsonl gains lines).
       ROOM COMPLETE.
 
+commits:
+  - hash: "PENDING"
+    date: "2026-05-09"
+    message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m1: drafts.json store module + Zod schema + atomic CRUD (smoke 12/12)"
+    files_changed: 2
+    specs_affected:
+      - "intent-mode1-simplify-hybrid-001 (anchors added: draftsStore.mjs DraftSchema + DraftFieldSchema + atomic CRUD; smoke-drafts-store.mjs)"
+    milestones_affected:
+      - "m1-drafts-store-module (→ completed)"
+
 current_sprint: "Sprint 12 — Mode 1 Simplify Hybrid"
 blockers: []
-status_note: "📋 Plan locked: 5 milestones, ~1010 LOC + ~410 smoke. Reuses heavy already-shipped infra (08/01 applications store + transitionStatus, qa-bank legal.yml/templates.md/history.jsonl, reports/{jobId}.md from 02-stage-b-sonnet, Tailor PDF outputs from 03-cv-engine, Anthropic prompt-cache pattern, 04-budget-gate's force flag). m1 ships drafts.json store (mirrors applications/store pattern). m2 ships single-Sonnet draft pipeline + runner (NOT 2-call extract-then-fill — Block E already does the personalization work). m3+m4 ship the 2 endpoints (draft generation + submitted transition + history.jsonl flywheel append). m5 ships Apply.tsx UI page + Shortlist Apply link + ROOM COMPLETE. 0 open questions — single Sonnet call, 4-class taxonomy, 3-tier confidence, latest draft replaces, history.jsonl all-classes append, native confirm() Mark Submitted (constraint #4) all locked from spec + existing patterns. Closes 07-applier/01-mode1 (1/7 children). Other 6 children (Mode 2 Playwright agent) flagged in spec for plan-ceo-review ROI evaluation."
+status_note: "🟢 m1 complete (1/5, 20%). NEW src/career/applier/draftsStore.mjs — pure-Node ESM store mirroring applications/store.mjs pattern but simpler (drafts are throwaway, no state machine). Zod DraftSchema (jobId 12-hex regex; fields min(1)/max(50) of DraftFieldSchema; generated_at ISO; model; cost_usd nonnegative+finite; .strict()) + DraftFieldSchema (label 1-200 chars; class enum hard/legal/open/file; suggested_value max 4000 chars; confidence enum high/medium/low; source_ref optional max 200 chars; .strict()). Atomic CRUD via .tmp + fs.rename (precedent: applications/store.mjs). Public API: readDraft (null on ENOENT), writeDraft (jobId mismatch guard before Zod parse — defense in depth), deleteDraft (idempotent — ENOENT swallowed, EACCES/EISDIR rethrown), listDraftJobIds (regex-anchored filter excludes orphan/temp/unrelated files). Plan-agent review: 0 CRITICAL + 0 HIGH + 2 MEDIUM (M1 verification PASS — mismatch check fires before Zod; M2 rename-failure orphan-cleanup branch unexercised — same gap as applications/store m1, acceptable to defer per locked design) + 3 LOW (TOCTOU race in single-process Node is harmless; sync JSON.stringify at 200KB worst-case is fine; min(1) rationale documented in plan). 0 fixes needed. Codex CLI quota-blocked. 12/12 m1 smoke + 43/43 full regression + vite build clean. 07-applier/01-mode1 0% → 20%. 下一个: m2 (single Sonnet draft pipeline + runner)."
 last_updated: "2026-05-08"
