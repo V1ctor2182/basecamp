@@ -88,6 +88,37 @@ export const TIMELINE_EVENT_TYPES = Object.freeze([
   'followup_cleared',
 ]);
 
+// ── In-process mutex (m2 endpoint use) ──────────────────────────────────
+//
+// JS single-threaded event loop makes a check-then-set pair atomic so long
+// as both happen synchronously (no awaits between). Endpoints acquire
+// before their first await; on failure return 409. Pattern mirrors
+// scanRunner.acquirePipelineEnrichLock.
+//
+// This mutex is INDEPENDENT of pipelineMutex — applications.json writes
+// don't block pipeline scans (and vice versa).
+
+let applicationsMutex = {
+  busy: false,
+  acquired_at: null,
+};
+
+export function isApplicationsBusy() {
+  return applicationsMutex.busy;
+}
+
+export function acquireApplicationsLock() {
+  if (applicationsMutex.busy) {
+    return { ok: false, reason: 'applications_busy', acquired_at: applicationsMutex.acquired_at };
+  }
+  applicationsMutex = { busy: true, acquired_at: new Date().toISOString() };
+  return { ok: true };
+}
+
+export function releaseApplicationsLock() {
+  applicationsMutex = { busy: false, acquired_at: null };
+}
+
 // ── Errors ──────────────────────────────────────────────────────────────
 
 export class InvalidTransitionError extends Error {

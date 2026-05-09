@@ -85,7 +85,7 @@ milestones:
 
   - id: "m2-applications-rest-endpoints"
     name: "REST endpoints + applicationsMutex + Zod-validated transitions"
-    status: pending
+    status: completed
     estimated_files:
       - "server.mjs"
       - "scripts/smoke-applications-endpoints.mjs"
@@ -204,6 +204,15 @@ commits:
   - hash: "f3db81e"
     date: "2026-05-08"
     message: "[04-career-system/08-human-gate-tracker/01-application-state] m1: applications store module + Zod schema + state machine + atomic CRUD (smoke 20/20)"
+  - hash: "PENDING"
+    date: "2026-05-08"
+    message: "[04-career-system/08-human-gate-tracker/01-application-state] m2: REST endpoints + applicationsMutex + Zod-validated transitions (smoke 11/11)"
+    files_changed: 3
+    specs_affected:
+      - "intent-application-state-001 (anchors added: 4 endpoints in server.mjs, applicationsMutex in store.mjs, smoke-applications-endpoints.mjs)"
+      - "constraint-application-state-001 (in-process serialization via mutex; structured 400 with current_status + allowed_next on illegal transition)"
+    milestones_affected:
+      - "m2-applications-rest-endpoints (→ completed)"
     files_changed: 2
     specs_affected:
       - "intent-application-state-001 (anchors added: store.mjs ApplicationSchema + VALID_TRANSITIONS + STATUS_RANK + atomic CRUD + upsert/transitionStatus/appendTimelineEvent helpers; smoke-applications-store.mjs)"
@@ -213,5 +222,5 @@ commits:
 
 current_sprint: "Sprint 11 — Application State"
 blockers: []
-status_note: "🟢 m1 complete (1/3, 33%). NEW src/career/applications/store.mjs — pure-Node ESM store. Zod ApplicationSchema (id `{12-hex}-{YYYYMMDD}` regex; 8-status enum; 4-legitimacy enum default 'Unknown'; non-empty timeline; optional followup; .strict() on all sub-schemas). VALID_TRANSITIONS frozen state machine: Evaluated→Applied→Responded→Interview→(Offer|Rejected); Discarded reachable from every non-terminal; SKIP from Evaluated/Applied/Responded/Interview only; Offer→SKIP rejected; Offer→Rejected allowed (declined offer); Discarded fully terminal. STATUS_RANK for upsert idempotency (Discarded/SKIP=99 so re-eval doesn't resurrect archived rows). atomicWriteJson via .tmp + fs.rename (precedent: scanRunner.atomicWriteJson). 3 typed errors: InvalidTransitionError (carries current_status + allowed_next for m2 endpoint UX), ApplicationNotFoundError, TimelineOrderError. upsertApplication(partial) idempotent, special partial.creationNote field becomes the 'created' event note. transitionStatus(id, newStatus, note?) appends status_changed event with from/to. appendTimelineEvent rejects backdated timestamps + reserved internal events ('status_changed' + 'created'). All public helpers documented as NOT in-process concurrent-safe — m2 will add applicationsMutex at the endpoint layer. Plan-agent review: 0 CRITICAL + 0 HIGH + 3 MEDIUM (concurrent-safety doc; 'created' rejection in appendTimelineEvent + smoke; partial.creationNote JSDoc) + 6 LOW (verified correct, no fixes needed). Codex CLI quota-blocked. 20/20 m1 smoke + 40/40 full regression + vite build clean. 01-application-state 0% → 33%. 下一个: m2 (REST endpoints + applicationsMutex)."
+status_note: "🟢 m2 complete (2/3, 67%). 4 REST endpoints in server.mjs over the m1 store module. GET /api/career/applications (?status=CSV filter, sorted by max(timeline.ts) desc, defensive copy before sort), GET /:id (404 missing, regex 400), POST /:id/status (Zod-validated body, applicationsMutex acquired before first await; structured 400 on illegal transition with {error, current_status, allowed_next}; 404 missing; 409 on mutex contention), POST /:id/timeline (Zod USER_TIMELINE_EVENTS excludes reserved internal 'status_changed'+'created'; backdated ts → 400 TimelineOrderError; default ts = now). NEW applicationsMutex in store.mjs — independent of pipelineMutex (applications writes don't block pipeline scans). Plan-agent review: 0 CRITICAL + 0 HIGH + 1 MEDIUM (defensive copy before sort — applied) + 4 LOW (3 informational/acceptable, 1 applied: empty CSV filter `?status=,,,` → 400). 11/11 m2 smoke + 41/41 full regression + vite build clean. Codex CLI quota-blocked. 01-application-state 33% → 67%. 下一个: m3 (Stage B runner auto-insert hook + ROOM COMPLETE)."
 last_updated: "2026-05-08"
