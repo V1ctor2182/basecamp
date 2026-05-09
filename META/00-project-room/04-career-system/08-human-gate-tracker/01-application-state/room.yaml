@@ -3,9 +3,9 @@ room:
   name: "Application State"
   parent: "00-project-room/04-career-system/08-human-gate-tracker"
   type: feature
-  lifecycle: planning
+  lifecycle: active
   created_at: "2026-04-22"
-  updated_at: "2026-04-22"
+  updated_at: "2026-05-08"
   owner: backend
   contributors: []
   prompt_test:

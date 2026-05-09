@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/08-human-gate-tracker/01-application-state`  
 **Type**: feature  
-**Lifecycle**: planning  
+**Lifecycle**: active (ROOM COMPLETE 2026-05-08)  
 **Owner**: backend  
 **Parent**: `00-project-room/04-career-system/08-human-gate-tracker`  
 
@@ -23,7 +23,7 @@ applications.json schema + 状态机 + timeline append-only
 - [intent-application-state-001](specs/intent-application-state-001.yaml) — applications.json schema + 状态机 + timeline append-only
 - [constraint-application-state-001](specs/constraint-application-state-001.yaml) — 状态按规范流转 + timeline append-only + 写操作原子
 
-## 当前进度 — m2/3 (2026-05-08, 67%)
+## 当前进度 — 🎉 ROOM COMPLETE (2026-05-08, 3/3 milestones, 100%)
 
 3 milestones, ~520 LOC + ~280 smoke. **复用 already-shipped infra**: Zod schemas + atomic-rename write pattern from cv-engine output writes + pipelineMutex pattern from server.mjs. **0 open questions**. 单方案路径. Closes 1/4 children of 08-human-gate-tracker; unblocks 07-applier/01-mode1-simplify-hybrid + 02/03/04 siblings.
 
@@ -31,7 +31,7 @@ applications.json schema + 状态机 + timeline append-only
 
 - ✅ **m1-applications-store-module** (~310 + smoke ~290, **20/20 green**) — Pure-Node ESM store at `src/career/applications/store.mjs`. Zod ApplicationSchema (id `{12-hex}-{YYYYMMDD}`; 8-status enum; 4-legitimacy enum default 'Unknown'; non-empty timeline; optional followup; .strict() on all sub-schemas). VALID_TRANSITIONS frozen state machine + STATUS_RANK for idempotency. atomicWriteJson via .tmp + fs.rename (precedent: scanRunner). 3 typed errors (InvalidTransitionError carries current_status + allowed_next for m2 UX, ApplicationNotFoundError, TimelineOrderError). upsertApplication idempotent (special `partial.creationNote` becomes the 'created' event note); transitionStatus appends status_changed event with from/to; appendTimelineEvent rejects backdated ts AND reserved internal events ('status_changed' + 'created'). All public helpers JSDoc'd as NOT in-process concurrent-safe — m2 will add applicationsMutex at endpoints. Plan-agent review: 0 CRITICAL + 0 HIGH + 3 MEDIUM (all 3 applied: concurrent-safety doc; 'created' event rejection + smoke; partial.creationNote JSDoc).
 - ✅ **m2-applications-rest-endpoints** (~190 + smoke ~250, **11/11 green**) — 4 endpoints in server.mjs: `GET /api/career/applications` (?status=CSV filter, sorted by max(timeline.ts) desc with defensive copy before sort) + `GET /:id` (400 regex / 404 missing) + `POST /:id/status` (Zod body; mutex; structured 400 with `current_status` + `allowed_next` on illegal; 404 missing; 409 contention) + `POST /:id/timeline` (Zod USER_TIMELINE_EVENTS excludes reserved internal events; backdated ts → 400 TimelineOrderError; default ts = now). NEW `applicationsMutex` in store.mjs — independent of pipelineMutex. Plan-agent review: 0 CRITICAL + 0 HIGH + 1 MEDIUM (sort mutation safety — fixed via defensive copy) + 4 LOW (1 applied: empty CSV filter → 400).
-- ⏳ **m3-stage-b-auto-insert-and-room-complete** (~140 + smoke ~30) — `stageBRunner.mjs` auto-upserts an Evaluated row after every successful eval (jobId+YYYYMMDD id, score=total_score, legitimacy='Unknown', reportPath populated). Idempotent — preserves later user-set states. Wrapped in try/catch (auxiliary write; doesn't crash Stage B). + ROOM COMPLETE rollups: room.yaml planning→active, _tree.yaml synced, 08-human-gate-tracker 0% → 25% (1/4), 04-career-system 78% → 81%.
+- ✅ **m3-stage-b-auto-insert-and-room-complete** (~70 + smoke ~210, **3/3 green**) — `stageBRunner.mjs` evaluateOneJob() auto-upserts an Application row after every successful Stage B eval. Hook fires AFTER writeReport succeeds + AFTER FORCED_ON_BLOCKS check, BEFORE the success-path return. Inserts `{id:`{jobId}-{local-tz YYYYMMDD}`, status:'Evaluated', company/role/url from job, score: parsed.total_score, legitimacy:'Unknown', reportPath populated, creationNote:'auto-inserted by Stage B'}`. Try/catch wrapped — applications.json failure logs but doesn't crash the eval. Idempotency rule preserves user-set later states. Cross-day re-eval intentionally creates a new row (YYYYMMDD encodes the eval date — consumers must tolerate multi-row-per-jobId). Plan-agent review: 0 CRITICAL + 0 HIGH + 2 MEDIUM (1 applied: ApplicationSchema.score tightened to .finite(); 1 doc-only: cross-day multi-row contract for 07-applier) + 2 LOW. ROOM COMPLETE rollups: room.yaml planning→active, _tree.yaml synced, 08-human-gate-tracker 0% → 25% (1/4 ROOMs ✅), 04-career-system 78% → 81%.
 
 ### Locked design (single recommended path)
 

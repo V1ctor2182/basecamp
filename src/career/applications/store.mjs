@@ -170,7 +170,9 @@ export const ApplicationSchema = z
     company: z.string().min(1),
     role: z.string().min(1),
     url: z.string(),
-    score: z.number().nullable(),
+    // .finite() rejects NaN/Infinity (defense in depth — Stage B parser
+    // already returns null for non-finite, but a future caller could leak).
+    score: z.number().finite().nullable(),
     status: z.enum(STATUS_VALUES),
     legitimacy: z.enum(LEGITIMACY_VALUES).default('Unknown'),
     reportPath: z.string().nullable(),

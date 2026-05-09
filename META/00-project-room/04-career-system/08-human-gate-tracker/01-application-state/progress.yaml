@@ -137,7 +137,7 @@ milestones:
 
   - id: "m3-stage-b-auto-insert-and-room-complete"
     name: "Stage B runner auto-insert hook + ROOM COMPLETE"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/evaluator/stageBRunner.mjs"
       - "scripts/smoke-applications-stage-b-hook.mjs"
@@ -207,6 +207,14 @@ commits:
   - hash: "0fb46b2"
     date: "2026-05-08"
     message: "[04-career-system/08-human-gate-tracker/01-application-state] m2: REST endpoints + applicationsMutex + Zod-validated transitions (smoke 11/11)"
+  - hash: "PENDING"
+    date: "2026-05-08"
+    message: "[04-career-system/08-human-gate-tracker/01-application-state] m3: Stage B runner auto-insert hook + ROOM COMPLETE (smoke 3/3)"
+    files_changed: 3
+    specs_affected:
+      - "intent-application-state-001 (anchors added: Stage B runner hook in stageBRunner.mjs, smoke-applications-stage-b-hook.mjs, score schema tightened to .finite() in store.mjs)"
+    milestones_affected:
+      - "m3-stage-b-auto-insert-and-room-complete (→ completed) — ROOM COMPLETE"
     files_changed: 3
     specs_affected:
       - "intent-application-state-001 (anchors added: 4 endpoints in server.mjs, applicationsMutex in store.mjs, smoke-applications-endpoints.mjs)"
@@ -222,5 +230,5 @@ commits:
 
 current_sprint: "Sprint 11 — Application State"
 blockers: []
-status_note: "🟢 m2 complete (2/3, 67%). 4 REST endpoints in server.mjs over the m1 store module. GET /api/career/applications (?status=CSV filter, sorted by max(timeline.ts) desc, defensive copy before sort), GET /:id (404 missing, regex 400), POST /:id/status (Zod-validated body, applicationsMutex acquired before first await; structured 400 on illegal transition with {error, current_status, allowed_next}; 404 missing; 409 on mutex contention), POST /:id/timeline (Zod USER_TIMELINE_EVENTS excludes reserved internal 'status_changed'+'created'; backdated ts → 400 TimelineOrderError; default ts = now). NEW applicationsMutex in store.mjs — independent of pipelineMutex (applications writes don't block pipeline scans). Plan-agent review: 0 CRITICAL + 0 HIGH + 1 MEDIUM (defensive copy before sort — applied) + 4 LOW (3 informational/acceptable, 1 applied: empty CSV filter `?status=,,,` → 400). 11/11 m2 smoke + 41/41 full regression + vite build clean. Codex CLI quota-blocked. 01-application-state 33% → 67%. 下一个: m3 (Stage B runner auto-insert hook + ROOM COMPLETE)."
+status_note: "🎉 ROOM COMPLETE (3/3, 100%). m3 wired Stage B runner to auto-upsert an Application row on every successful eval. Hook fires in stageBRunner.mjs evaluateOneJob() AFTER writeReport succeeds and AFTER FORCED_ON_BLOCKS / total_score validation, BEFORE the success-path return. Inserts {id:`{jobId}-{local-tz YYYYMMDD}`, status:'Evaluated', company/role/url from job, score: parsed.total_score, legitimacy:'Unknown' (Block G text-parsing deferred), reportPath populated, pdfPath/resumeId null (filled later by 07-applier), creationNote:'auto-inserted by Stage B' becomes timeline event note}. Wrapped in try/catch — applications.json failure logs to console.warn but does NOT crash the eval (auxiliary write per locked design; Stage B already paid Anthropic). Re-eval idempotency: upsertApplication's STATUS_RANK>=0 rule preserves user-set later states (Applied/Interview/Offer never reset to Evaluated). Cross-day re-eval creates a NEW row (different YYYYMMDD suffix) — intentional; encodes the eval date. todayYyyymmdd() helper uses local-tz (matches 04-budget-gate's day-start convention). Plan-agent review: 0 CRITICAL + 0 HIGH + 2 MEDIUM (1 applied: ApplicationSchema.score tightened to .finite() defense-in-depth against future NaN leakage; 1 doc-only: cross-day multi-row consumer contract for 07-applier) + 2 LOW (race window + creationNote truncation — both informational/acceptable per locked design). 3/3 m3 smoke + 42/42 full regression + vite build clean. Codex CLI quota-blocked. 01-application-state 67% → 100%. 08-human-gate-tracker 0% → 25% (1/4 ROOMs). 04-career-system 78% → 81%. room.yaml lifecycle planning → active. _tree.yaml synced. 下游 unblocked: 07-applier/01-mode1-simplify-hybrid (Mark Submitted → Applied transition) + 02-career-dashboard-views (GET /applications) + 03-interview-prep + 04-followup-cadence sibling Rooms in 08."
 last_updated: "2026-05-08"

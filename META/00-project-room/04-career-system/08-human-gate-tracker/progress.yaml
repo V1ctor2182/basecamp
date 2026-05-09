@@ -1,5 +1,11 @@
 milestones: []
-current_sprint: null
+current_sprint: "Sprint 11 — Application State"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+completion: 25  # avg(100, 0, 0, 0) = 25 across 4 features (1 ROOM ✅)
+children_completion:
+  "01-application-state": 100  # 🎉 ROOM COMPLETE (3/3 milestones; canonical applications.json + state machine + Stage B auto-insert hook)
+  "02-career-dashboard-views": 0
+  "03-interview-prep": 0
+  "04-followup-cadence": 0
+status_note: "🟢 08-human-gate-tracker 25% (1/4 ROOMs ✅). 01-application-state just shipped — pure-Node store with Zod schema + frozen state machine + atomic CRUD + idempotent upsert (m1) + 4 REST endpoints + applicationsMutex (m2) + Stage B runner auto-insert hook (m3). applications.json is now the canonical single source of truth for career-system applications. 下游 unblocked: 07-applier/01-mode1-simplify-hybrid (Mark Submitted → Applied transition + history.jsonl append) + 02-career-dashboard-views (consumes GET /applications) + 03/04 sibling Rooms (transition state + followup field)."
+last_updated: "2026-05-08"
