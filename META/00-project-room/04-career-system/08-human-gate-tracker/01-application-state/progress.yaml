@@ -207,7 +207,7 @@ commits:
   - hash: "0fb46b2"
     date: "2026-05-08"
     message: "[04-career-system/08-human-gate-tracker/01-application-state] m2: REST endpoints + applicationsMutex + Zod-validated transitions (smoke 11/11)"
-  - hash: "PENDING"
+  - hash: "9c6bcea"
     date: "2026-05-08"
     message: "[04-career-system/08-human-gate-tracker/01-application-state] m3: Stage B runner auto-insert hook + ROOM COMPLETE (smoke 3/3)"
     files_changed: 3
