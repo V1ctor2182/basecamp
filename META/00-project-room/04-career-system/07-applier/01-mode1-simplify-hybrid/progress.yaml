@@ -68,7 +68,7 @@ milestones:
 
   - id: "m2-draft-prompt-and-runner"
     name: "Draft generation prompt + LLM pipeline (single Sonnet call)"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/draftPrompt.mjs"
       - "src/career/applier/draftRunner.mjs"
@@ -377,6 +377,14 @@ commits:
   - hash: "0ca48c3"
     date: "2026-05-09"
     message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m1: drafts.json store module + Zod schema + atomic CRUD (smoke 12/12)"
+  - hash: "PENDING"
+    date: "2026-05-09"
+    message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m2: draftPrompt + draftRunner — single Sonnet call (smoke 16/16)"
+    files_changed: 3
+    specs_affected:
+      - "intent-mode1-simplify-hybrid-001 (anchors added: draftPrompt.mjs prompt builder + parser; draftRunner.mjs orchestrator; smoke-draft-prompt.mjs)"
+    milestones_affected:
+      - "m2-draft-prompt-and-runner (→ completed)"
     files_changed: 2
     specs_affected:
       - "intent-mode1-simplify-hybrid-001 (anchors added: draftsStore.mjs DraftSchema + DraftFieldSchema + atomic CRUD; smoke-drafts-store.mjs)"
@@ -385,5 +393,5 @@ commits:
 
 current_sprint: "Sprint 12 — Mode 1 Simplify Hybrid"
 blockers: []
-status_note: "🟢 m1 complete (1/5, 20%). NEW src/career/applier/draftsStore.mjs — pure-Node ESM store mirroring applications/store.mjs pattern but simpler (drafts are throwaway, no state machine). Zod DraftSchema (jobId 12-hex regex; fields min(1)/max(50) of DraftFieldSchema; generated_at ISO; model; cost_usd nonnegative+finite; .strict()) + DraftFieldSchema (label 1-200 chars; class enum hard/legal/open/file; suggested_value max 4000 chars; confidence enum high/medium/low; source_ref optional max 200 chars; .strict()). Atomic CRUD via .tmp + fs.rename (precedent: applications/store.mjs). Public API: readDraft (null on ENOENT), writeDraft (jobId mismatch guard before Zod parse — defense in depth), deleteDraft (idempotent — ENOENT swallowed, EACCES/EISDIR rethrown), listDraftJobIds (regex-anchored filter excludes orphan/temp/unrelated files). Plan-agent review: 0 CRITICAL + 0 HIGH + 2 MEDIUM (M1 verification PASS — mismatch check fires before Zod; M2 rename-failure orphan-cleanup branch unexercised — same gap as applications/store m1, acceptable to defer per locked design) + 3 LOW (TOCTOU race in single-process Node is harmless; sync JSON.stringify at 200KB worst-case is fine; min(1) rationale documented in plan). 0 fixes needed. Codex CLI quota-blocked. 12/12 m1 smoke + 43/43 full regression + vite build clean. 07-applier/01-mode1 0% → 20%. 下一个: m2 (single Sonnet draft pipeline + runner)."
+status_note: "🟢 m2 complete (2/5, 40%). Single-Sonnet draft pipeline. NEW src/career/applier/draftPrompt.mjs (~290 lines): APPLIER_MODEL=claude-sonnet-4-6 + frozen CANONICAL_QUESTIONS (8-10 ATS standard questions + JD-specific bonus). 4-class taxonomy + 3-tier confidence rubric inlined into DRAFT_INSTRUCTIONS_HEAD with explicit JSON output contract. buildSystemBlock(bundle) emits ONE text block w/ cache_control:ephemeral (matches Stage A/B m1 single-block cache-on pattern); contains report (Block A/E) + flattened legal.yml + templates.md + identity.yml + history.jsonl 5-most-recent few-shot. buildUserMessage threads pdfPath separately so Sonnet emits the class:'file' field with the correct path (Tailor Engine output). buildDraftPrompt assembles the params (max_tokens=4096). parseDraftResponse: concat text blocks → extract first JSON object via brace-balanced regex (tolerates ```json wrap with fallback when fence content lacks `{` per review fix M1; tolerates preamble) → JSON.parse → Zod-validate per-field with field-index in error message (review fix M2). NEW src/career/applier/draftRunner.mjs (~155 lines): generateDraft NEVER throws — every failure mode lands as {jobId, status:'error', error:'api:|parse:|validate: ...'}. Cost recorded BEFORE parse (preserved on parse-failure path so 04-budget-gate accounting honors actual API spend). caller='applier:draft' (separate budget line from evaluator:stage-b). callWithRetry: 3 attempts (base + 2 retries) on 429/5xx/APIConnectionError. Plan-agent review: 0 CRITICAL + 0 HIGH + 2 MEDIUM (M1 fence-extract fallback when content lacks `{` — applied; M2 ZodError diagnostic with field index — applied) + 8 LOW (1 applied: history newest-first JSDoc contract; 7 verifications/informational). Codex CLI quota-blocked. 16/16 m2 smoke + 44/44 full regression + vite build clean. 07-applier/01-mode1 20% → 40%. 下一个: m3 (POST /api/career/apply/draft endpoint)."
 last_updated: "2026-05-08"
