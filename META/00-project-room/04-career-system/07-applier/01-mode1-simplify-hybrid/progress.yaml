@@ -162,7 +162,7 @@ milestones:
 
   - id: "m3-apply-draft-endpoint"
     name: "POST /api/career/apply/draft endpoint + cost recording"
-    status: pending
+    status: completed
     estimated_files:
       - "server.mjs"
       - "scripts/smoke-apply-draft-endpoint.mjs"
@@ -380,6 +380,14 @@ commits:
   - hash: "05bd19f"
     date: "2026-05-09"
     message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m2: draftPrompt + draftRunner — single Sonnet call (smoke 16/16)"
+  - hash: "PENDING"
+    date: "2026-05-09"
+    message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m3: applierBundle + POST /apply/draft + GET /:jobId endpoints (smoke 9/9)"
+    files_changed: 3
+    specs_affected:
+      - "intent-mode1-simplify-hybrid-001 (anchors added: applierBundle.mjs loader, server.mjs POST /apply/draft + GET /:jobId, smoke-apply-draft-endpoint.mjs)"
+    milestones_affected:
+      - "m3-apply-draft-endpoint (→ completed)"
     files_changed: 3
     specs_affected:
       - "intent-mode1-simplify-hybrid-001 (anchors added: draftPrompt.mjs prompt builder + parser; draftRunner.mjs orchestrator; smoke-draft-prompt.mjs)"
@@ -393,5 +401,5 @@ commits:
 
 current_sprint: "Sprint 12 — Mode 1 Simplify Hybrid"
 blockers: []
-status_note: "🟢 m2 complete (2/5, 40%). Single-Sonnet draft pipeline. NEW src/career/applier/draftPrompt.mjs (~290 lines): APPLIER_MODEL=claude-sonnet-4-6 + frozen CANONICAL_QUESTIONS (8-10 ATS standard questions + JD-specific bonus). 4-class taxonomy + 3-tier confidence rubric inlined into DRAFT_INSTRUCTIONS_HEAD with explicit JSON output contract. buildSystemBlock(bundle) emits ONE text block w/ cache_control:ephemeral (matches Stage A/B m1 single-block cache-on pattern); contains report (Block A/E) + flattened legal.yml + templates.md + identity.yml + history.jsonl 5-most-recent few-shot. buildUserMessage threads pdfPath separately so Sonnet emits the class:'file' field with the correct path (Tailor Engine output). buildDraftPrompt assembles the params (max_tokens=4096). parseDraftResponse: concat text blocks → extract first JSON object via brace-balanced regex (tolerates ```json wrap with fallback when fence content lacks `{` per review fix M1; tolerates preamble) → JSON.parse → Zod-validate per-field with field-index in error message (review fix M2). NEW src/career/applier/draftRunner.mjs (~155 lines): generateDraft NEVER throws — every failure mode lands as {jobId, status:'error', error:'api:|parse:|validate: ...'}. Cost recorded BEFORE parse (preserved on parse-failure path so 04-budget-gate accounting honors actual API spend). caller='applier:draft' (separate budget line from evaluator:stage-b). callWithRetry: 3 attempts (base + 2 retries) on 429/5xx/APIConnectionError. Plan-agent review: 0 CRITICAL + 0 HIGH + 2 MEDIUM (M1 fence-extract fallback when content lacks `{` — applied; M2 ZodError diagnostic with field index — applied) + 8 LOW (1 applied: history newest-first JSDoc contract; 7 verifications/informational). Codex CLI quota-blocked. 16/16 m2 smoke + 44/44 full regression + vite build clean. 07-applier/01-mode1 20% → 40%. 下一个: m3 (POST /api/career/apply/draft endpoint)."
+status_note: "🟢 m3 complete (3/5, 60%). NEW src/career/applier/applierBundle.mjs (~155 lines) — loader for Mode 1 inputs: reports/{jobId}.md (Block A/E) + qa-bank/legal.yml + qa-bank/templates.md + identity.yml + qa-bank/history.jsonl (last 5 NEWEST-FIRST per draftPrompt contract — slice(-5).reverse()) + Tailor PDF latest-by-mtime via {jobId}-*.pdf regex. Defensive reads (ENOENT/parse-error → '' / {} / []). server.mjs adds 2 endpoints (~120 lines): POST /api/career/apply/draft (Zod body w/ .strict(); 402 budget gate parallels Stage B/Tailor; force=true bypasses; 404 on missing pipeline / missing job / missing report w/ actionable hint; 502 on runner status='error' with detail+cost; 500 on writeDraft Zod fail; 200 returns persisted DraftSchema shape) + GET /apply/draft/:jobId (regex 400 / Zod-fail 500 / missing 404 / 200 returns stored draft). Outer try/catch on POST handler matches Stage B+Tailor convention (review fix H1) — without it, EACCES inside loadApplierBundle would bubble to Express's default HTML 500 with absolute filesystem paths. Plan-agent review: 0 CRITICAL + 1 HIGH (H1 missing outer try/catch — applied) + 2 MEDIUM (1 minor leak in GET 500 detail, acceptable; 1 race window — closed by H1) + 5 LOW (all verifications PASS) + 1 NIT (smoke #6 regex slightly loose — acceptable). Codex CLI quota-blocked. 9/9 m3 smoke + 45/45 full regression + vite build clean. 07-applier/01-mode1 40% → 60%. 下一个: m4 (POST /api/career/apply/submitted — Applied transition + history.jsonl flywheel append)."
 last_updated: "2026-05-08"
