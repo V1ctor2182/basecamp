@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-applications-store-module"
     name: "applications.json schema + atomic store module + state machine"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applications/store.mjs"
       - "scripts/smoke-applications-store.mjs"
@@ -200,7 +200,18 @@ milestones:
       验收: 3/3 smoke; full regression; manual: trigger Stage B → see row
       appear in applications.json; ROOM COMPLETE.
 
+commits:
+  - hash: "PENDING"
+    date: "2026-05-08"
+    message: "[04-career-system/08-human-gate-tracker/01-application-state] m1: store module + Zod schema + state machine + atomic CRUD (smoke 20/20)"
+    files_changed: 2
+    specs_affected:
+      - "intent-application-state-001 (anchors added: store.mjs ApplicationSchema + VALID_TRANSITIONS + STATUS_RANK + atomic CRUD + upsert/transitionStatus/appendTimelineEvent helpers; smoke-applications-store.mjs)"
+      - "constraint-application-state-001 (state-machine + append-only invariants enforced in transitionStatus and appendTimelineEvent)"
+    milestones_affected:
+      - "m1-applications-store-module (→ completed)"
+
 current_sprint: "Sprint 11 — Application State"
 blockers: []
-status_note: "📋 Plan locked: 3 milestones, ~520 LOC + ~280 smoke. Reuses already-shipped infra (Zod schemas + atomic-rename write pattern from cv-engine output writes + pipelineMutex pattern from server.mjs). m1 ships pure-Node store module with schema + state machine + atomic CRUD + idempotent upsert. m2 adds REST endpoints + NEW applicationsMutex (independent of pipelineMutex so applications writes don't block pipeline scans). m3 wires Stage B runner to auto-insert Evaluated rows + ROOM COMPLETE. 0 open questions. 单方案路径 — pattern is clear from 04-budget-gate's schema+endpoint+integration cadence. Closes 08-human-gate-tracker/01 (1/4 children); unblocks 07-applier (Mode 1 needs the Applied transition) + 02-career-dashboard-views + 03/04 sibling Rooms in 08. NOTE: planning surfaced from a 'plan milestone 07-applier' request — 07-applier/01-mode1-simplify-hybrid hard-depends on this Room (applications.json state machine + Mark Submitted transition). After this Room ships, 07-applier/01-mode1 unblocks for its own milestone planning."
+status_note: "🟢 m1 complete (1/3, 33%). NEW src/career/applications/store.mjs — pure-Node ESM store. Zod ApplicationSchema (id `{12-hex}-{YYYYMMDD}` regex; 8-status enum; 4-legitimacy enum default 'Unknown'; non-empty timeline; optional followup; .strict() on all sub-schemas). VALID_TRANSITIONS frozen state machine: Evaluated→Applied→Responded→Interview→(Offer|Rejected); Discarded reachable from every non-terminal; SKIP from Evaluated/Applied/Responded/Interview only; Offer→SKIP rejected; Offer→Rejected allowed (declined offer); Discarded fully terminal. STATUS_RANK for upsert idempotency (Discarded/SKIP=99 so re-eval doesn't resurrect archived rows). atomicWriteJson via .tmp + fs.rename (precedent: scanRunner.atomicWriteJson). 3 typed errors: InvalidTransitionError (carries current_status + allowed_next for m2 endpoint UX), ApplicationNotFoundError, TimelineOrderError. upsertApplication(partial) idempotent, special partial.creationNote field becomes the 'created' event note. transitionStatus(id, newStatus, note?) appends status_changed event with from/to. appendTimelineEvent rejects backdated timestamps + reserved internal events ('status_changed' + 'created'). All public helpers documented as NOT in-process concurrent-safe — m2 will add applicationsMutex at the endpoint layer. Plan-agent review: 0 CRITICAL + 0 HIGH + 3 MEDIUM (concurrent-safety doc; 'created' rejection in appendTimelineEvent + smoke; partial.creationNote JSDoc) + 6 LOW (verified correct, no fixes needed). Codex CLI quota-blocked. 20/20 m1 smoke + 40/40 full regression + vite build clean. 01-application-state 0% → 33%. 下一个: m2 (REST endpoints + applicationsMutex)."
 last_updated: "2026-05-08"

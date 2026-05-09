@@ -17,6 +17,10 @@ provenance:
   confidence: 0.9
   source_ref: "career-architecture/07-gate-tracker.md#applicationsjson"
 relations: []
-anchors: []
+anchors:
+  - file: "src/career/applications/store.mjs"
+    description: "Application State m1: NEW pure-Node ESM store. Zod ApplicationSchema (id `^[a-f0-9]{12}-\\d{8}$`; 8-status enum; 4-legitimacy enum default 'Unknown'; non-empty timeline; optional followup; .strict() on all sub-schemas). Frozen VALID_TRANSITIONS state machine + STATUS_RANK for upsert idempotency. atomicWriteJson via .tmp + fs.rename (precedent: scanRunner.atomicWriteJson). 3 typed errors: InvalidTransitionError (carries current_status + allowed_next), ApplicationNotFoundError, TimelineOrderError. Public helpers: readApplications / writeApplications / upsertApplication (idempotent — preserves user-set later states; special partial.creationNote field becomes the 'created' event note) / transitionStatus(id, newStatus, note?) / appendTimelineEvent (rejects backdated ts + reserved internal events 'status_changed' + 'created'). All public helpers JSDoc'd as NOT concurrent-safe at the in-process level — m2 endpoints will add applicationsMutex on top."
+  - file: "scripts/smoke-applications-store.mjs"
+    description: "Application State m1 smoke: 20 pure-Node asserts. Schema accept/reject / VALID_TRANSITIONS shape (Discarded reachable from all non-terminal; SKIP from non-terminal subset; Offer→Rejected; Discarded terminal) / upsertApplication creates with creation event / upsertApplication idempotent / transitionStatus appends event with from/to/note / illegal jumps throw InvalidTransitionError with allowed_next / appendTimelineEvent rejects backdated ts AND reserved internal events / ApplicationNotFoundError on missing id / schema-violation write leaves no .tmp orphans / STATUS_RANK ordering / readApplications ENOENT → []."
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-08"
