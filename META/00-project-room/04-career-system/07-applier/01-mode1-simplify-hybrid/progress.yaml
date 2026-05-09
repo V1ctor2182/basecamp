@@ -222,7 +222,7 @@ milestones:
 
   - id: "m4-apply-submitted-endpoint"
     name: "POST /api/career/apply/submitted + history.jsonl append + Applied transition"
-    status: pending
+    status: completed
     estimated_files:
       - "server.mjs"
       - "scripts/smoke-apply-submitted-endpoint.mjs"
@@ -383,6 +383,15 @@ commits:
   - hash: "e62803f"
     date: "2026-05-09"
     message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m3: applierBundle + POST /apply/draft + GET /:jobId endpoints (smoke 9/9)"
+  - hash: "PENDING"
+    date: "2026-05-09"
+    message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m4: POST /apply/submitted + history.jsonl flywheel append (smoke 7/7)"
+    files_changed: 2
+    specs_affected:
+      - "intent-mode1-simplify-hybrid-001 (anchors added: server.mjs POST /apply/submitted endpoint, smoke-apply-submitted-endpoint.mjs)"
+      - "constraint-mode1-simplify-hybrid-001 (Mark Submitted is the only path that transitions Evaluated → Applied; history.jsonl appends only at submit time)"
+    milestones_affected:
+      - "m4-apply-submitted-endpoint (→ completed)"
     files_changed: 3
     specs_affected:
       - "intent-mode1-simplify-hybrid-001 (anchors added: applierBundle.mjs loader, server.mjs POST /apply/draft + GET /:jobId, smoke-apply-draft-endpoint.mjs)"
@@ -401,5 +410,5 @@ commits:
 
 current_sprint: "Sprint 12 — Mode 1 Simplify Hybrid"
 blockers: []
-status_note: "🟢 m3 complete (3/5, 60%). NEW src/career/applier/applierBundle.mjs (~155 lines) — loader for Mode 1 inputs: reports/{jobId}.md (Block A/E) + qa-bank/legal.yml + qa-bank/templates.md + identity.yml + qa-bank/history.jsonl (last 5 NEWEST-FIRST per draftPrompt contract — slice(-5).reverse()) + Tailor PDF latest-by-mtime via {jobId}-*.pdf regex. Defensive reads (ENOENT/parse-error → '' / {} / []). server.mjs adds 2 endpoints (~120 lines): POST /api/career/apply/draft (Zod body w/ .strict(); 402 budget gate parallels Stage B/Tailor; force=true bypasses; 404 on missing pipeline / missing job / missing report w/ actionable hint; 502 on runner status='error' with detail+cost; 500 on writeDraft Zod fail; 200 returns persisted DraftSchema shape) + GET /apply/draft/:jobId (regex 400 / Zod-fail 500 / missing 404 / 200 returns stored draft). Outer try/catch on POST handler matches Stage B+Tailor convention (review fix H1) — without it, EACCES inside loadApplierBundle would bubble to Express's default HTML 500 with absolute filesystem paths. Plan-agent review: 0 CRITICAL + 1 HIGH (H1 missing outer try/catch — applied) + 2 MEDIUM (1 minor leak in GET 500 detail, acceptable; 1 race window — closed by H1) + 5 LOW (all verifications PASS) + 1 NIT (smoke #6 regex slightly loose — acceptable). Codex CLI quota-blocked. 9/9 m3 smoke + 45/45 full regression + vite build clean. 07-applier/01-mode1 40% → 60%. 下一个: m4 (POST /api/career/apply/submitted — Applied transition + history.jsonl flywheel append)."
+status_note: "🟢 m4 complete (4/5, 80%). server.mjs adds POST /api/career/apply/submitted (~120 lines) — Mark Submitted backend that atomically transitions applications.json row to Applied AND appends each submitted field to qa-bank/history.jsonl (Applier feedback flywheel ② data source). Body: ApplySubmittedBodySchema.strict() with jobId 12-hex regex + fields min(1)/max(50) of {label, final_answer max 2000, class enum} + optional note max 1000. ID resolution: tries `${jobId}-${today-local-tz}` first (matches Stage B m3 auto-insert), then sorts cross-day matches DESC and picks newest (review fix Probe 7 — was picking oldest via Array.find). Acquires applicationsMutex around transitionStatus only; releases before history.jsonl appends so concurrent /status calls aren't blocked. InvalidTransitionError → 400 with current_status+allowed_next; ApplicationNotFoundError → 404; outer try/catch returns JSON 500 on unexpected throws. history.jsonl append: per-line fs.appendFile with HISTORY_LINE_BYTE_LIMIT=4000 runtime guard (review fix Probe 10 — keeps the PIPE_BUF=4096 atomicity invariant load-bearing in code, not just comment); per-field write failure logs + breaks loop (Applied transition already persisted; partial-success acceptable). Response: {application, history_lines_added, total_fields, partial} — partial=true when any line was skipped (review fix Probe 6 — gives UI a soft-warning signal). Plan-agent review: 0 CRITICAL + 0 HIGH + 3 MINOR (cross-day-newest sort, partial flag, byte-size runtime guard — all 3 applied) + 1 NIT (smoke fixture date robustness via Date.now-86400000 — applied). Codex CLI quota-blocked. 7/7 m4 smoke + 46/46 full regression + vite build clean. 07-applier/01-mode1 60% → 80%. 下一个: m5 (Apply.tsx UI + Shortlist Apply link + ROOM COMPLETE)."
 last_updated: "2026-05-08"
