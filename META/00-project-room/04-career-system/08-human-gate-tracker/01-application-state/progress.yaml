@@ -204,7 +204,7 @@ commits:
   - hash: "f3db81e"
     date: "2026-05-08"
     message: "[04-career-system/08-human-gate-tracker/01-application-state] m1: applications store module + Zod schema + state machine + atomic CRUD (smoke 20/20)"
-  - hash: "PENDING"
+  - hash: "0fb46b2"
     date: "2026-05-08"
     message: "[04-career-system/08-human-gate-tracker/01-application-state] m2: REST endpoints + applicationsMutex + Zod-validated transitions (smoke 11/11)"
     files_changed: 3
