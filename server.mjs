@@ -1438,6 +1438,16 @@ const EvaluatorStrategySchema = z.object({
       block_e: z.boolean(),
       block_f: z.boolean(),
       block_g: z.boolean(),
+      // 03-block-toggles m1: fine-grained sub-toggles. Flat keys (not
+      // nested objects) preserve YAML migrations as simple default-fills.
+      // block_d_websearch=false: D enabled but skips web_search → JD-
+      // inference only, saves ~$0.05/call. block_f_story_count: STAR+R
+      // story count for Block F (3-20, default 8). block_g_playwright=
+      // false: G enabled but skips verify_job_posting tool, relies on
+      // posted_at heuristic.
+      block_d_websearch: z.boolean().default(true),
+      block_f_story_count: z.number().int().min(3).max(20).default(8),
+      block_g_playwright: z.boolean().default(true),
     }),
     // Daily Sonnet+Tailor budget cap. 04-budget-gate enforces this:
     // when today's total cost (incl. Haiku) reaches this threshold,
@@ -1524,6 +1534,9 @@ function defaultPreferences() {
           block_e: true,
           block_f: false,
           block_g: false,
+          block_d_websearch: true,
+          block_f_story_count: 8,
+          block_g_playwright: true,
         },
       },
     },

@@ -344,7 +344,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/06-evaluator/03-block-toggles"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: fullstack
       parent: "00-project-room/04-career-system/06-evaluator"
       children: []

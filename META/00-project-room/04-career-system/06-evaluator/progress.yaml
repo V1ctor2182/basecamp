@@ -1,12 +1,12 @@
 milestones: []
 current_sprint: "Sprint 6 — Evaluator"
 blockers: []
-completion: 80  # avg(100, 100, 0, 100, 100) = 80 across 5 features (4 ROOMs ✅)
+completion: 100  # 🎉 SUB-EPIC COMPLETE (5/5 ROOMs ✅)
 children_completion:
   "01-stage-a-haiku": 100  # ✅ ROOM COMPLETE (4/4 milestones, ~2300 行)
   "02-stage-b-sonnet": 100  # 🎉 ROOM COMPLETE (5/5 milestones; first Anthropic Tools API use)
-  "03-block-toggles": 0
+  "03-block-toggles": 100  # 🎉 ROOM COMPLETE (3/3 milestones; fine-grained sub-toggles + cost estimator + UI projection)
   "04-budget-gate": 100  # 🎉 ROOM COMPLETE (3/3 milestones, ~580 LOC + 29 smoke asserts; daily_budget_usd + 402 gate + 3-state banner)
   "05-pipeline-ui": 100  # 🎉 ROOM COMPLETE (3/3 milestones; Force Sonnet wiring + Shortlist page + Reports page with Block A-G sidebar)
-status_note: "🎉 06-evaluator 80% (4/5 ROOMs ✅). 05-pipeline-ui just shipped — Force Sonnet/Re-eval wiring (m1, consumes 04-budget-gate's body.force flag), Shortlist page full rewrite with sortable+filterable table over new GET /api/career/shortlist endpoint (m2), Reports page list+detail with Block A-G sticky sidebar nav driven by IntersectionObserver + page actions (Tailor / Open in Pipeline / Print) (m3). 下一个: 03-block-toggles (last sibling Room — extends Preferences with per-block cost preview / disable-on-budget hints)."
+status_note: "🎉 06-evaluator SUB-EPIC COMPLETE (5/5 ROOMs ✅). 03-block-toggles just shipped — fine-grained sub-toggles (block_d_websearch / block_f_story_count / block_g_playwright) wired into Stage B prompt via resolveStageBToolPolicy + renderSubToggleOverrides (m1), pure-constants blockCostEstimates module + estimateStageBCost helper (m2), Preferences UI with per-block cost badges + sub-controls + cost projection card (m3). All 5 evaluator Rooms closed: stage-a-haiku, stage-b-sonnet, block-toggles, budget-gate, pipeline-ui. 下游 unblocked: 07-applier remains the next flagship sub-epic."
 last_updated: "2026-05-08"

@@ -471,6 +471,123 @@
   font-family: ui-monospace, SFMono-Regular, monospace;
 }
 
+/* ─── Block cost badges (m3) ─── */
+.af-block-cost {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: #14532d;
+  background: rgba(20, 83, 45, 0.10);
+}
+.af-block-cost-off {
+  color: #78716c;
+  background: #f5f5f4;
+  text-decoration: line-through;
+  font-weight: 500;
+}
+.af-block-cost-extra {
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+/* ─── Block sub-controls (m3) ─── */
+.af-block-subcontrol {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-left: 2px solid #d0d7de;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 0 4px 4px 0;
+}
+.af-block-subcontrol label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #1c1917;
+  cursor: pointer;
+}
+.af-block-subcontrol-disabled {
+  opacity: 0.5;
+}
+.af-block-subcontrol-disabled label {
+  cursor: not-allowed;
+}
+.af-block-subcontrol-hint {
+  font-size: 11px;
+  color: #78716c;
+  font-style: italic;
+}
+.af-block-subcontrol-num {
+  width: 60px;
+  padding: 3px 6px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+}
+
+/* ─── Cost projection summary card (m3) ─── */
+.af-cost-projection {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: rgba(9, 105, 218, 0.05);
+  border: 1px solid rgba(9, 105, 218, 0.20);
+  border-radius: 8px;
+}
+.af-cost-projection-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.af-cost-projection-label {
+  color: #57534e;
+  font-weight: 500;
+}
+.af-cost-projection-value {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-weight: 600;
+  color: #1c1917;
+}
+.af-cost-projection-baseline {
+  color: #78716c;
+  font-weight: 400;
+}
+.af-cost-projection-savings {
+  font-size: 13px;
+  color: #14532d;
+  margin-bottom: 0;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.af-cost-projection-savings-zero {
+  font-size: 12px;
+  color: #78716c;
+  font-style: italic;
+  margin-bottom: 0;
+}
+.af-cost-projection-caveat {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #78716c;
+  line-height: 1.5;
+}
+.af-cost-projection-caveat code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.af-cost-projection-warn {
+  color: #b91c1c;
+  font-weight: 500;
+}
+
 /* Toggle switch (block cards) */
 .af-toggle {
   position: relative;

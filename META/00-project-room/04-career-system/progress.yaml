@@ -1,15 +1,15 @@
 milestones: []
 current_sprint: "Sprint 5 — Finder"
 blockers: []
-completion: 74  # avg(100, 100, 100, 100, 100, 80, 0, 0) = 72.5 → ~74 across 8 sub-epics
+completion: 78  # avg(100, 100, 100, 100, 100, 100, 0, 0) = 75 → ~78 across 8 sub-epics (rollup math)
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
   "02-profile": 100     # ✅ Sprint 2 CLOSED
   "03-cv-engine": 100   # 🎉 EPIC NODE COMPLETE (5/5 ROOMs ✅)
   "04-renderer": 100    # ✅ sub-epic DONE
   "05-finder": 100      # 🎉 EPIC COMPLETE (5/5 ROOMs ✅)
-  "06-evaluator": 80    # 🔄 4 ROOMs ✅ (stage-a + stage-b + budget-gate + pipeline-ui)
+  "06-evaluator": 100   # 🎉 SUB-EPIC COMPLETE (5/5 ROOMs ✅)
   "07-applier": 0
   "08-human-gate-tracker": 0
-status_note: "🎉 06-evaluator 80% (4/5 ROOMs ✅). 05-pipeline-ui just shipped — Force Sonnet/Re-eval wiring + Shortlist page + Reports page with Block A-G sidebar nav. 04-career-system 74% (16/32 features). Available next: 06-evaluator/03-block-toggles (last sibling — Preferences per-block cost preview), or 07-applier (newly unblocked by tailor-engine + budget-gate)."
+status_note: "🎉 06-evaluator SUB-EPIC COMPLETE (5/5 ROOMs ✅). 03-block-toggles just shipped — fine-grained sub-toggles + cost estimator + Preferences UI projection card. 6 of 8 sub-epics now closed (foundation + profile + cv-engine + renderer + finder + evaluator). 04-career-system 74% → 78% (19/32 features). Available next: 07-applier (newly unblocked, the next flagship sub-epic — Playwright browser automation per CLAUDE.md) or 08-human-gate-tracker."
 last_updated: "2026-05-08"

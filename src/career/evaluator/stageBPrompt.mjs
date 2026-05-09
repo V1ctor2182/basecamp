@@ -112,6 +112,73 @@ export function resolveEnabledBlocks(prefs) {
   return BLOCK_KEYS.filter((k) => enabled.has(k));
 }
 
+// 03-block-toggles m1: fine-grained sub-toggle resolution.
+//
+// Reads three flat keys nested under prefs.evaluator_strategy.stage_b.blocks:
+//   block_d_websearch (default true)  — when false: D enabled but no web_search
+//   block_f_story_count (default 8)   — STAR+R story count for Block F (3-20)
+//   block_g_playwright (default true) — when false: G enabled but no verify_job_posting
+//
+// The parent block toggle (block_d / block_f / block_g) takes precedence: a
+// disabled parent skips the whole block regardless of its sub-flag. Sub-flags
+// only matter when the parent is enabled.
+export const STAGE_B_DEFAULT_STORY_COUNT = 8;
+export const STAGE_B_STORY_COUNT_MIN = 3;
+export const STAGE_B_STORY_COUNT_MAX = 20;
+
+// Returns {websearch_for_d, playwright_for_g, story_count}.
+// NOTE: story_count is reported regardless of block_f's parent toggle.
+// Callers that need F-specific behavior must independently check
+// resolveEnabledBlocks() — this helper does not gate on parent state.
+export function resolveStageBToolPolicy(prefs) {
+  const blocks = prefs?.evaluator_strategy?.stage_b?.blocks ?? {};
+  const websearch_for_d = blocks.block_d_websearch !== false; // default true
+  const playwright_for_g = blocks.block_g_playwright !== false; // default true
+  const raw = blocks.block_f_story_count;
+  let story_count = STAGE_B_DEFAULT_STORY_COUNT;
+  if (Number.isFinite(raw) && Number.isInteger(raw)) {
+    story_count = Math.min(STAGE_B_STORY_COUNT_MAX, Math.max(STAGE_B_STORY_COUNT_MIN, raw));
+  }
+  return { websearch_for_d, playwright_for_g, story_count };
+}
+
+// Render override-instructions to be appended to STAGE_B_INSTRUCTIONS_HEAD
+// when sub-toggles depart from the canonical defaults. Returns '' when all
+// sub-toggles match defaults (no override needed).
+//
+// Only emits override lines for blocks that are actually enabled — overriding
+// a disabled block is meaningless (disabled blocks are skipped wholesale).
+function renderSubToggleOverrides(enabledLetters, policy) {
+  const enabled = new Set(enabledLetters);
+  const lines = [];
+
+  if (enabled.has('D') && !policy.websearch_for_d) {
+    lines.push(
+      '- Block D OVERRIDE: web_search tool deliberately disabled by user. Base your',
+      '  comp & demand analysis entirely on JD inference + general market knowledge.',
+      '  Mark "*confidence: low. Web tool disabled by user preference.*" at the start',
+      '  of the block.'
+    );
+  }
+  if (enabled.has('F') && policy.story_count !== STAGE_B_DEFAULT_STORY_COUNT) {
+    lines.push(
+      `- Block F OVERRIDE: produce exactly ${policy.story_count} STAR + Reflection`,
+      '  stories (override the canonical 6-10 range above).'
+    );
+  }
+  if (enabled.has('G') && !policy.playwright_for_g) {
+    lines.push(
+      '- Block G OVERRIDE: verify_job_posting tool disabled by user. Base legitimacy',
+      '  assessment on posted_at recency + JD signals only. Mark "*confidence: low.',
+      '  Posting verification tool disabled by user preference.*" at the start of',
+      '  the block.'
+    );
+  }
+
+  if (lines.length === 0) return '';
+  return ['', 'SUB-TOGGLE OVERRIDES (apply on top of the canonical block descriptions):', ...lines].join('\n');
+}
+
 // Render the toggle list section of the system instructions so Sonnet knows
 // which blocks to emit. Always lists all 7 with an [enabled]/[skip] tag —
 // this is more reliable than just listing enabled (Sonnet sometimes hallucinates
@@ -161,12 +228,20 @@ export function buildSystemBlock(bundle) {
     : FORCED_ON_BLOCKS;
   const qaSection = renderQaFewShot(bundle?.qaFewShot);
   const weightsSection = renderScoringWeights(bundle?.prefs);
+  const subToggleOverrides = renderSubToggleOverrides(
+    enabledLetters,
+    resolveStageBToolPolicy(bundle?.prefs)
+  );
 
+  // Spread-conditional injection so the all-defaults path (empty
+  // subToggleOverrides) produces text byte-identical to the pre-m1 prompt —
+  // preserving Anthropic prompt-cache hits on the always-default path.
   const text = [
     STAGE_B_INSTRUCTIONS_HEAD,
     '',
     'BLOCK TOGGLE LIST (enabled blocks — emit ONLY these; skip the rest):',
     renderEnabledBlockList(enabledLetters),
+    ...(subToggleOverrides ? [subToggleOverrides] : []),
     '',
     'SCORING WEIGHTS for the total score (weighted average of block-derived signals):',
     weightsSection,
