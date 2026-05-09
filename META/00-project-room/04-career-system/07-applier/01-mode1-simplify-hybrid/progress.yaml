@@ -383,7 +383,7 @@ commits:
   - hash: "e62803f"
     date: "2026-05-09"
     message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m3: applierBundle + POST /apply/draft + GET /:jobId endpoints (smoke 9/9)"
-  - hash: "PENDING"
+  - hash: "fce1a85"
     date: "2026-05-09"
     message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m4: POST /apply/submitted + history.jsonl flywheel append (smoke 7/7)"
     files_changed: 2
