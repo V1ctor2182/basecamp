@@ -427,7 +427,7 @@ tree:
         - "00-project-room/04-career-system/08-human-gate-tracker/04-followup-cadence"
     - id: "00-project-room/04-career-system/08-human-gate-tracker/01-application-state"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: backend
       parent: "00-project-room/04-career-system/08-human-gate-tracker"
       children: []

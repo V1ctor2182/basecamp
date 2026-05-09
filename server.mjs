@@ -45,6 +45,19 @@ import {
   writePortalsConfig,
 } from './src/career/finder/portalsLoader.mjs';
 import { manualPaste } from './src/career/finder/adapters/manual.mjs';
+import {
+  readApplications,
+  transitionStatus,
+  appendTimelineEvent,
+  acquireApplicationsLock,
+  releaseApplicationsLock,
+  STATUS_VALUES,
+  TIMELINE_EVENT_TYPES,
+  APPLICATION_ID_RE,
+  InvalidTransitionError,
+  ApplicationNotFoundError,
+  TimelineOrderError,
+} from './src/career/applications/store.mjs';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const app = express();
@@ -4127,6 +4140,172 @@ app.post('/api/career/pipeline/manual', async (req, res) => {
       return res.status(400).json({ error: 'Invalid manual paste', details: e.issues });
     }
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── Application State (08-human-gate-tracker/01) ──────────────────────
+// 4 endpoints over data/career/applications.json. Reads are unmutexed
+// (parse-once snapshots are safe under POSIX-atomic-rename writes); writes
+// acquire applicationsMutex (independent of pipelineMutex) for in-process
+// HTTP-concurrent serialization. Illegal transitions return structured 400
+// with current_status + allowed_next so the UI can render actionable
+// feedback. id regex is canonical {12-hex jobId}-{YYYYMMDD}.
+
+// Body schemas
+const StatusUpdateSchema = z
+  .object({
+    status: z.enum(STATUS_VALUES),
+    note: z.string().max(1000).optional(),
+  })
+  .strict();
+
+// User-appendable timeline events: subset of TIMELINE_EVENT_TYPES that
+// excludes the reserved internal events ('status_changed' + 'created').
+// The store also enforces this — endpoint just rejects earlier with a
+// cleaner Zod error.
+const USER_TIMELINE_EVENTS = TIMELINE_EVENT_TYPES.filter(
+  (e) => e !== 'status_changed' && e !== 'created'
+);
+const TimelineAppendSchema = z
+  .object({
+    event: z.enum(USER_TIMELINE_EVENTS),
+    note: z.string().max(1000).optional(),
+    ts: z.string().datetime({ offset: true }).optional(),
+  })
+  .strict();
+
+// GET /api/career/applications — list, optional ?status=CSV filter
+app.get('/api/career/applications', async (req, res) => {
+  try {
+    const arr = await readApplications();
+    const filterParam = typeof req.query.status === 'string' ? req.query.status : null;
+    // Defensive copy so .sort() never mutates the snapshot returned by
+    // readApplications (review fix M1 — guards against future caching).
+    let result;
+    if (filterParam) {
+      const allowed = new Set(
+        filterParam.split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+      );
+      if (allowed.size === 0) {
+        return res.status(400).json({ error: 'empty status filter' });
+      }
+      // Reject unknown values up-front so the client knows their query was bad
+      for (const s of allowed) {
+        if (!STATUS_VALUES.includes(s)) {
+          return res.status(400).json({ error: `unknown status filter: ${s}` });
+        }
+      }
+      result = arr.filter((row) => allowed.has(row.status));
+    } else {
+      result = [...arr];
+    }
+    // Sort by max(timeline.ts) desc — most-recently-touched first
+    result.sort((a, b) => {
+      const ta = a.timeline[a.timeline.length - 1]?.ts ?? '';
+      const tb = b.timeline[b.timeline.length - 1]?.ts ?? '';
+      if (tb < ta) return -1;
+      if (tb > ta) return 1;
+      return 0;
+    });
+    res.json({ total: arr.length, filtered: result.length, results: result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/career/applications/:id — single
+app.get('/api/career/applications/:id', async (req, res) => {
+  const id = req.params?.id;
+  if (typeof id !== 'string' || !APPLICATION_ID_RE.test(id)) {
+    return res.status(400).json({ error: 'invalid id (must match {jobId}-YYYYMMDD)' });
+  }
+  try {
+    const arr = await readApplications();
+    const row = arr.find((r) => r.id === id);
+    if (!row) return res.status(404).json({ error: 'application not found' });
+    res.json(row);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/career/applications/:id/status — transition status
+app.post('/api/career/applications/:id/status', async (req, res) => {
+  const id = req.params?.id;
+  if (typeof id !== 'string' || !APPLICATION_ID_RE.test(id)) {
+    return res.status(400).json({ error: 'invalid id (must match {jobId}-YYYYMMDD)' });
+  }
+  let body;
+  try {
+    body = StatusUpdateSchema.parse(req.body ?? {});
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid body', details: e.issues });
+  }
+  // Acquire mutex BEFORE first await so the in-process race window is closed.
+  const lock = acquireApplicationsLock();
+  if (!lock.ok) {
+    return res.status(409).json({
+      error: 'applications.json busy; retry shortly',
+      acquired_at: lock.acquired_at,
+    });
+  }
+  try {
+    const updated = await transitionStatus(id, body.status, body.note);
+    res.json(updated);
+  } catch (e) {
+    if (e instanceof InvalidTransitionError) {
+      return res.status(400).json({
+        error: e.message,
+        current_status: e.current_status,
+        allowed_next: e.allowed_next,
+      });
+    }
+    if (e instanceof ApplicationNotFoundError) {
+      return res.status(404).json({ error: e.message });
+    }
+    res.status(500).json({ error: e.message });
+  } finally {
+    releaseApplicationsLock();
+  }
+});
+
+// POST /api/career/applications/:id/timeline — append free-form event
+app.post('/api/career/applications/:id/timeline', async (req, res) => {
+  const id = req.params?.id;
+  if (typeof id !== 'string' || !APPLICATION_ID_RE.test(id)) {
+    return res.status(400).json({ error: 'invalid id (must match {jobId}-YYYYMMDD)' });
+  }
+  let body;
+  try {
+    body = TimelineAppendSchema.parse(req.body ?? {});
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid body', details: e.issues });
+  }
+  const event = {
+    ts: body.ts ?? new Date().toISOString(),
+    event: body.event,
+    ...(body.note ? { note: body.note } : {}),
+  };
+  const lock = acquireApplicationsLock();
+  if (!lock.ok) {
+    return res.status(409).json({
+      error: 'applications.json busy; retry shortly',
+      acquired_at: lock.acquired_at,
+    });
+  }
+  try {
+    const updated = await appendTimelineEvent(id, event);
+    res.json(updated);
+  } catch (e) {
+    if (e instanceof TimelineOrderError) {
+      return res.status(400).json({ error: e.message });
+    }
+    if (e instanceof ApplicationNotFoundError) {
+      return res.status(404).json({ error: e.message });
+    }
+    res.status(500).json({ error: e.message });
+  } finally {
+    releaseApplicationsLock();
   }
 });
 

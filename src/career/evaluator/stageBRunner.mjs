@@ -42,6 +42,7 @@ import {
   LOCAL_TOOL_HANDLERS,
   runToolUseLoop,
 } from './stageBTools.mjs';
+import { upsertApplication } from '../applications/store.mjs';
 
 const STAGE_B_CALLER = 'evaluator:stage-b';
 
@@ -273,6 +274,35 @@ async function evaluateOneJob(job, prefs, cvBundle, client, deps) {
     };
   }
 
+  // 08-human-gate-tracker/01-application-state m3: auto-insert an
+  // applications.json row on every successful Stage B eval. applications.json
+  // is the single source of truth that 07-applier and 02-career-dashboard-views
+  // consume. upsertApplication is idempotent — re-running Stage B on a job
+  // already in Applied/Interview/Offer state preserves the user-set status
+  // (the per-row data has changed on disk, but the application's lifecycle
+  // hasn't). Failure is logged and swallowed: applications.json is auxiliary
+  // and MUST NOT crash the eval that already paid Anthropic.
+  try {
+    await upsertApplication({
+      id: `${jobId}-${todayYyyymmdd()}`,
+      company: job?.company ?? '',
+      role: job?.role ?? '',
+      url: job?.url ?? '',
+      score: parsed.total_score,
+      status: 'Evaluated',
+      legitimacy: 'Unknown', // Block G text-parsing deferred
+      reportPath,
+      pdfPath: null,
+      resumeId: null,
+      creationNote: 'auto-inserted by Stage B',
+    });
+  } catch (e) {
+    console.warn(
+      '[stageBRunner] applications.json upsert failed (auxiliary):',
+      String(e?.message ?? e).slice(0, 200)
+    );
+  }
+
   return {
     jobId,
     total_score: parsed.total_score,
@@ -285,6 +315,17 @@ async function evaluateOneJob(job, prefs, cvBundle, client, deps) {
     tool_rounds_used: response?._toolRoundsUsed ?? 0,
     status: STATUS.EVALUATED,
   };
+}
+
+// Local-tz YYYYMMDD for the application id suffix. Same convention as the
+// 04-budget-gate today-start helper (Date getFullYear/getMonth/getDate
+// reflect the local tz).
+function todayYyyymmdd() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}${m}${day}`;
 }
 
 function errorResult(jobId, err) {
