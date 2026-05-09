@@ -23,6 +23,44 @@ applications.json schema + 状态机 + timeline append-only
 - [intent-application-state-001](specs/intent-application-state-001.yaml) — applications.json schema + 状态机 + timeline append-only
 - [constraint-application-state-001](specs/constraint-application-state-001.yaml) — 状态按规范流转 + timeline append-only + 写操作原子
 
+## 当前进度 — m0/3 (planned 2026-05-08, 0%)
+
+3 milestones, ~520 LOC + ~280 smoke. **复用 already-shipped infra**: Zod schemas + atomic-rename write pattern from cv-engine output writes + pipelineMutex pattern from server.mjs. **0 open questions**. 单方案路径. Closes 1/4 children of 08-human-gate-tracker; unblocks 07-applier/01-mode1-simplify-hybrid + 02/03/04 siblings.
+
+**Re-routed from a "plan milestone 07-applier" request** — 07-applier/01-mode1 hard-depends on this Room's applications.json state machine + Mark Submitted transition, so this Room ships first.
+
+- ⏳ **m1-applications-store-module** (~200 + smoke ~150) — Pure-Node ESM store with Zod ApplicationSchema (id `{jobId}-YYYYMMDD`; 8-status union; 4-legitimacy union; append-only timeline; optional followup) + VALID_TRANSITIONS state machine + STATUS_RANK for idempotency + atomic-rename writes + `upsertApplication` (idempotent — preserves user-set later states) + `transitionStatus(id, newStatus, note?)` with InvalidTransitionError + `appendTimelineEvent` rejecting backdated ts.
+- ⏳ **m2-applications-rest-endpoints** (~180 + smoke ~100) — `GET /api/career/applications` (?status=CSV filter) + `GET /:id` (404) + `POST /:id/status {status, note?}` (400 with `allowed_next` on illegal transition) + `POST /:id/timeline {event, note?}` (400 on backdated ts). NEW `applicationsMutex` parallel to pipelineMutex.
+- ⏳ **m3-stage-b-auto-insert-and-room-complete** (~140 + smoke ~30) — `stageBRunner.mjs` auto-upserts an Evaluated row after every successful eval (jobId+YYYYMMDD id, score=total_score, legitimacy='Unknown', reportPath populated). Idempotent — preserves later user-set states. Wrapped in try/catch (auxiliary write; doesn't crash Stage B). + ROOM COMPLETE rollups: room.yaml planning→active, _tree.yaml synced, 08-human-gate-tracker 0% → 25% (1/4), 04-career-system 78% → 81%.
+
+### Locked design (single recommended path)
+
+| Decision | Choice |
+|----------|--------|
+| ID format | `{12-hex jobId}-{YYYYMMDD}` per intent |
+| legitimacy default | `'Unknown'` (Block G text-parsing deferred to a future Room) |
+| Idempotency rule | `STATUS_RANK[current] >= Evaluated` → upsert no-op (preserves user-set later states) |
+| Mutex scope | NEW `applicationsMutex` (independent of pipelineMutex — applications writes don't block scans) |
+| Atomic write | `.tmp + fs.rename` (POSIX-atomic; same pattern as cv-engine output writes) |
+| Offer→Rejected | Allowed (declined offer scenario) |
+| Discarded/SKIP | Terminal-from-any-non-terminal per constraint #1 |
+| Stage B integration | Default-on, no feature flag (this IS the source of truth) |
+| Stage B failure mode | applications.json upsert failure logged + swallowed; doesn't crash the eval |
+
+### Deferred (out of scope this Room)
+
+- Block G legitimacy parsing (deferred to 02-career-dashboard-views or a future Room — m3 writes `'Unknown'`)
+- followup field population (handled by 04-followup-cadence Room)
+- pdfPath / resumeId population (handled by 07-applier when Tailor outputs are linked to applications)
+- Applied.tsx UI rewrite (handled by 02-career-dashboard-views Room)
+
+### 下游 contracts
+
+- **`07-applier/01-mode1-simplify-hybrid`** consumes `POST /:id/status {Applied}` for the Mark Submitted button + history.jsonl append flow
+- **`08-human-gate-tracker/02-career-dashboard-views`** consumes `GET /applications` for the Applied + Pipeline + Reports tabs
+- **`08-human-gate-tracker/03-interview-prep`** consumes the Interview transition
+- **`08-human-gate-tracker/04-followup-cadence`** consumes the followup field
+
 ---
 
-_Generated 2026-04-22 by room-init._
+_Generated 2026-04-22 by room-init. Plan refined 2026-05-08 by plan-milestones._

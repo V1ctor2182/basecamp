@@ -1,5 +1,206 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-applications-store-module"
+    name: "applications.json schema + atomic store module + state machine"
+    status: pending
+    estimated_files:
+      - "src/career/applications/store.mjs"
+      - "scripts/smoke-applications-store.mjs"
+    estimated_lines: 200
+    depends_on: []
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Pure-Node ESM module — no HTTP, no UI. Provides the canonical schema +
+      state machine + atomic read/write + timeline append-only invariants.
+
+      Files:
+        - src/career/applications/store.mjs (~200 lines):
+          · Zod ApplicationSchema:
+            - id: regex /^[a-f0-9]{12}-\d{8}$/  ({jobId}-YYYYMMDD)
+            - company / role / url / score (number, nullable)
+            - status: z.enum(['Evaluated','Applied','Responded','Interview',
+              'Offer','Rejected','Discarded','SKIP'])
+            - legitimacy: z.enum(['High Confidence','Proceed with Caution',
+              'Suspicious','Unknown']).default('Unknown')
+            - reportPath / pdfPath / resumeId: nullable string
+            - timeline: z.array(TimelineEventSchema).min(1) — every row has
+              at least the creation event
+            - followup: { nextAt: ISO, reason: string }.optional()
+          · TimelineEventSchema: { ts: ISO, event: enum, note?: string,
+            from?: status, to?: status }
+          · VALID_TRANSITIONS — frozen state machine map:
+              Evaluated  → Applied | Discarded | SKIP
+              Applied    → Responded | Discarded | SKIP
+              Responded  → Interview | Rejected | Discarded | SKIP
+              Interview  → Offer | Rejected | Discarded | SKIP
+              Offer      → Rejected | Discarded   (declined offer allowed)
+              Rejected   → Discarded
+              Discarded  → []                    (terminal)
+              SKIP       → Discarded
+          · STATUS_RANK = {Evaluated:0, Applied:1, Responded:2, Interview:3,
+            Offer:4, Rejected:5, Discarded:99, SKIP:99} for idempotency check
+          · APPLICATIONS_FILE = data/career/applications.json
+          · readApplications() — { ENOENT → [], parse-error → throw }
+          · writeApplications(arr) — atomic rename (write to .tmp, fs.rename
+            to final); ApplicationSchema.array().parse before write
+          · upsertApplication(partial) — idempotent: if id exists with
+            STATUS_RANK[current] >= STATUS_RANK['Evaluated'], no-op return
+            existing (preserves user-set later states); else create new
+            with timeline:[{ts, event:'created', note?}]
+          · transitionStatus(id, newStatus, note?) — VALID_TRANSITIONS
+            check; on legal: append {ts, event:'status_changed', from, to,
+            note?} + writeApplications atomically; throws
+            InvalidTransitionError otherwise
+          · appendTimelineEvent(id, event) — free-form events (correction,
+            note, etc.); rejects timestamps earlier than the last event
+            (append-only invariant)
+
+        - scripts/smoke-applications-store.mjs (~150 lines, ~16 asserts):
+          · ApplicationSchema accepts a valid row + rejects bad id regex /
+            unknown status / unknown legitimacy / empty timeline
+          · upsertApplication creates new row with creation event
+          · upsertApplication idempotent (re-run same id keeps current
+            status; doesn't reset)
+          · transitionStatus Evaluated→Applied appends event w/ from/to
+          · transitionStatus rejects illegal jumps (Evaluated→Interview
+            throws InvalidTransitionError)
+          · Discarded reachable from every non-terminal status
+          · SKIP reachable from every non-terminal status
+          · Offer→Rejected allowed (declined offer)
+          · Discarded is terminal (transitions out throw)
+          · appendTimelineEvent rejects backdated timestamps
+          · Atomic write resilience: simulate process kill mid-write —
+            pre-rename .tmp present, original intact (no partial JSON)
+          · ApplicationSchema.array() rejects array containing one bad row
+
+      Locked design (no open questions):
+        - id format: {jobId 12-hex}-{YYYYMMDD} per spec
+        - legitimacy default: 'Unknown' (Block G parsing deferred)
+        - upsertApplication idempotency: STATUS_RANK >= Evaluated → no-op
+        - Offer→Rejected: allowed for declined offers
+        - Discarded/SKIP: terminal-from-any-non-terminal per constraint #1
+
+      验收: 16/16 smoke; module exports compile; atomic write survives
+      simulated concurrent writers.
+
+  - id: "m2-applications-rest-endpoints"
+    name: "REST endpoints + applicationsMutex + Zod-validated transitions"
+    status: pending
+    estimated_files:
+      - "server.mjs"
+      - "scripts/smoke-applications-endpoints.mjs"
+    estimated_lines: 180
+    depends_on: ["m1-applications-store-module"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Wires the m1 store module into Express endpoints. NEW applicationsMutex
+      serializes in-process concurrent writes; doesn't share with
+      pipelineMutex so pipeline scans don't block applications writes.
+
+      Files:
+        - server.mjs (+~150 lines):
+          · NEW applicationsMutex (independent of pipelineMutex)
+          · GET /api/career/applications — list (?status=CSV filter optional;
+            sorted by max(timeline.ts) desc)
+          · GET /api/career/applications/:id — single, 404 missing,
+            id regex validated
+          · POST /api/career/applications/:id/status — body {status, note?}
+            Zod-parsed; acquires mutex; calls store.transitionStatus; 400
+            on illegal transition with structured error
+            {error, current_status, allowed_next}
+          · POST /api/career/applications/:id/timeline — body {event, note?}
+            for free-form events (correction, etc.); 400 on backdated ts
+
+        - scripts/smoke-applications-endpoints.mjs (~100 lines, ~10 asserts,
+          server-spawn):
+          · Pre-seed applications.json with one Evaluated row
+          · GET /applications returns the row
+          · POST /:id/status {Applied} → 200 + timeline length=2
+          · POST /:id/status {Interview} from Evaluated → 400 with
+            allowed_next=['Applied','Discarded','SKIP']
+          · POST /:bad-id/status → 400 (regex)
+          · GET /:unknown-id → 404
+          · ?status=Applied filter
+          · POST /:id/timeline {event:'correction'} appends free-form event
+          · POST with backdated ts → 400 (append-only enforced by store)
+          · Concurrent writes: 2 simultaneous POSTs to /:id/status —
+            mutex serializes; second errors clean with structured
+            current_status mismatch
+
+      Locked design:
+        - applicationsMutex is NEW, parallel to pipelineMutex
+        - Illegal transition errors include allowed_next for client UX
+        - note: z.string().max(1000) so timeline entries don't explode
+
+      验收: 10/10 smoke; full regression green.
+
+  - id: "m3-stage-b-auto-insert-and-room-complete"
+    name: "Stage B runner auto-insert hook + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "src/career/evaluator/stageBRunner.mjs"
+      - "scripts/smoke-applications-stage-b-hook.mjs"
+    estimated_lines: 140
+    depends_on: ["m2-applications-rest-endpoints"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Wires the Stage B runner to auto-upsert an Application row on every
+      successful eval. Per spec: "Evaluator Stage B 完成后自动 insert 一条
+      status=Evaluated". This makes applications.json the single source of
+      truth that 07-applier and 02-career-dashboard-views consume.
+
+      Files:
+        - src/career/evaluator/stageBRunner.mjs (modify ~50 lines):
+          · After persisting stage_b result on disk (just before returning
+            the result object), call store.upsertApplication({
+              id: `${jobId}-${YYYYMMDD-local-tz}`,
+              company, role, url,
+              score: total_score, status: 'Evaluated',
+              legitimacy: 'Unknown',
+              reportPath: `data/career/reports/${jobId}.md`,
+              pdfPath: null, resumeId: null,
+            })
+          · upsertApplication's idempotency rule preserves user-set
+            later states (status>=Evaluated rank → no-op return existing)
+          · Wrapped in try/catch — applications.json failure MUST NOT crash
+            the Stage B run (logged + stage_b result still returns
+            successfully); auxiliary write
+          · No mutex acquisition needed in the runner — store.mjs uses
+            atomic rename which serializes at FS level; in-process Node
+            single-threading prevents truly-concurrent writes from the
+            runner. The m2 endpoints add applicationsMutex for HTTP-level
+            concurrent serialization.
+
+        - scripts/smoke-applications-stage-b-hook.mjs (~30 lines, ~3
+          asserts, server-spawn):
+          · Run Stage B on a job (MOCK_ANTHROPIC); applications.json gains
+            a row {id:`{jobId}-{YYYYMMDD}`, status:'Evaluated', score
+            populated, reportPath populated, timeline has 'created' event}
+          · Re-run Stage B with force=true on same job; applications.json
+            row preserved (no status reset)
+          · Manually transition row to Applied via API; re-run Stage B;
+            row status STILL Applied (idempotency holds)
+
+      ROOM COMPLETE work:
+        - room.yaml: lifecycle planning → active
+        - _tree.yaml: 01-application-state lifecycle planning → active
+        - 08-human-gate-tracker parent progress: 0% → 25% (1/4 ROOMs ✅)
+        - 04-career-system: 78% → 81% (20/32 features)
+
+      下游 unblocked:
+        - 07-applier/01-mode1-simplify-hybrid (the Mark Submitted →
+          Applied transition + history.jsonl append both consume this)
+        - 08-human-gate-tracker/02-career-dashboard-views (consumes
+          GET /applications for Applied + Pipeline tabs)
+        - 08-human-gate-tracker/03-interview-prep (Interview transition)
+        - 08-human-gate-tracker/04-followup-cadence (followup field)
+
+      验收: 3/3 smoke; full regression; manual: trigger Stage B → see row
+      appear in applications.json; ROOM COMPLETE.
+
+current_sprint: "Sprint 11 — Application State"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "📋 Plan locked: 3 milestones, ~520 LOC + ~280 smoke. Reuses already-shipped infra (Zod schemas + atomic-rename write pattern from cv-engine output writes + pipelineMutex pattern from server.mjs). m1 ships pure-Node store module with schema + state machine + atomic CRUD + idempotent upsert. m2 adds REST endpoints + NEW applicationsMutex (independent of pipelineMutex so applications writes don't block pipeline scans). m3 wires Stage B runner to auto-insert Evaluated rows + ROOM COMPLETE. 0 open questions. 单方案路径 — pattern is clear from 04-budget-gate's schema+endpoint+integration cadence. Closes 08-human-gate-tracker/01 (1/4 children); unblocks 07-applier (Mode 1 needs the Applied transition) + 02-career-dashboard-views + 03/04 sibling Rooms in 08. NOTE: planning surfaced from a 'plan milestone 07-applier' request — 07-applier/01-mode1-simplify-hybrid hard-depends on this Room (applications.json state machine + Mark Submitted transition). After this Room ships, 07-applier/01-mode1 unblocks for its own milestone planning."
+last_updated: "2026-05-08"
