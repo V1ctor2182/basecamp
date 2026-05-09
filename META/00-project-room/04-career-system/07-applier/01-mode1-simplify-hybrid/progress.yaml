@@ -1,5 +1,379 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-drafts-store-module"
+    name: "drafts/{jobId}.json schema + atomic store module"
+    status: pending
+    estimated_files:
+      - "src/career/applier/draftsStore.mjs"
+      - "scripts/smoke-drafts-store.mjs"
+    estimated_lines: 150
+    depends_on: []
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Pure-Node ESM module — no HTTP, no UI, no LLM. Provides the canonical
+      drafts/{jobId}.json shape + atomic CRUD. Mirrors applications/store.mjs
+      (08-human-gate-tracker/01-application-state) with a much simpler schema
+      since drafts are throwaway (regenerated on demand; no state machine).
+
+      Files:
+        - src/career/applier/draftsStore.mjs (~150 lines):
+          · Constants:
+            - DRAFTS_DIR = data/career/drafts
+            - JOB_ID_RE = /^[a-f0-9]{12}$/  (matches existing project regex;
+              unlike applications, drafts are 1:1 with jobId — no date suffix
+              since latest draft replaces)
+            - FIELD_CLASSES = ['hard', 'legal', 'open', 'file']
+            - CONFIDENCE_TIERS = ['high', 'medium', 'low']
+          · Zod schemas:
+            - DraftFieldSchema: { label: str.min(1).max(200),
+              class: enum(FIELD_CLASSES), suggested_value: str.max(4000),
+              confidence: enum(CONFIDENCE_TIERS),
+              source_ref: str.max(200).optional() }.strict()
+            - DraftSchema: { jobId: str.regex(JOB_ID_RE),
+              fields: array(DraftFieldSchema).min(1).max(50),
+              generated_at: ISO datetime,
+              model: str, cost_usd: number().nonnegative() }.strict()
+          · readDraft(jobId) — { ENOENT → null, parse-error → throw,
+            schema-validate before return }
+          · writeDraft(jobId, draft) — atomic .tmp + fs.rename;
+            DraftSchema.parse before write
+          · deleteDraft(jobId) — fs.unlink, swallow ENOENT
+          · listDraftJobIds() — fs.readdir DRAFTS_DIR, regex-filter
+
+        - scripts/smoke-drafts-store.mjs (~80 lines, ~10 asserts):
+          · DraftSchema accepts a valid draft; rejects bad regex jobId
+          · DraftFieldSchema rejects unknown class / unknown confidence /
+            empty label / oversized suggested_value
+          · empty fields array → reject (DraftSchema.fields.min(1))
+          · readDraft returns null on ENOENT (not throw)
+          · writeDraft round-trips through readDraft
+          · writeDraft + readDraft validates via Zod (corrupt JSON → throw)
+          · atomic write: schema-violation .tmp orphan cleanup verified
+          · listDraftJobIds returns only valid 12-hex ids (filters out
+            old/orphan files)
+          · deleteDraft removes the file; subsequent readDraft → null
+
+      Locked design (no open questions):
+        - jobId is 12-hex (no YYYYMMDD suffix — drafts are throwaway,
+          replaced wholesale on regen, unlike applications.json's
+          per-day audit trail)
+        - 4 classes hardcoded (matches Mode 1 spec): hard / legal / open / file
+        - 3-tier confidence (matches Block G legitimacy convention; easier
+          UI rendering than [0,1] floats)
+        - Latest draft replaces wholesale (no merge); user re-pulls anytime
+        - drafts/{jobId}.json is gitignored (sensitive — contains user's
+          actual answers)
+
+      验收: 10/10 smoke; module exports compile.
+
+  - id: "m2-draft-prompt-and-runner"
+    name: "Draft generation prompt + LLM pipeline (single Sonnet call)"
+    status: pending
+    estimated_files:
+      - "src/career/applier/draftPrompt.mjs"
+      - "src/career/applier/draftRunner.mjs"
+      - "scripts/smoke-draft-prompt.mjs"
+    estimated_lines: 280
+    depends_on: ["m1-drafts-store-module"]
+    complexity_flags: ["prompt_engineering", "design_decisions"]
+    open_questions: []
+    description: |
+      Single Sonnet call (NOT a 2-call extract-then-fill pipeline) that
+      consumes the JD + Stage B Block A/E + qa-bank inputs and emits the
+      structured field list per m1 schema.
+
+      Files:
+        - src/career/applier/draftPrompt.mjs (~180 lines):
+          · APPLIER_MODEL = 'claude-sonnet-4-6'
+          · CANONICAL_QUESTIONS frozen array of 8-10 standard ATS
+            open-ended questions: 'Why us?' / 'Why this role?' / 'Tell me
+            about a time…' / 'Expected salary' / 'Why leaving' / 'Notice
+            period' / 'Citizenship/work auth' / 'EEO self-id' / 'Cover letter'
+          · DRAFT_INSTRUCTIONS_HEAD describing the 4-class taxonomy + JSON
+            output contract:
+              hard  — factual fields (name, email, school, dates) — pull
+                       from identity.yml; high confidence
+              legal — visa, EEO, comp expectations — verbatim from
+                       qa-bank/legal.yml; high confidence; source_ref
+                       points to legal.yml key path
+              open  — Why us / Why role / Tell me about — LLM-drafted using
+                       Block E + templates.md + history.jsonl few-shot;
+                       confidence based on Block E specificity
+              file  — resume PDF — points to output/{jobId}-{resumeId}.pdf;
+                       always 'high' confidence
+          · buildSystemBlock({reportText, legalYml, templatesText,
+              identityYml, qaFewShot}) — single text block w/
+              cache_control:ephemeral (matches Stage B m1 pattern); trims
+              cv-style sections to 4000 chars + qa-bank cap to 5 entries
+          · buildUserMessage({job}) — JD body trimmed to 12000; includes
+            comp_hint if available
+          · buildDraftPrompt(job, bundle) returns {model, max_tokens:4096,
+            system, messages}
+          · parseDraftResponse(content) — concat text blocks, extract first
+            JSON object via brace-balanced regex (tolerant of markdown
+            ```json wrap), Zod-validate against DraftFieldSchema array
+          · ParseError class for non-recoverable parse failures
+
+        - src/career/applier/draftRunner.mjs (~100 lines):
+          · NEVER throws — every failure mode lands as { jobId, status:'error',
+            error: '...' }; success returns { jobId, fields, model, cost_usd,
+            generated_at, status:'drafted' }
+          · generateDraft(job, bundle, opts) orchestrates:
+            - buildDraftPrompt → client.messages.create → callWithRetry
+              (2 retries on 429/5xx; same predicate as Stage A/B runners)
+            - parseDraftResponse
+            - computeCostUsd (existing helper)
+            - recordCost via existing appendCostRecord (caller='applier:draft')
+            - opts._client / opts._recordCost injectable for smokes
+          · Idempotent: caller decides whether to skip if drafts/{jobId}.json
+            exists; runner just generates fresh
+
+        - scripts/smoke-draft-prompt.mjs (~140 lines, ~12 asserts):
+          · Module exports the documented public API
+          · buildSystemBlock: ONE text block with cache_control:ephemeral
+          · buildSystemBlock: trims CV/templates to 4000 chars; qa-bank
+            cap=5 entries
+          · buildUserMessage: JD trimmed to 12000 chars
+          · buildDraftPrompt: model + max_tokens + system + messages shape
+          · parseDraftResponse: tolerates ```json markdown wrapping
+          · parseDraftResponse: returns array of DraftFieldSchema-valid items
+          · parseDraftResponse: throws ParseError on empty content
+          · parseDraftResponse: throws ParseError on non-JSON garbage
+          · generateDraft: success path with mock client returning a 5-field
+            JSON response → status='drafted', fields populated, cost_usd > 0
+          · generateDraft: degenerate response → status='error', error msg
+            includes 'parse:'
+          · generateDraft: API error → status='error', error msg includes
+            'api:'
+
+      Locked design (no open questions):
+        - SINGLE Sonnet call (locked from plan — Block E already does the
+          hard personalization work; adding a Q-extract pass would double
+          cost without adding info)
+        - 4-class taxonomy hardcoded in instructions (no caller config)
+        - Output is JSON inside a single text content block — Sonnet
+          formats reliably with explicit schema in instructions
+        - Response parser is regex-tolerant to ```json wrap (Sonnet
+          sometimes adds it despite explicit "no markdown" instruction)
+        - cost recorded as caller='applier:draft' (separate budget line
+          from evaluator:stage-b for clarity in 04-budget-gate dashboard)
+
+      验收: 12/12 smoke; mock-client end-to-end produces a valid Draft.
+
+  - id: "m3-apply-draft-endpoint"
+    name: "POST /api/career/apply/draft endpoint + cost recording"
+    status: pending
+    estimated_files:
+      - "server.mjs"
+      - "scripts/smoke-apply-draft-endpoint.mjs"
+    estimated_lines: 180
+    depends_on: ["m2-draft-prompt-and-runner"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Wires m2 runner into Express. POST endpoint takes a jobId, gathers
+      all inputs (JD + Block A/E + qa-bank + identity), runs the draft
+      pipeline, persists via m1 store, returns the draft fields.
+
+      Files:
+        - server.mjs (+~150 lines):
+          · POST /api/career/apply/draft
+            - Body: { jobId: 12-hex, force?: boolean } via Zod
+            - 400 on bad body / bad jobId
+            - 404 if pipeline.json missing the job OR Stage B report
+              not yet generated (directs user to /pipeline to run Stage B)
+            - 402 budget gate if checkBudgetGate.paused (consumes existing
+              04-budget-gate flow; force=true bypasses, same convention as
+              Stage B)
+            - Reads: pipeline.json job, reports/{jobId}.md, qa-bank/legal.yml,
+              qa-bank/templates.md, qa-bank/history.jsonl (last 5 entries),
+              identity.yml — bundle into draftRunner input
+            - Calls draftRunner.generateDraft
+            - On status='error': returns 502 with error message
+            - On status='drafted': writes via draftsStore.writeDraft +
+              returns { jobId, fields, generated_at, model, cost_usd }
+          · GET /api/career/apply/draft/:jobId (supplementary):
+            - Reads existing draft via draftsStore.readDraft
+            - 404 if no draft persisted
+            - Returns the stored draft as-is
+
+        - scripts/smoke-apply-draft-endpoint.mjs (~80 lines, ~8 asserts,
+          server-spawn pattern, port 4593):
+          · POST /draft with valid jobId + pre-seeded report → 200 with
+            fields + generated_at + cost_usd > 0
+          · POST /draft with bad jobId regex → 400
+          · POST /draft when Stage B report missing → 404 with hint
+          · POST /draft when pipeline.json missing the job → 404
+          · POST /draft when budget paused + no force → 402
+          · POST /draft when budget paused + force=true → 200 (cost still
+            records)
+          · GET /draft/:jobId after POST → returns the same draft
+          · GET /draft/:unknownJobId → 404
+
+      Locked design:
+        - 402 budget gate parallels Stage B + Tailor (force=true override
+          available; cost still records)
+        - 404 (not 400) when Stage B not yet run — actionable error
+          (UI can show "Run Stage B first" link)
+        - draft persists on every successful generation (no re-eval
+          idempotency — caller decides via force / GET-then-POST flow)
+
+      验收: 8/8 smoke; full regression green.
+
+  - id: "m4-apply-submitted-endpoint"
+    name: "POST /api/career/apply/submitted + history.jsonl append + Applied transition"
+    status: pending
+    estimated_files:
+      - "server.mjs"
+      - "scripts/smoke-apply-submitted-endpoint.mjs"
+    estimated_lines: 120
+    depends_on: ["m3-apply-draft-endpoint"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      The Mark Submitted button's backend. Atomically transitions the
+      application row to Applied AND appends submitted answers to
+      qa-bank/history.jsonl (the Applier feedback flywheel data source).
+
+      Files:
+        - server.mjs (+~100 lines):
+          · POST /api/career/apply/submitted
+            - Body: { jobId: 12-hex, fields: [{label, final_answer, class}],
+              note?: string } via Zod
+            - 400 on bad body
+            - 404 if applications.json has no Evaluated row for jobId
+              (id derived from jobId-{today's-YYYYMMDD}; falls back to any
+              row with this jobId prefix if same-day not found)
+            - Acquires applicationsMutex (existing m2-08 pattern)
+            - Calls store.transitionStatus(applicationId, 'Applied',
+              note ?? 'Marked submitted via Mode 1')
+              - 400 with current_status + allowed_next on illegal
+                transition (e.g. already Applied → Applied)
+            - Appends submitted fields to qa-bank/history.jsonl: one line
+              per field, schema {ts, jobId, label, final_answer, class}
+              - Each final_answer trimmed to 2KB (PIPE_BUF safety for
+                atomic appendFile)
+              - 'hard' / 'legal' / 'file' class entries are also appended
+                so the few-shot has a complete picture of what was submitted
+            - Returns { application: <updated row>, history_lines_added: N }
+
+        - scripts/smoke-apply-submitted-endpoint.mjs (~80 lines, ~6 asserts,
+          server-spawn pattern, port 4594):
+          · Pre-seed: applications.json with one Evaluated row +
+            drafts/{jobId}.json + initial empty history.jsonl
+          · POST /submitted with 5 fields → 200, application.status =
+            Applied, history_lines_added = 5
+          · history.jsonl now has 5 new lines, each with proper schema
+          · POST /submitted again on same id (now Applied → Applied) →
+            400 with allowed_next=['Responded','Discarded','SKIP']
+          · POST /submitted with bad jobId regex → 400
+          · POST /submitted with no application row → 404
+          · POST /submitted with empty fields[] → 400 (Zod min(1))
+
+      Locked design:
+        - history.jsonl append uses fs.appendFile (POSIX-atomic for sub-
+          PIPE_BUF writes; we trim each line to 2KB)
+        - All 4 classes appended (not just 'open') — feedback flywheel
+          benefits from the full picture
+        - id resolution: tries `${jobId}-${today}` first, falls back to
+          any row with matching jobId prefix (handles cross-day re-eval
+          consumer-contract from 08/01 m3)
+
+      验收: 6/6 smoke; manual: drafts/{jobId}.json exists +
+      applications.json transitions to Applied + history.jsonl gains
+      lines.
+
+  - id: "m5-apply-ui-and-room-complete"
+    name: "Apply.tsx UI page + Shortlist Apply link + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "src/career/Apply.tsx"
+      - "src/career/apply.css"
+      - "src/career/Shortlist.tsx"
+      - "src/CareerApp.tsx"
+      - "scripts/smoke-apply-ui.mjs"
+    estimated_lines: 280
+    depends_on: ["m4-apply-submitted-endpoint"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      The user-facing Mode 1 flow: click Apply on Shortlist → land on
+      /career/apply/:jobId → see field cards by class → copy answers
+      to browser → Mark Submitted with confirm modal → state transitions.
+
+      Files:
+        - src/career/Apply.tsx (~220 lines):
+          · Route: /career/apply/:jobId
+          · On mount: GET /api/career/apply/draft/:jobId — if 404, auto-
+            POST /api/career/apply/draft to generate one
+          · Top bar: back link to /career/shortlist + jobId + role +
+            company (loaded via shortlist projection)
+          · "Generate fresh draft" button (POST /draft with force=true)
+            — useful when JD changed or user wants to retry
+          · Field cards grouped by class (hard / legal / open / file):
+            - hard: read-only label + value + [Copy] button
+            - legal: read-only label + value + [Copy] (sourced from
+              legal.yml — source_ref shown as gray hint)
+            - open: editable textarea pre-filled with suggested_value +
+              [Copy] (copies the EDITED value, not the suggestion)
+            - file: shows output/{jobId}-{resumeId}.pdf path + [Open file]
+              link (target=_blank to /api/career/cv/tailor/output/...)
+          · Confidence pill on each card (high=green / medium=amber /
+            low=red)
+          · "Mark submitted" button at bottom:
+            - native confirm() with prompt: "Did you click Submit in the
+              browser? This will mark the application as Applied and
+              cannot be undone via Mode 1."
+            - On confirm: POST /apply/submitted with edited field values
+              → success toast → navigate to /career/applied or stay
+            - On 400 illegal-transition: show banner with current_status
+          · Loading + error states (matches sl-error / rp-loading
+            patterns from earlier Rooms)
+
+        - src/career/apply.css (~80 lines):
+          · ap- prefix scopes
+          · Field card grid (3-col responsive)
+          · Confidence pill variants (green/amber/red)
+          · [Copy] button feedback (✓ pulse on click)
+          · "Mark submitted" button: large red CTA at bottom
+
+        - src/career/Shortlist.tsx (modify ~10 lines):
+          · Per-row action: NEW [Apply] button next to [Open job posting]
+          · Click → navigate to /career/apply/{jobId}
+          · Only render when stage_b status = evaluated (else disabled
+            with title "Run Stage B first")
+
+        - src/CareerApp.tsx (modify ~5 lines):
+          · Add <Route path="apply/:jobId" element={<Apply />} />
+
+        - scripts/smoke-apply-ui.mjs (~30 lines, ~3 asserts):
+          · vite build clean (no TS errors with the new UI files)
+          · GET /api/career/apply/draft/:jobId returns the persisted draft
+            shape that Apply.tsx consumes
+          · POST /api/career/apply/submitted body shape matches what
+            Apply.tsx sends (label/final_answer/class for each edited
+            field)
+
+      ROOM COMPLETE work:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml synced
+        - 07-applier parent progress: 0% → 14% (1/7 ROOMs ✅)
+        - 04-career-system: 81% → 84%
+
+      下游 unblocked:
+        - 02-playwright-runtime / 03-field-classifier / 04-multi-step /
+          05-non-standard / 06-site-adapters / 07-feedback-flywheel — the
+          rest of 07-applier (Mode 2 full-agent automation). User flagged
+          for plan-ceo-review ROI evaluation before starting Mode 2.
+        - 08-human-gate-tracker/02-career-dashboard-views consumes
+          drafts/{jobId}.json + history.jsonl for Applied-tab insights
+
+      验收: 3/3 smoke + manual UI test (click Apply on Shortlist → see
+      cards by class → edit open-ended → Mark Submitted with confirm →
+      see status transition to Applied + history.jsonl gains lines).
+      ROOM COMPLETE.
+
+current_sprint: "Sprint 12 — Mode 1 Simplify Hybrid"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "📋 Plan locked: 5 milestones, ~1010 LOC + ~410 smoke. Reuses heavy already-shipped infra (08/01 applications store + transitionStatus, qa-bank legal.yml/templates.md/history.jsonl, reports/{jobId}.md from 02-stage-b-sonnet, Tailor PDF outputs from 03-cv-engine, Anthropic prompt-cache pattern, 04-budget-gate's force flag). m1 ships drafts.json store (mirrors applications/store pattern). m2 ships single-Sonnet draft pipeline + runner (NOT 2-call extract-then-fill — Block E already does the personalization work). m3+m4 ship the 2 endpoints (draft generation + submitted transition + history.jsonl flywheel append). m5 ships Apply.tsx UI page + Shortlist Apply link + ROOM COMPLETE. 0 open questions — single Sonnet call, 4-class taxonomy, 3-tier confidence, latest draft replaces, history.jsonl all-classes append, native confirm() Mark Submitted (constraint #4) all locked from spec + existing patterns. Closes 07-applier/01-mode1 (1/7 children). Other 6 children (Mode 2 Playwright agent) flagged in spec for plan-ceo-review ROI evaluation."
+last_updated: "2026-05-08"

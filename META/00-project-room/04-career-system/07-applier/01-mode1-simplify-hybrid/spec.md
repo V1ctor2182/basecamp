@@ -23,6 +23,42 @@ Mode 1 Simplify Hybrid：生成开放题 draft + 复制粘贴流程 + Mark submi
 - [intent-mode1-simplify-hybrid-001](specs/intent-mode1-simplify-hybrid-001.yaml) — Mode 1 Simplify Hybrid：生成开放题 draft + 复制粘贴流程 + Mark submitted
 - [constraint-mode1-simplify-hybrid-001](specs/constraint-mode1-simplify-hybrid-001.yaml) — 永远不自动点 Submit；状态只在用户明确 Mark submitted 后才改 Applied
 
+## 当前进度 — m0/5 (planned 2026-05-08, 0%)
+
+5 milestones, ~1010 LOC + ~410 smoke. **复用 heavy already-shipped infra**: 08/01 applications.json store + transitionStatus, qa-bank legal.yml/templates.md/history.jsonl, reports/{jobId}.md (02-stage-b-sonnet) Block A/E, Tailor PDF outputs (03-cv-engine/05), Anthropic prompt-cache pattern, 04-budget-gate's force flag. **0 open questions**. Closes 1/7 children of 07-applier; the other 6 (Mode 2 Playwright agent) flagged for plan-ceo-review ROI evaluation per parent intent.
+
+- ⏳ **m1-drafts-store-module** (~150 + smoke ~80) — Pure-Node ESM store at `src/career/applier/draftsStore.mjs`. Zod DraftSchema (jobId 12-hex, fields[{label, class, suggested_value, confidence, source_ref?}], generated_at, model, cost_usd) + 4-class enum + 3-tier confidence + atomic CRUD via .tmp+rename (precedent: applications/store.mjs).
+- ⏳ **m2-draft-prompt-and-runner** (~280 + smoke ~140) — Single Sonnet call (NOT 2-pass extract-then-fill). draftPrompt.mjs builds cached system block from Block E + templates.md + legal.yml + identity.yml + qa-bank/history.jsonl few-shot; user message has JD + canonical 8-10 questions + 4-class taxonomy. draftRunner.mjs orchestrates with retry + cost recording. Parser tolerant of ```json wrap.
+- ⏳ **m3-apply-draft-endpoint** (~180 + smoke ~80) — `POST /api/career/apply/draft` (Zod body, 402 budget gate with force=true override, 404 if Stage B report missing) + supplementary `GET /:jobId` for UI initial load. 8 server-spawn asserts.
+- ⏳ **m4-apply-submitted-endpoint** (~120 + smoke ~80) — `POST /api/career/apply/submitted` calls `applications/store.transitionStatus(id, 'Applied')` AND appends each submitted field to `qa-bank/history.jsonl` (Applier feedback flywheel ② data source). All 4 classes appended, 2KB cap per line for POSIX-atomic appendFile.
+- ⏳ **m5-apply-ui-and-room-complete** (~280 + smoke ~30) — `Apply.tsx` route page with field cards grouped by class (hard/legal read-only + Copy; open editable textarea + Copy; file PDF link) + confidence pill (green/amber/red) + Mark Submitted button with native confirm() (constraint #4). Shortlist Apply button wired. + ROOM COMPLETE rollups: room.yaml planning→active, _tree.yaml synced, 07-applier 0%→14% (1/7), 04-career-system 81%→84%.
+
+### Locked design (single recommended path)
+
+| Decision | Choice |
+|----------|--------|
+| LLM call shape | SINGLE Sonnet call (Block E already does personalization; 2-pass would double cost without info gain) |
+| Field taxonomy | 4 classes: hard / legal / open / file (per spec) |
+| Confidence | 3-tier (high / medium / low — matches Block G legitimacy convention) |
+| Draft regeneration | Latest draft replaces wholesale (no merge); user re-pulls anytime |
+| history.jsonl append | All 4 classes (full picture for flywheel); each line ≤2KB; appendFile |
+| Mark Submitted | Native confirm() (constraint #4) — UI doesn't auto-Submit |
+| Budget gate | 402 + force=true override (parallel to Stage B + Tailor) |
+| Cost recording | caller='applier:draft' (separate budget line for clarity) |
+| ID resolution at submit | `${jobId}-${today}` first, fallback to any matching jobId prefix (handles cross-day re-eval consumer contract from 08/01 m3) |
+
+### Deferred (out of scope this Room)
+
+- Auto-Submit in browser (Mode 2 Playwright — separate feature flagged for plan-ceo-review)
+- Field history learning (e.g. preferring user's last edit over template) — Applier flywheel ② Phase 2
+- PDF version selector (m3 hardcodes the Tailor-engine output path; multi-resume per-job is future work in 07-applier siblings)
+- Cover letter generation as a separate document (current scope: cover letter is one of the canonical questions, output as text, user copies into the ATS field)
+
+### 下游 contracts
+
+- `02-career-dashboard-views` (08-human-gate-tracker) consumes `drafts/{jobId}.json` + `history.jsonl` for Applied-tab insights
+- `07-applier/02-playwright-runtime` (Mode 2) — flagged for plan-ceo-review ROI evaluation before starting; not in this Room's scope
+
 ---
 
-_Generated 2026-04-22 by room-init._
+_Generated 2026-04-22 by room-init. Plan refined 2026-05-08 by plan-milestones._
