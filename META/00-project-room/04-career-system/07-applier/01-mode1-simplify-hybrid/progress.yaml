@@ -374,7 +374,7 @@ milestones:
       ROOM COMPLETE.
 
 commits:
-  - hash: "PENDING"
+  - hash: "0ca48c3"
     date: "2026-05-09"
     message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m1: drafts.json store module + Zod schema + atomic CRUD (smoke 12/12)"
     files_changed: 2
