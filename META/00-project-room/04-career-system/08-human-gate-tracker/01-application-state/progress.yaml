@@ -201,9 +201,9 @@ milestones:
       appear in applications.json; ROOM COMPLETE.
 
 commits:
-  - hash: "PENDING"
+  - hash: "f3db81e"
     date: "2026-05-08"
-    message: "[04-career-system/08-human-gate-tracker/01-application-state] m1: store module + Zod schema + state machine + atomic CRUD (smoke 20/20)"
+    message: "[04-career-system/08-human-gate-tracker/01-application-state] m1: applications store module + Zod schema + state machine + atomic CRUD (smoke 20/20)"
     files_changed: 2
     specs_affected:
       - "intent-application-state-001 (anchors added: store.mjs ApplicationSchema + VALID_TRANSITIONS + STATUS_RANK + atomic CRUD + upsert/transitionStatus/appendTimelineEvent helpers; smoke-applications-store.mjs)"
