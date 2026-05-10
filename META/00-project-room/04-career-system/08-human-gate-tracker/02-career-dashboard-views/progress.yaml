@@ -179,7 +179,7 @@ commits:
   - hash: "5570418"
     date: "2026-05-10"
     message: "[04-career-system/08-human-gate-tracker/02-career-dashboard-views] m1: Applied.tsx full rewrite — filter chips + per-row timeline + followup + Advance Status (smoke 5/5)"
-  - hash: "PENDING"
+  - hash: "2998db8"
     date: "2026-05-10"
     message: "[04-career-system/08-human-gate-tracker/02-career-dashboard-views] m2: Overview.tsx full rewrite + Nivo charts + ROOM COMPLETE (smoke 4/4)"
     files_changed: 3
