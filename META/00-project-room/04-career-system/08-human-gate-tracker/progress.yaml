@@ -1,11 +1,11 @@
 milestones: []
-current_sprint: "Sprint 11 — Application State"
+current_sprint: "Sprint 13 — Career Dashboard Views"
 blockers: []
-completion: 25  # avg(100, 0, 0, 0) = 25 across 4 features (1 ROOM ✅)
+completion: 50  # avg(100, 100, 0, 0) = 50 across 4 features (2 ROOMs ✅)
 children_completion:
   "01-application-state": 100  # 🎉 ROOM COMPLETE (3/3 milestones; canonical applications.json + state machine + Stage B auto-insert hook)
-  "02-career-dashboard-views": 0
+  "02-career-dashboard-views": 100  # 🎉 ROOM COMPLETE (2/2 milestones; Applied.tsx + Overview.tsx full rewrites — filter chips + timeline stepper + Advance Status + Nivo pie/bar/line + followup highlights + 30s polling)
   "03-interview-prep": 0
   "04-followup-cadence": 0
-status_note: "🟢 08-human-gate-tracker 25% (1/4 ROOMs ✅). 01-application-state just shipped — pure-Node store with Zod schema + frozen state machine + atomic CRUD + idempotent upsert (m1) + 4 REST endpoints + applicationsMutex (m2) + Stage B runner auto-insert hook (m3). applications.json is now the canonical single source of truth for career-system applications. 下游 unblocked: 07-applier/01-mode1-simplify-hybrid (Mark Submitted → Applied transition + history.jsonl append) + 02-career-dashboard-views (consumes GET /applications) + 03/04 sibling Rooms (transition state + followup field)."
-last_updated: "2026-05-08"
+status_note: "🟢 08-human-gate-tracker 50% (2/4 ROOMs ✅). 02-career-dashboard-views just shipped — Applied.tsx (m1, ~365 LOC, 30s polling + 7-chip filter strip + per-row timeline stepper + Advance Status with VALID_TRANSITIONS legal-next-only + Quick Discard from any non-terminal + 3-tier followup highlights + ScoreBadge ↔ status pill ↔ 12-hex id triple). Overview.tsx (m2, ~400 LOC, 3-parallel-fetch aggregator over /applications + /shortlist + /llm-costs + /llm-costs?groupBy=day&start=14daysAgo; 4 stat cards Total/This-week/Active/Today's-spend with appliedTabCount fix for quick-link consistency; first Nivo charts in project — pie/bar/line with semantic color tiers; 14-day cost trend with monotoneX area; followup list ≤3d yellow/past-due red/>3d gray). 下游 unblocked: 03-interview-prep (Interview state transition + STAR story prep flow) + 04-followup-cadence (followup.nextAt setter UI + reminder cron job — this Room only DISPLAYS followup, doesn't SET it)."
+last_updated: "2026-05-10"

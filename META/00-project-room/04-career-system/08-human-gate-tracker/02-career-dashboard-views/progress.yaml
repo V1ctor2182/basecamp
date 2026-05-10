@@ -87,7 +87,7 @@ milestones:
 
   - id: "m2-overview-page-and-room-complete"
     name: "Overview.tsx full rewrite — stat cards + status pie + activity bar + followup list + cost trend + ROOM COMPLETE"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/Overview.tsx"
       - "src/career/overview.css"
@@ -179,6 +179,14 @@ commits:
   - hash: "5570418"
     date: "2026-05-10"
     message: "[04-career-system/08-human-gate-tracker/02-career-dashboard-views] m1: Applied.tsx full rewrite — filter chips + per-row timeline + followup + Advance Status (smoke 5/5)"
+  - hash: "PENDING"
+    date: "2026-05-10"
+    message: "[04-career-system/08-human-gate-tracker/02-career-dashboard-views] m2: Overview.tsx full rewrite + Nivo charts + ROOM COMPLETE (smoke 4/4)"
+    files_changed: 3
+    specs_affected:
+      - "intent-career-dashboard-views-001 (anchors added: Overview.tsx full rewrite from 9-line stub, overview.css ov- prefix, smoke-overview-page.mjs)"
+    milestones_affected:
+      - "m2-overview-page-and-room-complete (→ completed) — ROOM COMPLETE"
     files_changed: 3
     specs_affected:
       - "intent-career-dashboard-views-001 (anchors added: Applied.tsx full rewrite from 9-line stub, applied.css ad- prefix, smoke-applied-page.mjs consumer contract)"
@@ -187,5 +195,5 @@ commits:
 
 current_sprint: "Sprint 13 — Career Dashboard Views"
 blockers: []
-status_note: "🟢 m1 complete (1/2, 50%). Applied.tsx full rewrite from 9-line stub (~365 lines). 30s polling of GET /api/career/applications. 7-chip filter strip (All excludes Evaluated since those live on Shortlist; Applied/Responded/Interview/Offer/Rejected/Discarded with client-side counts via useMemo). Per-row card: ScoreBadge (strong/worth/consider/na tiers, mirrors sl-score) + role + company + 12-hex id snippet + status pill (color-coded per status: applied=amber, responded=blue, interview=purple, offer=green, rejected=red, discarded=gray, skip=gray-italic). Horizontal timeline stepper renders each timeline[] event as a colored dot with hover tooltip (formatRelative + event type + from/to + note). Followup highlight: ≤3d=yellow border, past-due=red, >3d=muted gray. Quick actions: [Report] navigate to /career/reports/{jobId-prefix via row.id.split('-')[0]}, [Job] external link, [Advance status] select dropdown showing only VALID_TRANSITIONS[currentStatus] legal options + native confirm() with prompt naming source+target statuses + POST /:id/status + on 400 with allowed_next surfaces inline as banner + refresh after success. VALID_TRANSITIONS hardcoded client-side (mirror of store.mjs export; .mjs uses Zod/fs which Vite would try to bundle into browser). NEW applied.css (~260 lines, ad- prefix, zero global collisions verified). Plan-agent review: 0 CRITICAL + 0 HIGH + 0 MEDIUM + 5 minor observations (all low/acceptable per locked design — Status type drift mirrors VALID_TRANSITIONS drift rationale; formatRelative negative-flip on future ts; ARIA empty-list role minor inconsistency; manual-refresh-doesn't-clear-stale-banner; row.id.includes('-') always-true guard is defensive). 0 fixes required — reviewer explicitly says ship-ready. Codex CLI quota-blocked. 5/5 m1 smoke + 48/48 full regression + vite build clean. 02-career-dashboard-views 0% → 50%. 下一个: m2 (Overview.tsx full rewrite + ROOM COMPLETE)."
+status_note: "🎉 ROOM COMPLETE (2/2, 100%). m2 ships Overview.tsx full rewrite from 9-line stub (~400 lines). 3-parallel-fetch aggregator over already-shipped /applications + /shortlist + /llm-costs + /llm-costs?groupBy=day&start=14daysAgo. First Nivo charts in the project: @nivo/pie (status distribution, 8 STATUS_ORDER values filtered to >0 counts, semantic color tiers green/amber/red/gray mirroring Applied.tsx STATUS_COLORS map), @nivo/bar (7-day activity stacked by event type created/status_changed/other, oldest-left M/D labels), @nivo/line (14-day cost trend, monotoneX curve, area fill 8% opacity, $-formatted axisLeft, tickValues every 2 days at -45°). 4 stat cards (4-col grid responsive → 2-col mobile): Total applications, Stage B this week (timeline[0].ts within 7d), Active in funnel (Evaluated/Applied/Responded/Interview), Today's spend (tinted red if >$5 per locked design). Followup list (next 7 days, max 10, sorted asc, 3 tones: past-due red / ≤3d yellow / >3d gray). Quick links Pipeline / Shortlist (N) / Applied (M). 30s polling + AbortController cleanup + manual refresh button. Partial-failure resilience: /applications has no .catch (rejection surfaces as full error), /shortlist + /llm-costs .catch to null/{}. NEW overview.css (~200 lines, ov- prefix, zero global collisions, 4-col→2-col responsive grid for stats, 2-col→1-col responsive for chart cards, 240px chart container heights). Plan-agent review: 0 CRITICAL + 0 HIGH + 1 P1 (Active count in Applied quick-link mismatched Applied tab semantics since Applied page excludes Evaluated — fixed via new appliedTabCount stat that filters Evaluated out) + 1 P2 deferrable (hardcoded $5 today-spend threshold doesn't read prefs.daily_budget_usd — locked design says >$5 verbatim, defer to followup). All probe verifications PASS. Codex CLI quota-blocked. 4/4 m2 smoke + 49/49 full regression + vite build clean. 02-career-dashboard-views 50% → 100%. 08-human-gate-tracker 25% → 50% (2/4 ROOMs ✅). 04-career-system 84% → 87%. room.yaml lifecycle planning → active. _tree.yaml synced. 下游 unblocked: 03-interview-prep + 04-followup-cadence sibling Rooms in 08 (Interview state transition + STAR story prep / followup.nextAt setter UI + reminder cron)."
 last_updated: "2026-05-10"

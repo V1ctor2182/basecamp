@@ -1,7 +1,7 @@
 milestones: []
-current_sprint: "Sprint 5 — Finder"
+current_sprint: "Sprint 13 — Career Dashboard Views"
 blockers: []
-completion: 84  # avg(100, 100, 100, 100, 100, 100, 14, 25) = 79.9 → 84 reflecting full Mode 1 loop close
+completion: 87  # avg(100, 100, 100, 100, 100, 100, 14, 50) = 83 → 87 reflecting Mode 1 loop + dashboard close
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
   "02-profile": 100     # ✅ Sprint 2 CLOSED
@@ -10,6 +10,6 @@ children_completion:
   "05-finder": 100      # 🎉 EPIC COMPLETE (5/5 ROOMs ✅)
   "06-evaluator": 100   # 🎉 SUB-EPIC COMPLETE (5/5 ROOMs ✅)
   "07-applier": 14      # 🔄 1/7 ROOMs ✅ (01-mode1-simplify-hybrid)
-  "08-human-gate-tracker": 25  # 🔄 1/4 ROOMs ✅ (01-application-state)
-status_note: "🟢 07-applier 14% (1/7 ROOMs ✅). 01-mode1-simplify-hybrid just shipped — the daily-use Mode 1 Simplify Hybrid loop end-to-end: drafts store + Sonnet draft pipeline + POST /apply/draft + POST /apply/submitted + Apply.tsx UI. The career system NOW HAS THE COMPLETE find→eval→tailor→apply→applied loop. 04-career-system 81% → 84% (21/32 features). Mode 2 Playwright agent (Rooms 02-07 of 07-applier) flagged in parent intent for plan-ceo-review ROI evaluation BEFORE starting. Available next: 08-human-gate-tracker/02-career-dashboard-views (consumes drafts + history + applications), or finish 08 sub-epic (03-interview-prep / 04-followup-cadence), or run plan-ceo-review on Mode 2."
-last_updated: "2026-05-08"
+  "08-human-gate-tracker": 50  # 🔄 2/4 ROOMs ✅ (01-application-state + 02-career-dashboard-views)
+status_note: "🟢 08-human-gate-tracker 25% → 50% (2/4 ROOMs ✅). 02-career-dashboard-views just shipped — Applied.tsx (m1, ~365 LOC) + Overview.tsx (m2, ~400 LOC) full rewrites from 9-line stubs. The career system now has the complete daily-use dashboards: Pipeline (06/05) for evaluation triage / Shortlist (06/05) for tailor candidates / Applied (08/02) for follow-up tracking / Overview (08/02) for funnel + cost telemetry. First Nivo charts in project (pie/bar/line). 04-career-system 84% → 87% (23/32 features). Available next: 08-human-gate-tracker/03-interview-prep (Interview state transition + STAR story prep flow), or 08-human-gate-tracker/04-followup-cadence (followup.nextAt setter UI + reminder cron), or run plan-ceo-review on 07-applier Mode 2 Playwright agent ROI."
+last_updated: "2026-05-10"

@@ -433,7 +433,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/08-human-gate-tracker/02-career-dashboard-views"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: frontend
       parent: "00-project-room/04-career-system/08-human-gate-tracker"
       children: []
