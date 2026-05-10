@@ -386,7 +386,7 @@ commits:
   - hash: "fce1a85"
     date: "2026-05-09"
     message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m4: POST /apply/submitted + history.jsonl flywheel append (smoke 7/7)"
-  - hash: "PENDING"
+  - hash: "0251b29"
     date: "2026-05-10"
     message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m5: Apply.tsx UI + Shortlist Apply link + ROOM COMPLETE (smoke 3/3)"
     files_changed: 6
