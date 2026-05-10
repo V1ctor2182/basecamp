@@ -375,7 +375,7 @@ tree:
         - "00-project-room/04-career-system/07-applier/07-feedback-flywheel"
     - id: "00-project-room/04-career-system/07-applier/01-mode1-simplify-hybrid"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: fullstack
       parent: "00-project-room/04-career-system/07-applier"
       children: []

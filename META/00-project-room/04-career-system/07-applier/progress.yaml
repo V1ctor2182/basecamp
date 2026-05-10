@@ -1,5 +1,14 @@
 milestones: []
-current_sprint: null
+current_sprint: "Sprint 12 — Mode 1 Simplify Hybrid"
 blockers: []
-status_note: "Feature 暂搁置（backlog），未来再评估优先级。"
-last_updated: "2026-04-22"
+completion: 14  # 100/7 = 14.3 → ~14 across 7 children (1 ROOM ✅)
+children_completion:
+  "01-mode1-simplify-hybrid": 100  # 🎉 ROOM COMPLETE (5/5 milestones; full Mode 1 end-to-end loop)
+  "02-playwright-runtime": 0
+  "03-field-classifier": 0
+  "04-multi-step-state-machine": 0
+  "05-non-standard-controls": 0
+  "06-site-adapters": 0
+  "07-feedback-flywheel": 0
+status_note: "🟢 07-applier 14% (1/7 ROOMs ✅). 01-mode1-simplify-hybrid just shipped — full Mode 1 daily-use flow end-to-end: drafts/{jobId}.json store + state machine (m1) → single-Sonnet draft pipeline (m2) → POST /apply/draft endpoint with 402 budget gate (m3) → POST /apply/submitted Applied transition + qa-bank/history.jsonl flywheel append (m4) → Apply.tsx UI page with field cards by class + Copy buttons + Mark Submitted with native confirm (m5). The career system now has the COMPLETE find→eval→tailor→apply→applied loop. Mode 2 (Playwright agent) flagged in parent intent for plan-ceo-review ROI evaluation BEFORE starting any of: 02-playwright-runtime / 03-field-classifier / 04-multi-step-state-machine / 05-non-standard-controls / 06-site-adapters / 07-feedback-flywheel."
+last_updated: "2026-05-10"

@@ -58,6 +58,13 @@ import {
   ApplicationNotFoundError,
   TimelineOrderError,
 } from './src/career/applications/store.mjs';
+import {
+  readDraft,
+  writeDraft,
+  JOB_ID_RE as DRAFT_JOB_ID_RE,
+} from './src/career/applier/draftsStore.mjs';
+import { generateDraft, STATUS as DRAFT_STATUS } from './src/career/applier/draftRunner.mjs';
+import { loadApplierBundle } from './src/career/applier/applierBundle.mjs';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const app = express();
@@ -4307,6 +4314,294 @@ app.post('/api/career/applications/:id/timeline', async (req, res) => {
   } finally {
     releaseApplicationsLock();
   }
+});
+
+// ─── Mode 1 Applier draft endpoints (07-applier/01-mode1-simplify-hybrid m3)
+// POST /apply/draft generates the field draft via single Sonnet call.
+// GET /apply/draft/:jobId returns a previously-persisted draft.
+//
+// Reads pipeline.json + reports/{jobId}.md + qa-bank inputs + Tailor PDF
+// path → calls draftRunner.generateDraft → persists via draftsStore.writeDraft.
+// Budget gate (402 with force=true override) parallels Stage B + Tailor.
+
+const ApplyDraftBodySchema = z
+  .object({
+    jobId: z.string().regex(DRAFT_JOB_ID_RE, 'jobId must match 12-hex'),
+    force: z.boolean().optional(),
+  })
+  .strict();
+
+app.post('/api/career/apply/draft', async (req, res) => {
+  // Outer try/catch matches Stage B / Tailor convention — without it,
+  // an EACCES / EMFILE / unexpected throw inside loadApplierBundle would
+  // bubble to Express's default HTML error page, breaking the JSON-only
+  // contract AND leaking absolute filesystem paths in the stack trace.
+  // (review fix H1)
+  try {
+    let body;
+    try {
+      body = ApplyDraftBodySchema.parse(req.body ?? {});
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid body', details: e.issues });
+    }
+
+    // Budget gate FIRST (no I/O waste when paused). force=true bypasses;
+    // cost still records via runner.
+    if (body.force !== true) {
+      const gate = await checkBudgetGate();
+      if (gate.paused) {
+        return res.status(402).json({
+          error: 'daily_budget_usd reached for Mode 1 draft',
+          banner_message: gate.banner_message,
+          today_total_usd: gate.today_total_usd,
+          daily_budget_usd: gate.daily_budget_usd,
+        });
+      }
+    }
+
+    // Find the job in pipeline.json
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.status(404).json({ error: 'pipeline.json does not exist' });
+    }
+    let pipeline;
+    try {
+      pipeline = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(pipeline?.jobs) ? pipeline.jobs : [];
+    const job = jobs.find((j) => j && j.id === body.jobId);
+    if (!job) {
+      return res.status(404).json({ error: `job not found in pipeline.json: ${body.jobId}` });
+    }
+
+    // Load the draft input bundle. reportExists==false means Stage B
+    // hasn't run yet — Mode 1 draft without Block E personalization seed
+    // produces generic garbage, so we 404 with an actionable hint.
+    const bundle = await loadApplierBundle(body.jobId);
+    if (!bundle.reportExists) {
+      return res.status(404).json({
+        error: 'Stage B report not generated for this job',
+        hint: 'Run Stage B from /career/pipeline first; the draft uses Block E as the personalization seed.',
+      });
+    }
+
+    // Generate the draft (NEVER throws — error surfaces as result.status='error')
+    const result = await generateDraft(job, bundle);
+    if (result.status === DRAFT_STATUS.ERROR) {
+      return res.status(502).json({
+        error: 'Draft generation failed',
+        detail: result.error,
+        cost_usd: result.cost_usd,
+      });
+    }
+
+    // Persist via draftsStore (writeDraft validates via Zod again — defense
+    // in depth in case the runner's parser produces a near-valid shape that
+    // slips through).
+    const draftRecord = {
+      jobId: body.jobId,
+      fields: result.fields,
+      generated_at: result.generated_at,
+      model: result.model,
+      cost_usd: result.cost_usd,
+    };
+    try {
+      await writeDraft(body.jobId, draftRecord);
+    } catch (e) {
+      return res.status(500).json({
+        error: 'Draft persisted-shape validation failed',
+        detail: String(e?.message ?? e).slice(0, 300),
+      });
+    }
+
+    res.status(200).json(draftRecord);
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message ?? e).slice(0, 300) });
+  }
+});
+
+// POST /api/career/apply/submitted — Mark Submitted backend.
+//
+// 07-applier/01-mode1-simplify-hybrid m4. Atomically transitions the
+// applications.json row to Applied AND appends each submitted field to
+// qa-bank/history.jsonl (the Applier feedback flywheel ② data source).
+//
+// Body: { jobId: 12-hex, fields: [{label, final_answer, class}], note? }
+//
+// ID resolution per spec consumer-contract: tries `${jobId}-${today-local-tz}`
+// first (matches Stage B m3 hook's per-day insert), falls back to any
+// applications row with this jobId prefix when same-day not found (handles
+// cross-day re-eval).
+//
+// Status transitions are validated by store.transitionStatus — illegal
+// transitions (e.g. Applied → Applied) return 400 with structured
+// {error, current_status, allowed_next}.
+//
+// All 4 classes append to history.jsonl per locked design — feedback
+// flywheel benefits from the full picture (not just open-ended).
+
+const SubmittedFieldSchema = z
+  .object({
+    label: z.string().min(1).max(200),
+    final_answer: z.string().max(2000), // 2KB cap for POSIX-atomic appendFile
+    class: z.enum(['hard', 'legal', 'open', 'file']),
+  })
+  .strict();
+
+const ApplySubmittedBodySchema = z
+  .object({
+    jobId: z.string().regex(DRAFT_JOB_ID_RE, 'jobId must match 12-hex'),
+    fields: z.array(SubmittedFieldSchema).min(1).max(50),
+    note: z.string().max(1000).optional(),
+  })
+  .strict();
+
+function todayYyyymmddLocal() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}${m}${day}`;
+}
+
+app.post('/api/career/apply/submitted', async (req, res) => {
+  // Outer try/catch matches Stage B / Tailor / m3 convention so any
+  // unexpected throw returns JSON 500 (not Express HTML).
+  try {
+    let body;
+    try {
+      body = ApplySubmittedBodySchema.parse(req.body ?? {});
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid body', details: e.issues });
+    }
+
+    // Resolve the applications.json row id. Tries `${jobId}-${today}` first
+    // (matches Stage B m3 auto-insert convention), then the MOST-RECENT row
+    // with the jobId prefix (handles cross-day re-eval — consumer contract).
+    // Pick newest via id-desc sort: ids are `{12-hex}-{YYYYMMDD}` so lexical
+    // sort on the suffix is also chronological.
+    const todaySuffix = todayYyyymmddLocal();
+    const todayId = `${body.jobId}-${todaySuffix}`;
+    const applications = await readApplications();
+    let row = applications.find((r) => r.id === todayId);
+    if (!row) {
+      const matches = applications.filter((r) => r.id.startsWith(`${body.jobId}-`));
+      matches.sort((a, b) => (b.id < a.id ? -1 : b.id > a.id ? 1 : 0));
+      row = matches[0];
+    }
+    if (!row) {
+      return res.status(404).json({
+        error: `no applications.json row for jobId ${body.jobId}`,
+        hint: 'Run Stage B from /career/pipeline first — Stage B auto-inserts the application row.',
+      });
+    }
+
+    // Acquire applicationsMutex BEFORE first await on store helpers so the
+    // in-process race window is closed.
+    const lock = acquireApplicationsLock();
+    if (!lock.ok) {
+      return res.status(409).json({
+        error: 'applications.json busy; retry shortly',
+        acquired_at: lock.acquired_at,
+      });
+    }
+
+    let updated;
+    try {
+      try {
+        updated = await transitionStatus(
+          row.id,
+          'Applied',
+          body.note ?? 'Marked submitted via Mode 1'
+        );
+      } catch (e) {
+        if (e instanceof InvalidTransitionError) {
+          return res.status(400).json({
+            error: e.message,
+            current_status: e.current_status,
+            allowed_next: e.allowed_next,
+          });
+        }
+        if (e instanceof ApplicationNotFoundError) {
+          return res.status(404).json({ error: e.message });
+        }
+        throw e;
+      }
+    } finally {
+      releaseApplicationsLock();
+    }
+
+    // Append each submitted field to qa-bank/history.jsonl. Append-only
+    // file; fs.appendFile is POSIX-atomic for sub-PIPE_BUF (4096) writes.
+    // Each line is bounded to ~2KB by the SubmittedFieldSchema.max(2000)
+    // cap on final_answer (plus ~200 chars overhead) — well under the
+    // PIPE_BUF threshold. The HISTORY_LINE_BYTE_LIMIT runtime guard below
+    // makes the atomicity invariant load-bearing in code, not just in
+    // the comment — if a future schema bump pushes a line over PIPE_BUF
+    // we'd lose interleave-safety with a concurrent appendFile.
+    const HISTORY_LINE_BYTE_LIMIT = 4000; // PIPE_BUF=4096 minus safety
+    const now = new Date().toISOString();
+    let historyLinesAdded = 0;
+    for (const f of body.fields) {
+      const entry = {
+        ts: now,
+        jobId: body.jobId,
+        label: f.label,
+        final_answer: f.final_answer,
+        class: f.class,
+      };
+      const line = JSON.stringify(entry) + '\n';
+      if (Buffer.byteLength(line, 'utf8') > HISTORY_LINE_BYTE_LIMIT) {
+        console.warn(
+          '[apply/submitted] history.jsonl line exceeds PIPE_BUF safety limit; skipping field:',
+          f.label
+        );
+        continue;
+      }
+      try {
+        await fs.appendFile(QA_HISTORY_FILE, line, 'utf-8');
+        historyLinesAdded++;
+      } catch (e) {
+        // history.jsonl write failure MUST NOT undo the Applied transition
+        // (it's already persisted). Log + report partial success.
+        console.warn(
+          '[apply/submitted] history.jsonl append failed:',
+          String(e?.message ?? e).slice(0, 200)
+        );
+        break;
+      }
+    }
+
+    res.status(200).json({
+      application: updated,
+      history_lines_added: historyLinesAdded,
+      total_fields: body.fields.length,
+      partial: historyLinesAdded < body.fields.length,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message ?? e).slice(0, 300) });
+  }
+});
+
+app.get('/api/career/apply/draft/:jobId', async (req, res) => {
+  const jobId = req.params?.jobId;
+  if (typeof jobId !== 'string' || !DRAFT_JOB_ID_RE.test(jobId)) {
+    return res.status(400).json({ error: 'invalid jobId (must match 12-hex)' });
+  }
+  let draft;
+  try {
+    draft = await readDraft(jobId);
+  } catch (e) {
+    return res.status(500).json({
+      error: 'Stored draft is malformed',
+      detail: String(e?.message ?? e).slice(0, 300),
+    });
+  }
+  if (!draft) {
+    return res.status(404).json({ error: 'no draft persisted for this jobId' });
+  }
+  res.json(draft);
 });
 
 const port = process.env.PORT || 8000;
