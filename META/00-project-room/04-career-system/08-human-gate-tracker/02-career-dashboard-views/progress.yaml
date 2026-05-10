@@ -1,5 +1,181 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-applied-page-full-rewrite"
+    name: "Applied.tsx full rewrite — filter chips + per-row timeline + followup highlight + quick actions"
+    status: pending
+    estimated_files:
+      - "src/career/Applied.tsx"
+      - "src/career/applied.css"
+      - "scripts/smoke-applied-page.mjs"
+    estimated_lines: 270
+    depends_on: []
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Replace the Applied.tsx stub with a real dashboard for already-submitted
+      applications. Consumes GET /api/career/applications (already shipped by
+      08-human-gate-tracker/01-application-state m2).
+
+      Files:
+        - src/career/Applied.tsx (~250 lines):
+          · 30s polling of GET /api/career/applications (matches Shortlist
+            polling cadence)
+          · Filter chips strip (mutually exclusive): All / Applied /
+            Responded / Interview / Offer / Rejected / Discarded; chip
+            counts derived client-side from the full applications.json
+            snapshot
+          · Per-row card layout:
+            - ScoreBadge (strong/worth/consider — reuses sl-score tiers)
+            - Role · Company headline (clickable → /career/reports/{jobId
+              without YYYYMMDD suffix})
+            - Status pill (color-coded per status: Applied amber,
+              Responded blue, Interview purple, Offer green, Rejected
+              gray, Discarded muted, SKIP gray-italic)
+            - Horizontal timeline stepper: each timeline event = a dot;
+              hover tooltip shows ts (relative formatRelative) + event
+              type + note if present
+            - Followup section when row.followup is set:
+              · ≤ 3 days from now → yellow border + warning icon +
+                "Follow up by {date} — {reason}"
+              · Past-due → red border
+              · > 3 days → muted gray badge
+            - Quick action row:
+              · [Open report] → navigate(`/career/reports/{jobIdPrefix}`)
+              · [Advance status] dropdown with the VALID_TRANSITIONS legal
+                next states ONLY; selecting one fires native confirm() +
+                POST /api/career/applications/{id}/status; 400 with
+                allowed_next surfaces inline as banner
+              · [Open job posting] → external link (target=_blank, rel)
+          · Empty state: friendly message + link to /career/shortlist
+            when applications.json is empty
+          · Error states (network, malformed): banner + retry button
+          · CSS scoped ad- prefix (applied dashboard)
+
+        - src/career/applied.css (~80 lines):
+          · ad- prefix; filter chips strip (matches sl-chip pattern);
+            per-row card grid; timeline stepper dots with hover tooltip
+            via :hover + ::after; followup color variants (yellow/red/gray)
+
+        - scripts/smoke-applied-page.mjs (~80 lines, ~5 server-spawn
+          asserts, port 4599 to avoid collision with 4598):
+          · GET /applications returns the consumer shape Applied.tsx
+            renders (id/company/role/url/score/status/timeline[].ts/event
+            /event.note?/followup?)
+          · ?status=Applied filter returns only Applied rows + timeline
+            preserved
+          · POST /:id/status {Responded} from Applied → 200, timeline
+            length+1, event=status_changed with from/to
+          · POST /:id/status {Discarded} from any non-terminal allowed
+            (locks the Quick Discard action contract)
+          · POST /:id/status {Offer} from Applied → 400 with allowed_next
+            (Applied→Responded only — locks the illegal-jump banner UX)
+
+      Locked design (no open questions):
+        - 7 filter chips (excluding Evaluated since those are in Shortlist,
+          not Applied)
+        - Timeline stepper: horizontal flexbox of colored dots with
+          hover tooltips. No collapsible deep-history (keep it scannable;
+          full timeline.length is ≤ ~10 events per row in practice).
+        - Followup ≤ 3 days = yellow; past-due = red; > 3 days = muted.
+        - Quick action [Advance status] fires native confirm() with the
+          target status name (matches Mode 1 Mark Submitted convention
+          — confirm before any irreversible mutation).
+        - Polling 30s matches Shortlist + Pipeline cadence.
+
+      验收: 5/5 smoke; manual UI test (navigate /career/applied → see rows
+      grouped by status filter; click Advance status → confirm dialog →
+      timeline gains event; followup highlighting works on past-due fixture).
+
+  - id: "m2-overview-page-and-room-complete"
+    name: "Overview.tsx full rewrite — stat cards + status pie + activity bar + followup list + cost trend + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "src/career/Overview.tsx"
+      - "src/career/overview.css"
+      - "scripts/smoke-overview-page.mjs"
+    estimated_lines: 330
+    depends_on: ["m1-applied-page-full-rewrite"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Replace the Overview.tsx stub with the career-system dashboard.
+      Aggregates 3 already-shipped endpoints. Closes the Room.
+
+      Files:
+        - src/career/Overview.tsx (~280 lines):
+          · 3-parallel-fetch aggregator: /api/career/applications +
+            /api/career/shortlist + /api/career/llm-costs
+          · 30s polling (matches Applied + Shortlist cadence)
+          · Top: 4 stat cards (compact, 4-col grid responsive):
+            - Total applications: applications.json length
+            - Stage B evaluated (this week): count of rows where
+              timeline[0].ts within last 7 days AND status >= Evaluated
+            - Active in funnel: count of rows with status ∈
+              {Evaluated, Applied, Responded, Interview}
+            - Today's spend: sum cost_usd from /llm-costs where
+              ts ≥ today's local 00:00; tinted red if > $5
+          · Status distribution Nivo pie chart (data: aggregated counts
+            per status; 8 slices: Evaluated/Applied/Responded/Interview/
+            Offer/Rejected/Discarded/SKIP). Color-coded:
+            green tier (Offer / Interview), amber (Applied / Responded /
+            Evaluated), red (Rejected), gray (Discarded / SKIP). Legend
+            shows count + pct.
+          · Weekly activity Nivo bar (last 7 days, count of timeline
+            events per day, grouped by event type: created vs
+            status_changed). Stack groups so user sees both "new evals"
+            and "transitions" per day.
+          · Next-7-days followup list (table or simple card list):
+            applications with followup.nextAt within 7 days, ordered
+            asc; ≤ 3 days highlighted yellow; past-due red.
+          · Cost trend last 14 days Nivo line (sum cost_usd per day
+            from /llm-costs aggregate by caller=evaluator:stage-b +
+            evaluator:stage-a + tailor:cv + applier:draft). Total tinted
+            against prefs.evaluator_strategy.stage_b.daily_budget_usd as
+            reference line.
+          · Loading + error states (skeleton placeholders so the page
+            doesn't flicker on poll)
+
+        - src/career/overview.css (~50 lines):
+          · ov- prefix; 4-col stat-card grid; chart container heights
+            (240px pie, 200px bar, 180px line); followup list row variants
+
+        - scripts/smoke-overview-page.mjs (~50 lines, ~4 server-spawn
+          asserts, port 4585 — unused range):
+          · /applications + /shortlist + /llm-costs all available and
+            return JSON shapes Overview.tsx aggregates
+          · vite build clean with Overview imports Nivo charts (no
+            tree-shake regression)
+          · Aggregator math: 3 fixture applications + 2 cost records
+            → expected stat-card counts match
+          · Empty-state path: all three endpoints return [] → Overview
+            renders without crash + shows zero-state messages
+
+      ROOM COMPLETE work:
+        - room.yaml: lifecycle planning → active
+        - _tree.yaml: 02-career-dashboard-views planning → active
+        - 08-human-gate-tracker parent: 25% → 50% (2/4 ROOMs ✅)
+        - 04-career-system: 84% → 87% (22/32 features)
+
+      下游 unblocked:
+        - 08-human-gate-tracker/03-interview-prep (separate Room — Interview
+          transition + STAR story prep flow)
+        - 08-human-gate-tracker/04-followup-cadence (separate Room —
+          followup.nextAt setter UI + reminder cron)
+
+      Locked design (no open questions):
+        - Chart library: Nivo (@nivo/pie, @nivo/bar, @nivo/line already
+          in deps; lighter than ECharts for these 3 simple charts)
+        - 4 stat cards in the order: Total / This-week / Active / Today's-cost
+        - Pie: 8-slice grouping (one per status enum value); color tiers
+          per status semantics, NOT alphabetical
+        - Bar: 7-day window ending today; stacked by event type
+        - Cost trend reference line: daily_budget_usd from prefs (live-read)
+        - Polling 30s same as Applied + Shortlist
+
+      验收: 4/4 smoke + manual UI test (Overview renders 4 cards + 3 charts +
+      followup list + cost trend; data accurate after seeding fixture rows);
+      ROOM COMPLETE.
+
+current_sprint: "Sprint 13 — Career Dashboard Views"
 blockers: []
-status_note: "Feature 在规划中，尚未动工。"
-last_updated: "2026-04-22"
+status_note: "📋 Plan locked: 2 milestones, ~600 LOC + ~130 smoke. Scope reduced from original spec since Shortlist (06-evaluator/05-pipeline-ui m2) + Reports (m3) are already shipped — this Room only needs Overview + Applied (both currently stubs). Heavy reuse: GET /api/career/applications (?status filter) from 08/01 m2, /shortlist + /llm-costs + /evaluate/stage-b/results, Nivo charts already in deps, ScoreBadge/sl-chip patterns from Shortlist. 0 open questions. m1 ships Applied.tsx with filter chips + per-row timeline stepper + followup highlight + Advance Status quick action (native confirm); m2 ships Overview.tsx aggregator + 3 Nivo charts (pie/bar/line) + ROOM COMPLETE. Closes 2/4 of 08-human-gate-tracker; downstream unblocked: 03-interview-prep + 04-followup-cadence siblings."
+last_updated: "2026-05-10"
