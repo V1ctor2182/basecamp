@@ -14,6 +14,7 @@ import {
   Wand2,
   AlertTriangle,
   RefreshCw,
+  Send,
 } from 'lucide-react'
 import './shortlist/shortlist.css'
 
@@ -307,6 +308,18 @@ export default function Shortlist() {
                     {formatRelative(row.evaluated_at)}
                   </td>
                   <td className="sl-row-actions">
+                    <button
+                      type="button"
+                      className="sl-btn-link"
+                      aria-label="Apply (Mode 1 Simplify Hybrid)"
+                      title="Apply — Mode 1 draft + copy/paste flow"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigate(`/career/apply/${row.id}`)
+                      }}
+                    >
+                      <Send size={12} />
+                    </button>
                     <a
                       href={row.url}
                       target="_blank"

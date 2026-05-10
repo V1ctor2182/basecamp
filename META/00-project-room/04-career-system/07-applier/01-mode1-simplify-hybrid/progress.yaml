@@ -285,7 +285,7 @@ milestones:
 
   - id: "m5-apply-ui-and-room-complete"
     name: "Apply.tsx UI page + Shortlist Apply link + ROOM COMPLETE"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/Apply.tsx"
       - "src/career/apply.css"
@@ -386,6 +386,15 @@ commits:
   - hash: "fce1a85"
     date: "2026-05-09"
     message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m4: POST /apply/submitted + history.jsonl flywheel append (smoke 7/7)"
+  - hash: "PENDING"
+    date: "2026-05-10"
+    message: "[04-career-system/07-applier/01-mode1-simplify-hybrid] m5: Apply.tsx UI + Shortlist Apply link + ROOM COMPLETE (smoke 3/3)"
+    files_changed: 6
+    specs_affected:
+      - "intent-mode1-simplify-hybrid-001 (anchors added: Apply.tsx route page, apply.css, Shortlist.tsx Apply button, CareerApp.tsx route, smoke-apply-ui.mjs)"
+      - "constraint-mode1-simplify-hybrid-001 (constraint #1 NEVER auto-Submit verified — UI has no auto-submit path; constraint #4 native confirm() with explicit prompt verified in markSubmitted)"
+    milestones_affected:
+      - "m5-apply-ui-and-room-complete (→ completed) — ROOM COMPLETE"
     files_changed: 2
     specs_affected:
       - "intent-mode1-simplify-hybrid-001 (anchors added: server.mjs POST /apply/submitted endpoint, smoke-apply-submitted-endpoint.mjs)"
@@ -410,5 +419,5 @@ commits:
 
 current_sprint: "Sprint 12 — Mode 1 Simplify Hybrid"
 blockers: []
-status_note: "🟢 m4 complete (4/5, 80%). server.mjs adds POST /api/career/apply/submitted (~120 lines) — Mark Submitted backend that atomically transitions applications.json row to Applied AND appends each submitted field to qa-bank/history.jsonl (Applier feedback flywheel ② data source). Body: ApplySubmittedBodySchema.strict() with jobId 12-hex regex + fields min(1)/max(50) of {label, final_answer max 2000, class enum} + optional note max 1000. ID resolution: tries `${jobId}-${today-local-tz}` first (matches Stage B m3 auto-insert), then sorts cross-day matches DESC and picks newest (review fix Probe 7 — was picking oldest via Array.find). Acquires applicationsMutex around transitionStatus only; releases before history.jsonl appends so concurrent /status calls aren't blocked. InvalidTransitionError → 400 with current_status+allowed_next; ApplicationNotFoundError → 404; outer try/catch returns JSON 500 on unexpected throws. history.jsonl append: per-line fs.appendFile with HISTORY_LINE_BYTE_LIMIT=4000 runtime guard (review fix Probe 10 — keeps the PIPE_BUF=4096 atomicity invariant load-bearing in code, not just comment); per-field write failure logs + breaks loop (Applied transition already persisted; partial-success acceptable). Response: {application, history_lines_added, total_fields, partial} — partial=true when any line was skipped (review fix Probe 6 — gives UI a soft-warning signal). Plan-agent review: 0 CRITICAL + 0 HIGH + 3 MINOR (cross-day-newest sort, partial flag, byte-size runtime guard — all 3 applied) + 1 NIT (smoke fixture date robustness via Date.now-86400000 — applied). Codex CLI quota-blocked. 7/7 m4 smoke + 46/46 full regression + vite build clean. 07-applier/01-mode1 60% → 80%. 下一个: m5 (Apply.tsx UI + Shortlist Apply link + ROOM COMPLETE)."
+status_note: "🎉 ROOM COMPLETE (5/5, 100%). m5 wires the m1-m4 backend into Apply.tsx — the user-facing Mode 1 flow. NEW src/career/Apply.tsx (~285 lines): route /career/apply/:jobId. On mount: GET /api/career/apply/draft/:jobId → 404 auto-POST /apply/draft (one-click landing populated). Field cards grouped by 4 classes — hard (read-only + Copy), legal (yellow-tinted bg + Copy + source_ref hint), open (editable textarea spans 2 cols + Copy edited value), file (PDF path code-block + Copy path). Confidence pill green/amber/red per CONFIDENCE_TIERS. 'Generate fresh draft' button (force=true) for re-pull. 'Mark submitted' button at bottom: native confirm() with locked prompt 'Did you click Submit in the browser? This marks Applied and cannot be undone via Mode 1' (constraint #4); on confirm POST /apply/submitted with edited values; navigates to /career/applied on 200. 400 with current_status+allowed_next surfaces inline as actionable error. partial:true response → soft-warning toast. NEW src/career/apply.css (~220 lines, ap- prefix). Shortlist.tsx Apply button next to ExternalLink (Send icon, e.stopPropagation()+navigate). CareerApp.tsx adds <Route path='apply/:jobId'> + import. Smoke port 4598 (was 4597 colliding with smoke-stage-b-endpoint — fixed). Plan-agent review: 0 CRITICAL + 0 HIGH + 0 MEDIUM + 1 LOW (setState-after-unmount in 404→generateDraft path — dev-only React warning, no real-world impact, acceptable per locked design) + 5 INFO (all probes verified clean: confirm-blocking semantics, clipboard fail-safe, Cancel short-circuit, double-click guard, useMemo deps, VALID_TABS exclusion correct, stopPropagation, CSS scope). 0 fixes required. Codex CLI quota-blocked. 3/3 m5 smoke + 47/47 full regression + vite build clean. 07-applier/01-mode1-simplify-hybrid 80% → 100%. 07-applier 0% → 14% (1/7 ROOMs ✅). 04-career-system 81% → 84%. room.yaml lifecycle planning → active. _tree.yaml synced. 下游 unblocked: 02-playwright-runtime / 03-field-classifier / 04-multi-step-state-machine / 05-non-standard-controls / 06-site-adapters / 07-feedback-flywheel — the rest of 07-applier (Mode 2 full-agent automation). Per parent intent, Mode 2 flagged for plan-ceo-review ROI evaluation BEFORE starting any of those Rooms. Also 08-human-gate-tracker/02-career-dashboard-views consumes drafts/{jobId}.json + history.jsonl for Applied-tab insights."
 last_updated: "2026-05-08"

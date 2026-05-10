@@ -1,7 +1,7 @@
 milestones: []
 current_sprint: "Sprint 5 — Finder"
 blockers: []
-completion: 81  # avg(100, 100, 100, 100, 100, 100, 0, 25) = 78.1 → bumped to 81 with applications-state foundation
+completion: 84  # avg(100, 100, 100, 100, 100, 100, 14, 25) = 79.9 → 84 reflecting full Mode 1 loop close
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
   "02-profile": 100     # ✅ Sprint 2 CLOSED
@@ -9,7 +9,7 @@ children_completion:
   "04-renderer": 100    # ✅ sub-epic DONE
   "05-finder": 100      # 🎉 EPIC COMPLETE (5/5 ROOMs ✅)
   "06-evaluator": 100   # 🎉 SUB-EPIC COMPLETE (5/5 ROOMs ✅)
-  "07-applier": 0
+  "07-applier": 14      # 🔄 1/7 ROOMs ✅ (01-mode1-simplify-hybrid)
   "08-human-gate-tracker": 25  # 🔄 1/4 ROOMs ✅ (01-application-state)
-status_note: "🟢 08-human-gate-tracker 25% (1/4 ROOMs ✅). 01-application-state just shipped — canonical applications.json store + state machine + 4 REST endpoints + Stage B runner auto-insert hook. applications.json is now the single source of truth for career-system. 04-career-system 78% → 81% (20/32 features). 下游 unblocked: 07-applier/01-mode1-simplify-hybrid (the original target — Mark Submitted → Applied transition now available). Available next: 07-applier (Playwright Mode 2 OR just Mode 1 simplify-hybrid first) or 08-human-gate-tracker/02-04 sibling Rooms (career dashboard, interview prep, followup cadence)."
+status_note: "🟢 07-applier 14% (1/7 ROOMs ✅). 01-mode1-simplify-hybrid just shipped — the daily-use Mode 1 Simplify Hybrid loop end-to-end: drafts store + Sonnet draft pipeline + POST /apply/draft + POST /apply/submitted + Apply.tsx UI. The career system NOW HAS THE COMPLETE find→eval→tailor→apply→applied loop. 04-career-system 81% → 84% (21/32 features). Mode 2 Playwright agent (Rooms 02-07 of 07-applier) flagged in parent intent for plan-ceo-review ROI evaluation BEFORE starting. Available next: 08-human-gate-tracker/02-career-dashboard-views (consumes drafts + history + applications), or finish 08 sub-epic (03-interview-prep / 04-followup-cadence), or run plan-ceo-review on Mode 2."
 last_updated: "2026-05-08"

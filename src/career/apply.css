@@ -1,0 +1,296 @@
+/* Mode 1 Apply page — ap- prefix scopes
+ * 4-class field cards (hard / legal / open / file) + Copy buttons +
+ * editable textarea for open-ended + Mark Submitted CTA. Warm + Lucide
+ * design language consistent with Shortlist + Reports pages. */
+
+.ap-error,
+.ap-empty,
+.ap-loading,
+.ap-toast-ok {
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin: 12px 0;
+}
+.ap-error {
+  display: flex; align-items: center; gap: 6px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+.ap-empty {
+  text-align: center;
+  color: #78716c;
+  background: #fafaf9;
+}
+.ap-loading {
+  display: flex; align-items: center; gap: 8px;
+  color: #78716c;
+  background: #fafaf9;
+  justify-content: center;
+}
+.ap-toast-ok {
+  display: flex; align-items: center; gap: 6px;
+  color: #14532d;
+  background: #d1fae5;
+  border: 1px solid #a7f3d0;
+}
+.ap-spin { animation: ap-spin 1s linear infinite; }
+@keyframes ap-spin { to { transform: rotate(360deg); } }
+
+.ap-link {
+  color: #1c1917;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ap-link:hover { color: #5b21b6; }
+
+/* ── Top bar ────────────────────────────────────────────────────────── */
+.ap-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.ap-back {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: #57534e;
+}
+.ap-back:hover { background: #fafaf9; color: #1c1917; }
+
+.ap-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+.ap-action-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid #e7e5e4;
+  background: #fff;
+  color: #44403c;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ap-action-btn:hover:not(:disabled) {
+  background: #fafaf9;
+  border-color: #1c1917;
+  color: #1c1917;
+}
+.ap-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+.ap-header {
+  margin-bottom: 16px;
+}
+.ap-title {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 600;
+  color: #1c1917;
+}
+.ap-subhead {
+  font-size: 13px;
+  color: #57534e;
+}
+
+/* ── Sections (one per class) ───────────────────────────────────────── */
+.ap-section {
+  margin-bottom: 24px;
+}
+.ap-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c1917;
+  margin: 0 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #f5f5f4;
+}
+
+.ap-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* ── Field cards ────────────────────────────────────────────────────── */
+.ap-field {
+  border: 1px solid #e7e5e4;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ap-field-open {
+  /* Open-ended fields span both columns since the textarea is taller */
+  grid-column: 1 / -1;
+}
+.ap-field-legal {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.ap-field-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.ap-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1c1917;
+}
+
+.ap-confidence {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.ap-conf-high   { color: #14532d; background: #d1fae5; }
+.ap-conf-medium { color: #92400e; background: #fef3c7; }
+.ap-conf-low    { color: #b91c1c; background: #fef2f2; }
+
+.ap-field-value {
+  font-size: 13px;
+  color: #1c1917;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.ap-field-value em {
+  color: #a8a29e;
+  font-style: italic;
+}
+
+.ap-field-textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border: 1px solid #d6d3d1;
+  border-radius: 6px;
+  resize: vertical;
+  min-height: 80px;
+  color: #1c1917;
+}
+.ap-field-textarea:focus {
+  outline: 2px solid #0969da;
+  outline-offset: -1px;
+  border-color: #0969da;
+}
+
+.ap-field-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #57534e;
+}
+.ap-field-file-path {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  background: #f5f5f4;
+  padding: 2px 6px;
+  border-radius: 3px;
+  word-break: break-all;
+}
+
+.ap-field-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.ap-source-ref {
+  font-size: 11px;
+  color: #78716c;
+}
+.ap-source-ref code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.ap-copy-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid #e7e5e4;
+  background: #fff;
+  color: #44403c;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: auto;
+}
+.ap-copy-btn:hover:not(:disabled) {
+  background: #fafaf9;
+  border-color: #1c1917;
+  color: #1c1917;
+}
+.ap-copy-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.ap-copy-btn-ok {
+  background: #d1fae5;
+  border-color: #a7f3d0;
+  color: #14532d;
+}
+
+/* ── Submit bar ─────────────────────────────────────────────────────── */
+.ap-submit-bar {
+  margin-top: 24px;
+  padding: 16px;
+  background: rgba(9, 105, 218, 0.05);
+  border: 1px solid rgba(9, 105, 218, 0.20);
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.ap-submit-info {
+  font-size: 12px;
+  color: #57534e;
+  flex: 1;
+  line-height: 1.5;
+}
+.ap-submit-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 20px;
+  border: 1px solid #b91c1c;
+  background: #b91c1c;
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ap-submit-btn:hover:not(:disabled) {
+  background: #991b1b;
+  border-color: #991b1b;
+}
+.ap-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #a8a29e;
+  border-color: #a8a29e;
+}

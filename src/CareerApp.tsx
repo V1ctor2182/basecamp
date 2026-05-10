@@ -9,6 +9,7 @@ import NeedsManualEnrich from './career/shortlist/NeedsManualEnrich'
 import Applied from './career/Applied'
 import Prep from './career/Prep'
 import Reports from './career/Reports'
+import Apply from './career/Apply'
 import SettingsLayout from './career/settings/SettingsLayout'
 import Identity from './career/settings/Identity'
 import Preferences from './career/settings/Preferences'
@@ -79,6 +80,7 @@ export default function CareerApp() {
           <Route path="prep/:company" element={<Prep />} />
           <Route path="reports" element={<Reports />} />
           <Route path="reports/:id" element={<Reports />} />
+          <Route path="apply/:jobId" element={<Apply />} />
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="identity" replace />} />
             <Route path="identity" element={<Identity />} />
