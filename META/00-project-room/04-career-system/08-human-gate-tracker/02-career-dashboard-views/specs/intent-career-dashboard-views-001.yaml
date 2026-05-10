@@ -17,6 +17,12 @@ provenance:
   confidence: 0.9
   source_ref: "career-architecture/07-gate-tracker.md#ui-career-tab"
 relations: []
-anchors: []
+anchors:
+  - file: "src/career/Applied.tsx"
+    description: "Career Dashboard m1: full rewrite from 9-line stub (~365 lines). 30s polling of GET /api/career/applications. 7-chip filter strip (All excludes Evaluated; Applied/Responded/Interview/Offer/Rejected/Discarded). Per-row card with ScoreBadge (strong/worth/consider/na tiers mirror sl-score) + role·company + 12-hex id + 8-status color-coded pill (applied=amber, responded=blue, interview=purple, offer=green, rejected=red, discarded/skip=gray). Horizontal timeline stepper renders each timeline[] event as colored dot with hover tooltip (formatRelative + event type + from/to + note?). Followup highlight: ≤3d (FOLLOWUP_WARN_MS=3*86400000) yellow border, past-due red, >3d muted gray. Quick actions: [Report] → /career/reports/{jobId-prefix via row.id.split('-')[0]}, [Job] external link, [Advance status] dropdown with VALID_TRANSITIONS[currentStatus] legal-next-only options + native confirm() with prompt naming source+target + POST /:id/status + on 400 with allowed_next surfaces inline as banner + auto-refresh after success. VALID_TRANSITIONS hardcoded client-side as mirror of server-side store.mjs export (server's .mjs uses Zod/fs which Vite would try to bundle into browser; client-side map is UX-only — server still validates and returns 400 with allowed_next for any drift)."
+  - file: "src/career/applied.css"
+    description: "Career Dashboard m1: NEW scoped styles with ad- prefix (zero collisions verified vs sl-/rp-/ov-/sbb-/af-/c-/ap-). Filter chip strip (matches sl-chip pattern). Per-row card with left-border color-band per status. Status pills with 8 variants. Timeline stepper: flex-wrap dot pills with ::before colored dot + ::after 4px gray separator line between consecutive dots. Followup highlights with 3 color tiers. Advance Status dropdown styled as blue-outlined select with chevron icon."
+  - file: "scripts/smoke-applied-page.mjs"
+    description: "Career Dashboard m1 smoke: 5 server-spawn asserts (port 4599 — verified collision-free). GET /applications returns Applied.tsx-consumed shape with timeline preserved / ?status=Applied filter returns only Applied rows with full timeline / Advance Applied → Responded transitions + appends status_changed event with from/to / Quick Discard from Interview allowed (terminal-from-any-non-terminal locked from store.mjs) / Illegal jump Applied → Offer → 400 with allowed_next=['Responded','Discarded','SKIP']."
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-10"

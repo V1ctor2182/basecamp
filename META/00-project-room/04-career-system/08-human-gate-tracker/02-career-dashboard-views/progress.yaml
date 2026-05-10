@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-applied-page-full-rewrite"
     name: "Applied.tsx full rewrite — filter chips + per-row timeline + followup highlight + quick actions"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/Applied.tsx"
       - "src/career/applied.css"
@@ -175,7 +175,17 @@ milestones:
       followup list + cost trend; data accurate after seeding fixture rows);
       ROOM COMPLETE.
 
+commits:
+  - hash: "PENDING"
+    date: "2026-05-10"
+    message: "[04-career-system/08-human-gate-tracker/02-career-dashboard-views] m1: Applied.tsx full rewrite — filter chips + per-row timeline + followup + Advance Status (smoke 5/5)"
+    files_changed: 3
+    specs_affected:
+      - "intent-career-dashboard-views-001 (anchors added: Applied.tsx full rewrite from 9-line stub, applied.css ad- prefix, smoke-applied-page.mjs consumer contract)"
+    milestones_affected:
+      - "m1-applied-page-full-rewrite (→ completed)"
+
 current_sprint: "Sprint 13 — Career Dashboard Views"
 blockers: []
-status_note: "📋 Plan locked: 2 milestones, ~600 LOC + ~130 smoke. Scope reduced from original spec since Shortlist (06-evaluator/05-pipeline-ui m2) + Reports (m3) are already shipped — this Room only needs Overview + Applied (both currently stubs). Heavy reuse: GET /api/career/applications (?status filter) from 08/01 m2, /shortlist + /llm-costs + /evaluate/stage-b/results, Nivo charts already in deps, ScoreBadge/sl-chip patterns from Shortlist. 0 open questions. m1 ships Applied.tsx with filter chips + per-row timeline stepper + followup highlight + Advance Status quick action (native confirm); m2 ships Overview.tsx aggregator + 3 Nivo charts (pie/bar/line) + ROOM COMPLETE. Closes 2/4 of 08-human-gate-tracker; downstream unblocked: 03-interview-prep + 04-followup-cadence siblings."
+status_note: "🟢 m1 complete (1/2, 50%). Applied.tsx full rewrite from 9-line stub (~365 lines). 30s polling of GET /api/career/applications. 7-chip filter strip (All excludes Evaluated since those live on Shortlist; Applied/Responded/Interview/Offer/Rejected/Discarded with client-side counts via useMemo). Per-row card: ScoreBadge (strong/worth/consider/na tiers, mirrors sl-score) + role + company + 12-hex id snippet + status pill (color-coded per status: applied=amber, responded=blue, interview=purple, offer=green, rejected=red, discarded=gray, skip=gray-italic). Horizontal timeline stepper renders each timeline[] event as a colored dot with hover tooltip (formatRelative + event type + from/to + note). Followup highlight: ≤3d=yellow border, past-due=red, >3d=muted gray. Quick actions: [Report] navigate to /career/reports/{jobId-prefix via row.id.split('-')[0]}, [Job] external link, [Advance status] select dropdown showing only VALID_TRANSITIONS[currentStatus] legal options + native confirm() with prompt naming source+target statuses + POST /:id/status + on 400 with allowed_next surfaces inline as banner + refresh after success. VALID_TRANSITIONS hardcoded client-side (mirror of store.mjs export; .mjs uses Zod/fs which Vite would try to bundle into browser). NEW applied.css (~260 lines, ad- prefix, zero global collisions verified). Plan-agent review: 0 CRITICAL + 0 HIGH + 0 MEDIUM + 5 minor observations (all low/acceptable per locked design — Status type drift mirrors VALID_TRANSITIONS drift rationale; formatRelative negative-flip on future ts; ARIA empty-list role minor inconsistency; manual-refresh-doesn't-clear-stale-banner; row.id.includes('-') always-true guard is defensive). 0 fixes required — reviewer explicitly says ship-ready. Codex CLI quota-blocked. 5/5 m1 smoke + 48/48 full regression + vite build clean. 02-career-dashboard-views 0% → 50%. 下一个: m2 (Overview.tsx full rewrite + ROOM COMPLETE)."
 last_updated: "2026-05-10"
