@@ -1,0 +1,171 @@
+spec_id: "intent-snapshot-eval-harness-001"
+type: intent
+state: active
+intent:
+  summary: "ATS fixture corpus + ground truth + deterministic auto-tuner for snapshot+refs role filter calibration"
+  detail: |
+    07-applier 的 calibration / eval 基础设施。08-snapshot-refs-layer 的 role
+    filter（决定 a11y 树哪些节点保留进 snapshot）需要针对真实 ATS 调校 —
+    Vercel agent-browser 团队大概率试过几十个 ATS 才定下他们的 allowlist。
+    我们要自己复刻这个调校过程，但**不能靠人肉每次开一个 Greenhouse 页面眼睛扫**。
+
+    本 Room 提供一个**确定性 auto-tuner**（不烧 LLM token，纯算法），让 Claude
+    Code（或开发者）跑一句 `npm run tune-snapshot` 就能自动迭代 role filter
+    直到所有 fixture 收敛。
+
+    设计 (4 层):
+
+      (1) Fixture corpus — 真实 ATS apply 页面 HTML 快照（开发时手工捕获，
+          ~10-15 个）。覆盖主流 vendor:
+            - Greenhouse (boards.greenhouse.io)
+            - Lever (jobs.lever.co)
+            - Ashby (jobs.ashbyhq.com)
+            - Workday (myworkdayjobs.com — 多步表单)
+            - iCIMS
+            - Smartrecruiters
+            - Jobvite
+            - Bamboo HR
+            - 1-2 个 custom（公司自建 form）
+          每个 fixture: `fixtures/ats/{vendor}-{company}.html` (~30KB) +
+          `{vendor}-{company}.truth.yml` (ground truth 10-15 行).
+
+      (2) Ground truth schema (per-fixture YAML):
+            url: https://boards.greenhouse.io/anthropic/jobs/12345
+            captured_at: 2026-05-11
+            vendor: greenhouse
+            must_detect:               # 这些字段 snapshot 必须有
+              - { role: textbox,  name: "First Name", required: true }
+              - { role: textbox,  name: "Email" }
+              - { role: button,   name: "Submit Application" }
+              - { role: combobox, name: "Authorized to work?" }
+              - { role: textbox,  name: "Cover Letter", optional: true }
+            must_not_detect:           # 这些 noise snapshot 必须过滤掉
+              - "Cookie banner"
+              - "Footer: Privacy Policy"
+              - "Nav: About Us"
+
+      (3) Eval runner — 对每个 fixture:
+            a. 加载 HTML 进 Playwright（headless, 离线）
+            b. 跑 snapshot+refs serializer（来自 08-snapshot-refs-layer）
+            c. 三维 diff 对 ground truth:
+                 coverage:        must_detect 找到几个 (target ≥ 95%)
+                 noise:           must_not_detect 漏进来几个 (target ≤ 5%)
+                 aria_accuracy:   required/optional/checked 等 state 是否对
+            d. 输出结构化报告 (JSON + 人可读 markdown)
+
+      (4) Auto-tuner (确定性算法，0 LLM token):
+            loop until converged OR max_iterations (=20):
+              1. 跑全部 fixture eval
+              2. 收集所有 missing elements 在它们 fixture 里的真实 a11y role
+              3. 生成候选 fix:
+                   - "add role X to allowlist" (从 missing element 的 role 列表)
+                   - "remove role Y from allowlist" (从 noise element 的 role 列表)
+                   - "filter heading where level > N" (复合规则)
+              4. 对每个候选 fix:
+                   a. 临时 apply
+                   b. 全部 fixture re-run
+                   c. 算 aggregate score delta
+                   d. 如果 delta > 0 且没有 fixture 退化 > 阈值 → keep
+                   e. 否则 → revert
+              5. 如果没有候选改善 → 收敛 break
+            输出: 最终 allowlist diff + 每轮 iteration log + 每 fixture 收敛分数
+
+    使用流程 (人 + Claude Code 配合):
+
+      新增 ATS sample (人做, ~10 分钟):
+        1. 浏览器开 apply 页 → DevTools → 'Save Page As' HTML
+        2. 放进 fixtures/ats/{vendor}-{company}.html
+        3. 手写 .truth.yml (10-15 行)
+
+      调校 (Claude Code 做, ~5 分钟):
+        $ npm run tune-snapshot
+        → 算法跑 → 报告 + diff 给 src/career/applier/snapshot/filter.mjs
+        → Claude Code review diff，跑 smoke 确认无 regression，commit
+
+      CI / regression (自动):
+        npm run test:eval-snapshot
+        每 commit 都跑；分数退化 → CI red
+
+    Consumers (downstream Rooms 复用 fixture corpus):
+      - 08-snapshot-refs-layer: 用 eval 验证 snapshot 输出正确
+      - 03-field-classifier: 同 fixture，ground truth 加 `field_class` 字段
+        → 测试 Hard/Legal/Open/File 分类准确率
+      - 04-multi-step-state-machine: Workday 多步 fixture（多个 HTML 串成
+        sequence）→ 测试 state transition 正确
+      - 06-site-adapters: 测试 adapter overrides 生效（vendor 特化策略）
+
+    NOT in scope:
+      - LLM-driven tuner（写过 prompt 喂 Sonnet 让它建议 filter 改动）—
+        确定性算法已足够，避免烧 token + 引入 LLM nondeterminism
+      - Live ATS scraping (fixture 是 offline HTML 快照；不实时去 boards.* 抓)
+      - Visual regression (DOM-only V1, screenshot diff 留给未来)
+      - 自动 ground truth 生成（必须人工标注 — 这是 corpus 的核心价值）
+
+    Estimated complexity: ~450 LOC TS (loader + eval runner + tuner +
+    smoke + CLI) + ~300KB fixture data (10-15 HTML files manually captured) +
+    10-15 ground truth YAMLs (~150 lines total).
+
+    验收:
+      (a) 10 fixture 覆盖 Greenhouse / Lever / Ashby / Workday / iCIMS /
+          Smartrecruiters / Jobvite / Bamboo / 2 custom
+      (b) 初始 filter (08-snapshot-refs-layer m1 default) 跑 baseline 得到
+          score 60-80% (说明 fixture 有信号空间，能驱动 tuner)
+      (c) 跑 auto-tuner 后所有 fixture coverage ≥ 95% AND noise ≤ 5%
+      (d) Tuner 收敛后 ≤ 20 iterations；iteration log 可 reproduce（同样
+          fixture + 同样初始 allowlist → 同样最终 allowlist）
+      (e) 加一个新 fixture → 跑 eval 不破坏其他 fixture 分数 (no regression)
+      (f) CI smoke `test:eval-snapshot` 跑全部 fixture < 60s
+constraints:
+  - id: "constraint-EH1-deterministic-tuner"
+    severity: must
+    rule: "Tuner MUST be deterministic algorithm — 不调 LLM API. 同样 fixture + 同样初始 allowlist 必须收敛到同样最终 allowlist. 引入 LLM 等于引入 nondeterminism + token cost + 调试地狱."
+  - id: "constraint-EH2-no-regression-gate"
+    severity: must
+    rule: "Tuner apply 一个 fix 时, MUST gate on '没有 fixture 退化超过阈值 (默认 5%)'. 不能为了改善 fixture A 让 fixture B 从 95% 掉到 80%."
+  - id: "constraint-EH3-ground-truth-human-only"
+    severity: must
+    rule: "Ground truth YAML MUST 是人工标注. 不允许 LLM 生成 ground truth (会引入 ground truth 本身有 bug 的循环). 这是 corpus 的核心价值 — 它代表'人类对这个页面正确理解'."
+  - id: "constraint-EH4-fixture-offline"
+    severity: must
+    rule: "Fixture MUST 是 offline HTML 快照, NOT live URL fetch. 原因: (a) ATS 改 UI fixture 就失效 — 离线版本可 reproduce; (b) CI 不依赖外网; (c) 不被 ATS bot detection 烦."
+  - id: "constraint-EH5-tuner-output-reviewable"
+    severity: must
+    rule: "Auto-tuner MUST 输出可 review 的 diff (不能直接 commit 改 filter 源码). Claude Code 必须看 diff + 跑 smoke 确认后才 commit. 避免 tuner 改坏了悄悄进 main."
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [backend, eval, calibration, ats-fixture, deterministic, no-llm]
+provenance:
+  source_type: derived
+  confidence: 0.95
+  source_ref: "Designed 2026-05-11 — follow-up to 08-snapshot-refs-layer review. Anticipates the '5% loss' from porting (manual role filter tuning) and converts it to automated harness."
+relations:
+  - type: depends_on
+    target: "intent-snapshot-refs-layer-001"
+  - type: foundation_for
+    target: "00-project-room/04-career-system/07-applier/03-field-classifier"
+  - type: foundation_for
+    target: "00-project-room/04-career-system/07-applier/04-multi-step-state-machine"
+  - type: foundation_for
+    target: "00-project-room/04-career-system/07-applier/06-site-adapters"
+open_questions:
+  - id: "Q1-fixture-storage"
+    question: "Fixture HTML 放 repo 里 (~300KB) 还是 LFS 还是单独 git submodule？"
+    options: ["repo (≤500KB OK)", "git LFS (如果 corpus 长到 >2MB)", "submodule (过度工程)"]
+    lock_before: "plan-milestones"
+    recommendation: "repo — 10-15 fixture 总 ~300KB 可接受，避免 LFS 复杂度"
+  - id: "Q2-score-aggregation"
+    question: "Aggregate score 用 fixture 间 mean / median / min？影响 tuner 决策."
+    options: ["mean (公平)", "median (抗 outlier)", "min (悲观, 防最坏 case)"]
+    lock_before: "plan-milestones"
+    recommendation: "min — 任何 fixture < 95% 都阻止收敛, 保证最差 ATS 也能用"
+  - id: "Q3-tuner-rule-complexity"
+    question: "Tuner 候选 fix 支持复合规则（如 'heading where level > 2'）还是只支持简单 add/remove role？"
+    options: ["简单 only (V1)", "复合 (V2)", "无限制（容易过拟合）"]
+    lock_before: "plan-milestones"
+    recommendation: "简单 only V1; 复合规则等真 fixture 数据驱动需要再加"
+anchors: []
+created_at: "2026-05-11"
+updated_at: "2026-05-11"

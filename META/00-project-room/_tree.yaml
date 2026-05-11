@@ -374,6 +374,7 @@ tree:
         - "00-project-room/04-career-system/07-applier/06-site-adapters"
         - "00-project-room/04-career-system/07-applier/07-feedback-flywheel"
         - "00-project-room/04-career-system/07-applier/08-snapshot-refs-layer"
+        - "00-project-room/04-career-system/07-applier/09-snapshot-eval-harness"
     - id: "00-project-room/04-career-system/07-applier/01-mode1-simplify-hybrid"
       type: feature
       lifecycle: active
@@ -417,6 +418,12 @@ tree:
       parent: "00-project-room/04-career-system/07-applier"
       children: []
     - id: "00-project-room/04-career-system/07-applier/08-snapshot-refs-layer"
+      type: feature
+      lifecycle: backlog
+      owner: backend
+      parent: "00-project-room/04-career-system/07-applier"
+      children: []
+    - id: "00-project-room/04-career-system/07-applier/09-snapshot-eval-harness"
       type: feature
       lifecycle: backlog
       owner: backend

@@ -1,0 +1,8 @@
+milestones: []
+current_sprint: null
+blockers:
+  - "Depends on 08-snapshot-refs-layer m1+ (need snapshot serializer to eval against)"
+  - "Both 09 + 08 gated on plan-ceo-review of 07-applier Mode 2 ROI"
+completion: 0
+status_note: "🔄 backlog. Calibration / eval harness for 08-snapshot-refs-layer. Confirms the '5% loss' from porting agent-browser stays managed automatically. Also a horizontal fixture corpus shared with 03-field-classifier / 04-multi-step-state-machine / 06-site-adapters. Blocked on (1) plan-ceo-review of Mode 2 ROI + (2) 08-snapshot-refs-layer m1 (need a snapshot serializer to eval against). If Mode 2 cut → this Room also cut."
+last_updated: "2026-05-11"

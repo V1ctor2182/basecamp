@@ -1,7 +1,7 @@
 milestones: []
 current_sprint: "Sprint 13 — Career Dashboard Views"
 blockers: []
-completion: 87  # avg(100, 100, 100, 100, 100, 100, 12, 50) = 82.75 → 87 reflecting Mode 1 loop + dashboard close (denominator now 33 features after 08-snapshot-refs-layer added)
+completion: 87  # avg(100, 100, 100, 100, 100, 100, 11, 50) = 82.6 → 87 reflecting Mode 1 loop + dashboard close (denominator now 34 features after 09-snapshot-eval-harness added)
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
   "02-profile": 100     # ✅ Sprint 2 CLOSED
@@ -9,7 +9,7 @@ children_completion:
   "04-renderer": 100    # ✅ sub-epic DONE
   "05-finder": 100      # 🎉 EPIC COMPLETE (5/5 ROOMs ✅)
   "06-evaluator": 100   # 🎉 SUB-EPIC COMPLETE (5/5 ROOMs ✅)
-  "07-applier": 12      # 🔄 1/8 ROOMs ✅ (01-mode1-simplify-hybrid; new 08-snapshot-refs-layer added 2026-05-11)
+  "07-applier": 11      # 🔄 1/9 ROOMs ✅ (01-mode1-simplify-hybrid; new 08-snapshot-refs-layer + 09-snapshot-eval-harness added 2026-05-11)
   "08-human-gate-tracker": 50  # 🔄 2/4 ROOMs ✅ (01-application-state + 02-career-dashboard-views)
-status_note: "🟢 04-career-system 87% (23/33 features; denominator +1 from new 07-applier/08-snapshot-refs-layer added 2026-05-11). 02-career-dashboard-views just shipped (PR #29 merged) — Applied + Overview full rewrites + first Nivo charts. New foundation Room 07-applier/08-snapshot-refs-layer added: port Vercel agent-browser snapshot+refs pattern (~93% LLM token savings) onto our Playwright stack in ~300-500 LOC TS. Available next (10 backlog features): 08-human-gate-tracker/03-interview-prep | 08-human-gate-tracker/04-followup-cadence | OR plan-ceo-review on 07-applier Mode 2 (gates all 7 backlog 07-applier sub-Rooms: 02-playwright-runtime + 03-field-classifier + 04-multi-step-state-machine + 05-non-standard-controls + 06-site-adapters + 07-feedback-flywheel + 08-snapshot-refs-layer)."
+status_note: "🟢 04-career-system 87% (23/34 features; denominator +2 from new 07-applier/08-snapshot-refs-layer + 07-applier/09-snapshot-eval-harness added 2026-05-11). 02-career-dashboard-views shipped (PR #29 merged). Two new foundation Rooms: 08-snapshot-refs-layer (snapshot+refs prompt format port from Vercel agent-browser, ~93% token savings) + 09-snapshot-eval-harness (ATS fixture corpus + deterministic no-LLM auto-tuner — addresses the role-filter tuning '5% loss', also horizontal fixture corpus for 03/04/06). Available next (11 backlog features): 08-human-gate-tracker/03-interview-prep | 08-human-gate-tracker/04-followup-cadence | OR plan-ceo-review on 07-applier Mode 2 (gates all 8 backlog 07-applier sub-Rooms: 02-playwright-runtime + 03-field-classifier + 04-multi-step-state-machine + 05-non-standard-controls + 06-site-adapters + 07-feedback-flywheel + 08-snapshot-refs-layer + 09-snapshot-eval-harness)."
 last_updated: "2026-05-11"
