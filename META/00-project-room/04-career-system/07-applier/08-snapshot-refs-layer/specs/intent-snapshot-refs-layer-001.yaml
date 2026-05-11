@@ -6,7 +6,8 @@ intent:
   detail: |
     Mode 2 Full Agent 的 LLM-facing 抽象层，sits between 02-playwright-runtime
     (Chromium 底座) and 03-field-classifier / 04-multi-step-state-machine /
-    05-non-standard-controls (所有需要"看页面 → 决定动作"的消费者)。
+    05-non-standard-controls / 06-site-adapters (所有需要"看页面 → 决定动作"的
+    消费者)。
 
     核心问题：传统 Playwright + LLM 方案让模型看到完整 a11y 树 / DOM dump
     (~7000-8000 tokens 每个 ATS apply 页面)，且模型要从 noise 里挑出 CSS
@@ -17,57 +18,104 @@ intent:
           过滤出 interactive roles {button, link, textbox, checkbox, radio,
           combobox, menuitem, tab, heading, ...}，每个 node 输出一行：
             - role "accessible-name" [ref=eN] [extra-attrs?]
-          一整个 ATS apply 页面压到 200-400 tokens（~20× 节省）
-      (2) Ref table — 计数器 mint `eN`，server 端 Map { eN → ElementHandle }
-          per-session 维护。Snapshot 返回时同时 freeze 这张表。
+          一整个 ATS apply 页面压到 200-400 tokens（~20× 节省）。
+          [headings 是否保留为 LLM 导航锚点，见 open_questions Q2]
+      (2) Ref table — 计数器 mint `eN`，server 端 Map { eN → ElementHandle }。
+          作用域 = per-Page（跟 Playwright Page 生命周期对齐，Page 关闭/重定向
+          整张表清空）。Snapshot 返回时同时 freeze 这张表为新一代 generation。
       (3) Symbolic action API — `click @e2`, `fill @e3 "value"`,
           `select @e4 "option"`, `press @e5 "Enter"`, `upload @e6 "/path.pdf"`
           —— resolve `@eN` → 内部 handle → 调用 Playwright 原生方法。模型
-          NEVER sees DOM ids / classes / XPaths / coordinates.
-      (4) Invalidation — 监听 page `framenavigated` / `domcontentloaded` /
-          任何 mutating action 完成后，把当前 ref table 标 stale。模型再
-          引用 stale ref → 返回 "snapshot expired, re-snapshot first" 强制
-          self-correct。约定: snapshot → act → re-snapshot loop。
-      (5) Stale-ref guard — unknown ref / stale ref 用统一 error code 拒绝，
-          带 hint "call snapshot first"，避免模型瞎猜继续。
+          NEVER sees DOM ids / classes / XPaths / coordinates。LLM tool
+          surface 只暴露 ~10 个符号动词，**绝不暴露 page.locator / page.eval
+          / 任何 raw Playwright API**（见 constraints C1）。
+      (4) Invalidation — **pessimistic post-action invalidation 为主信号**:
+          任何 mutating action (click/fill/press/upload/select) 完成后立刻把
+          当前 ref table 标 stale。原因：Greenhouse/Lever/Ashby/Workday 全是
+          SPA，用 history.pushState 路由，framenavigated/domcontentloaded
+          都不 fire — 只有 post-action 信号能稳定捕捉 SPA 切换。**附加信号**:
+          framenavigated（兜底 hard navigation）+ Page close（清整张表）。
+          约定: snapshot → act → re-snapshot loop，每次 act 后必须 re-snapshot
+          才能继续 act。
+      (5) Stale-ref guard + 统一错误码 — 三类失败：
+            STALE_REF      → 引用的 generation 已被 invalidate（act 后未 re-snapshot）
+            UNKNOWN_REF    → eN 从未在任何 snapshot 出现过
+            ELEMENT_GONE   → ref 对应的 ElementHandle 底层 node 已 detach
+                             （Playwright 抛 TargetClosedError/ElementHandleError，
+                             由 action wrapper catch 后翻译）
+          三类一律附带 hint "call snapshot first"，避免模型瞎猜继续。
       (6) Daemon warmth — 长期常驻 Node process (server.mjs 内 module 单例)
           复用 Playwright browser context，每个 LLM tool call < 200ms (vs
           Playwright cold-start 1-2s)。
+      (7) iframe handling — V1 默认 inline-recurse iframe content into 父
+          snapshot，ref 用全局 eN 编号（不分 frame）；action resolve 时通过
+          ref→frame 反查表找到正确 Frame 调 .click()。这让 LLM 看到统一视图，
+          不用关心 frame 边界（Greenhouse 几乎所有 form 都在 iframe 里，
+          强制 LLM 切 frame 体验差）。[最终格式见 open_questions Q1]
 
     Consumers (downstream Rooms):
       - 03-field-classifier: snapshot 输出喂给 Sonnet 分类器，得到字段 class
       - 04-multi-step-state-machine: 每步 snapshot 后 LLM 判断 "下一步 ref" /
         "页面变了，re-snapshot"
       - 05-non-standard-controls: 用 ref 定位非标控件 + 走特化策略
+      - 06-site-adapters: site-specific snapshot 提示（如 Workday 给 ref 加
+        step prefix，让 LLM 知道当前在 step 几）
 
     NOT in scope:
       - 反检测 / stealth (那是 02-playwright-runtime)
-      - 视觉 fallback / multimodal screenshot 分析 (defer; DOM-only V1)
+      - 视觉 fallback / multimodal screenshot 分析 (DOM-only V1；screenshot
+        是单独的 explicit `screenshot @eN` 命令，不混入 snapshot 输出)
       - 跨 tab / 跨 window 状态同步 (single-page V1)
       - MCP server 包装 (defer to 07-feedback-flywheel 或单独 Room)
+      - Drag-drop file upload (V1 只支持 input[type=file]；drag-drop 见
+        open_questions Q5)
 
     Estimated complexity: ~300-500 LOC TypeScript (serializer + ref table +
-    symbolic action wrappers + invalidation listener) + ~150-200 LOC smoke
-    (snapshot stability across mutations, ref resolve correctness, stale-ref
-    error path, token-budget assertion <500 tokens for typical Greenhouse JD).
+    symbolic action wrappers + invalidation listener + iframe inline recurse +
+    Playwright-error→统一错误码 wrapper) + ~150-200 LOC smoke (snapshot
+    stability across mutations, ref resolve correctness, stale-ref error path,
+    token-budget assertion, handle-leak assertion).
 
-    验收：(a) 给一个真实 Greenhouse apply 页 URL，snapshot 输出 < 500 tokens
-    且能让 Sonnet 100% 识别 8 个核心字段 (Name/Email/Phone/Resume/LinkedIn/
-    Cover/EEO/Authorization); (b) ref click/fill 100% 命中 vs Playwright 直接
-    selector; (c) DOM 变更后 stale ref 100% 触发 "expired" 错误而非误操作;
-    (d) 同 tab 8 次 snapshot → act → re-snapshot 循环 daemon 内存稳定 (no
-    handle leak).
-constraints: []
+    验收：
+      (a) 给一个真实 Greenhouse apply 页 URL (含 iframe), snapshot 输出
+          < 500 tokens 且能让 Sonnet 100% 识别 8 个核心字段 (Name/Email/
+          Phone/Resume/LinkedIn/Cover/EEO/Authorization)
+      (b) Workday 最坏 case 单步 30-50 fields 页面，snapshot 输出 < 1500 tokens
+      (c) ref click/fill 100% 命中 vs Playwright 直接 selector
+      (d) DOM 变更后 stale ref 100% 触发 STALE_REF 错误（不 silent 误操作）;
+          unknown ref 触发 UNKNOWN_REF; detached node 触发 ELEMENT_GONE
+      (e) SPA 路由切换 (Greenhouse 主页 → form iframe) 后旧 ref 100% stale
+      (f) 同 tab 8 次 snapshot → act → re-snapshot 循环，Playwright context
+          内部 element-handle Map size 不单调增长 (no handle leak)
+constraints:
+  - id: "constraint-C1-llm-tool-surface"
+    severity: must_not
+    rule: "LLM tool surface MUST NOT expose raw Playwright API (page.locator / page.eval / page.$ / setInputFiles 等). 只暴露 ~10 个符号动词 (snapshot/click/fill/select/press/upload/screenshot/wait_navigation/wait_text/close). Fallback 通道一旦存在，模型会偷懒回去写 selector，整层抽象失效。"
+  - id: "constraint-C2-snapshot-output-purity"
+    severity: must_not
+    rule: "Snapshot 输出 MUST NOT contain DOM id / class / XPath / CSS selector / inline-style / data-* 任意一种. 只允许: role / accessible-name / ref / 必要的 ARIA state (checked/selected/expanded/disabled/required)."
+  - id: "constraint-C3-pessimistic-invalidation"
+    severity: must
+    rule: "MUST pessimistic invalidate ref table after every mutating action (click/fill/press/upload/select). 不依赖 framenavigated/domcontentloaded — SPA 路由会绕过它们."
+  - id: "constraint-C4-unified-error-codes"
+    severity: must
+    rule: "Action wrapper MUST catch Playwright 原生 errors (TargetClosedError / ElementHandleError / Timeout) 并翻译成统一错误码 (STALE_REF / UNKNOWN_REF / ELEMENT_GONE / ACTION_TIMEOUT). 错误码 + hint 'call snapshot first' 喂给 LLM."
+  - id: "constraint-C5-dom-only-v1"
+    severity: must
+    rule: "V1 MUST be DOM-only (snapshot 不含 screenshot bytes). Screenshot 是 explicit `screenshot @eN` 命令，不混入 snapshot 输出. Vision fallback 留给未来 Room."
+  - id: "constraint-C6-no-auth-vault"
+    severity: must_not
+    rule: "MUST NOT 自写 credential vault. ATS 登录用 Playwright storage_state.json 持久化机制 (一次性 headful 手动登录 + 长期 cookie 持久化). 不端口 agent-browser 的 auth 命令，不存密码."
 indexing:
   type: intent
   priority: high
   layer: feature
   domain: "04-career-system"
-  tags: [backend, playwright, llm-agent, token-efficiency, a11y]
+  tags: [backend, playwright, llm-agent, token-efficiency, a11y, spa]
 provenance:
   source_type: research
   confidence: 0.9
-  source_ref: "vercel-labs/agent-browser (Jan 2026) — snapshot+refs pattern; researched 2026-05-11"
+  source_ref: "vercel-labs/agent-browser (Jan 2026) — snapshot+refs pattern; researched + design-reviewed 2026-05-11"
 relations:
   - type: depends_on
     target: "intent-playwright-runtime-001"
@@ -77,6 +125,38 @@ relations:
     target: "00-project-room/04-career-system/07-applier/04-multi-step-state-machine"
   - type: foundation_for
     target: "00-project-room/04-career-system/07-applier/05-non-standard-controls"
+  - type: foundation_for
+    target: "00-project-room/04-career-system/07-applier/06-site-adapters"
+open_questions:
+  - id: "Q1-iframe-format"
+    question: "iframe 是 inline-recurse 进父 snapshot（V1 default）还是要 LLM 显式 `frame switch @fN` 命令？影响：inline 让 LLM 体验统一但 ref→frame 反查表复杂；显式 frame 更可控但 LLM 要管 frame 状态."
+    options: ["inline-recurse (default)", "explicit frame switch", "hybrid: top-level inline + nested 显式"]
+    lock_before: "plan-milestones"
+  - id: "Q2-heading-inclusion"
+    question: "Snapshot 是否保留 heading 节点作 LLM navigation aid？agent-browser 保留；纯交互角度可以过滤掉."
+    options: ["keep (agent-browser parity)", "filter out (interactive-only strict)"]
+    lock_before: "plan-milestones"
+    recommendation: "keep — 帮 LLM 判断当前在哪一步页面，Workday 多步表单尤其需要"
+  - id: "Q3-action-auto-wait-timeout"
+    question: "click/fill 等动作默认 timeout 几秒？Playwright 默认 30s. ATS 页面慢可能要更长."
+    options: ["5s", "10s", "30s (Playwright default)", "configurable per-action"]
+    lock_before: "plan-milestones"
+    recommendation: "10s default + per-action override 参数"
+  - id: "Q4-no-accessible-name"
+    question: "Icon button / image-only button 在 a11y 树里 name='' 的怎么 emit？skip / fallback aria-label / fallback title?"
+    options: ["skip (LLM 看不见就不会用)", "fallback aria-label", "fallback title", "fallback to nearest text content"]
+    lock_before: "plan-milestones"
+    recommendation: "fallback aria-label → title → skip — Workday 大量用 icon button (X 关闭 / ? help)"
+  - id: "Q5-drag-drop-upload"
+    question: "Non-input file upload (drag-drop dropzone) V1 支持吗？需要 CDP Input.dispatchDragEvent."
+    options: ["V1 不支持 (只 input[type=file])", "V1 支持 (~30 LOC CDP wrap)"]
+    lock_before: "plan-milestones"
+    recommendation: "V1 不支持 — Greenhouse/Lever 都用 input[type=file]，drag-drop 是 Workday 特有，归 06-site-adapters 处理"
+  - id: "Q6-ref-id-format"
+    question: "Ref ID 格式 `e1` (agent-browser parity) vs `[1]` vs `r1`?"
+    options: ["e1 (agent-browser parity)", "[1]", "r1"]
+    lock_before: "plan-milestones"
+    recommendation: "e1 — 跟 agent-browser 一致便于人脑切换工具 + 借鉴它的 prompt example"
 anchors: []
 created_at: "2026-05-11"
 updated_at: "2026-05-11"
