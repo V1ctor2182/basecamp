@@ -1,0 +1,207 @@
+/* Career Overview dashboard — ov- prefix scopes
+ * 4 stat cards + Nivo pie/bar/line + followup list + quick links. */
+
+.ov-page { /* container — relies on c-page base */ }
+
+.ov-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.ov-header h2 {
+  margin: 0;
+  flex: 1;
+}
+
+.ov-error,
+.ov-empty,
+.ov-loading,
+.ov-stale {
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-top: 12px;
+}
+.ov-error {
+  display: flex; align-items: center; gap: 6px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+.ov-loading {
+  display: flex; align-items: center; gap: 8px;
+  color: #78716c;
+  background: #fafaf9;
+  justify-content: center;
+}
+.ov-stale {
+  display: flex; align-items: center; gap: 6px;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  font-size: 12px;
+  margin-top: 8px;
+}
+.ov-spin { animation: ov-spin 1s linear infinite; }
+@keyframes ov-spin { to { transform: rotate(360deg); } }
+
+.ov-refresh {
+  background: transparent;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  color: #57534e;
+}
+.ov-refresh:hover { background: #fafaf9; color: #1c1917; }
+
+/* ── Stat cards (4-col responsive grid) ─────────────────────────────── */
+.ov-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+@media (max-width: 900px) {
+  .ov-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.ov-stat-card {
+  border: 1px solid #e7e5e4;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #fff;
+}
+.ov-stat-warn {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+.ov-stat-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #78716c;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.ov-stat-icon { color: #57534e; }
+.ov-stat-warn .ov-stat-icon { color: #b91c1c; }
+.ov-stat-label { font-weight: 500; }
+.ov-stat-value {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 28px;
+  font-weight: 700;
+  color: #1c1917;
+  line-height: 1.1;
+}
+.ov-stat-warn .ov-stat-value { color: #b91c1c; }
+.ov-stat-hint {
+  font-size: 11px;
+  color: #a8a29e;
+  margin-top: 4px;
+}
+
+/* ── Chart cards (2-col responsive grid) ─────────────────────────────── */
+.ov-chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+@media (max-width: 900px) {
+  .ov-chart-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ov-chart-card {
+  border: 1px solid #e7e5e4;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #fff;
+}
+.ov-chart-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1c1917;
+}
+.ov-chart-empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: #a8a29e;
+  font-size: 12px;
+  font-style: italic;
+}
+.ov-chart-container {
+  /* height set inline via style — Nivo Responsive* needs a sized parent */
+}
+
+/* ── Followup list ───────────────────────────────────────────────────── */
+.ov-followup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ov-fu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.ov-fu-past {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+.ov-fu-soon {
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+.ov-fu-future {
+  background: #fafaf9;
+  border: 1px solid #f5f5f4;
+  color: #57534e;
+}
+.ov-fu-date {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-weight: 600;
+  min-width: 48px;
+  flex-shrink: 0;
+}
+.ov-fu-text {
+  flex: 1;
+  line-height: 1.5;
+}
+
+/* ── Quick links ─────────────────────────────────────────────────────── */
+.ov-quicklinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.ov-quicklink {
+  font-size: 12px;
+  padding: 6px 12px;
+  border: 1px solid #e7e5e4;
+  background: #fff;
+  color: #44403c;
+  border-radius: 6px;
+  text-decoration: none;
+}
+.ov-quicklink:hover {
+  background: #fafaf9;
+  border-color: #1c1917;
+  color: #1c1917;
+}
