@@ -362,7 +362,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/07-applier"
       type: sub-epic
-      lifecycle: backlog
+      lifecycle: planning
       owner: fullstack
       parent: "00-project-room/04-career-system"
       children:
@@ -383,49 +383,49 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/07-applier/02-playwright-runtime"
       type: feature
-      lifecycle: backlog
+      lifecycle: planning
       owner: backend
       parent: "00-project-room/04-career-system/07-applier"
       children: []
     - id: "00-project-room/04-career-system/07-applier/03-field-classifier"
       type: feature
-      lifecycle: backlog
+      lifecycle: planning
       owner: backend
       parent: "00-project-room/04-career-system/07-applier"
       children: []
     - id: "00-project-room/04-career-system/07-applier/04-multi-step-state-machine"
       type: feature
-      lifecycle: backlog
+      lifecycle: planning
       owner: backend
       parent: "00-project-room/04-career-system/07-applier"
       children: []
     - id: "00-project-room/04-career-system/07-applier/05-non-standard-controls"
       type: feature
-      lifecycle: backlog
+      lifecycle: planning
       owner: backend
       parent: "00-project-room/04-career-system/07-applier"
       children: []
     - id: "00-project-room/04-career-system/07-applier/06-site-adapters"
       type: feature
-      lifecycle: backlog
+      lifecycle: planning
       owner: backend
       parent: "00-project-room/04-career-system/07-applier"
       children: []
     - id: "00-project-room/04-career-system/07-applier/07-feedback-flywheel"
       type: feature
-      lifecycle: backlog
+      lifecycle: planning
       owner: fullstack
       parent: "00-project-room/04-career-system/07-applier"
       children: []
     - id: "00-project-room/04-career-system/07-applier/08-snapshot-refs-layer"
       type: feature
-      lifecycle: backlog
+      lifecycle: planning
       owner: backend
       parent: "00-project-room/04-career-system/07-applier"
       children: []
     - id: "00-project-room/04-career-system/07-applier/09-snapshot-eval-harness"
       type: feature
-      lifecycle: backlog
+      lifecycle: planning
       owner: backend
       parent: "00-project-room/04-career-system/07-applier"
       children: []

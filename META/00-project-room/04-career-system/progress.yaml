@@ -1,5 +1,5 @@
 milestones: []
-current_sprint: "Sprint 13 — Career Dashboard Views"
+current_sprint: "Sprint 14 — Mode 2 Lock"
 blockers: []
 completion: 87  # avg(100, 100, 100, 100, 100, 100, 11, 50) = 82.6 → 87 reflecting Mode 1 loop + dashboard close (denominator now 34 features after 09-snapshot-eval-harness added)
 children_completion:
@@ -9,7 +9,7 @@ children_completion:
   "04-renderer": 100    # ✅ sub-epic DONE
   "05-finder": 100      # 🎉 EPIC COMPLETE (5/5 ROOMs ✅)
   "06-evaluator": 100   # 🎉 SUB-EPIC COMPLETE (5/5 ROOMs ✅)
-  "07-applier": 11      # 🔄 1/9 ROOMs ✅ (01-mode1-simplify-hybrid; new 08-snapshot-refs-layer + 09-snapshot-eval-harness added 2026-05-11)
+  "07-applier": 11      # 🔄 1/9 ROOMs ✅; Mode 2 LOCKED 2026-05-11, 8 sub-Rooms (02-09) backlog→planning
   "08-human-gate-tracker": 50  # 🔄 2/4 ROOMs ✅ (01-application-state + 02-career-dashboard-views)
-status_note: "🟢 04-career-system 87% (23/34 features; denominator +2 from new 07-applier/08-snapshot-refs-layer + 07-applier/09-snapshot-eval-harness added 2026-05-11). 02-career-dashboard-views shipped (PR #29 merged). Two new foundation Rooms: 08-snapshot-refs-layer (snapshot+refs prompt format port from Vercel agent-browser, ~93% token savings) + 09-snapshot-eval-harness (ATS fixture corpus + deterministic no-LLM auto-tuner — addresses the role-filter tuning '5% loss', also horizontal fixture corpus for 03/04/06). Available next (11 backlog features): 08-human-gate-tracker/03-interview-prep | 08-human-gate-tracker/04-followup-cadence | OR plan-ceo-review on 07-applier Mode 2 (gates all 8 backlog 07-applier sub-Rooms: 02-playwright-runtime + 03-field-classifier + 04-multi-step-state-machine + 05-non-standard-controls + 06-site-adapters + 07-feedback-flywheel + 08-snapshot-refs-layer + 09-snapshot-eval-harness)."
+status_note: "🟢 04-career-system 87% (23/34 features). **Mode 2 LOCKED 2026-05-11** — 07-applier 全部 8 个 sub-Room (02-playwright-runtime/03-field-classifier/04-multi-step-state-machine/05-non-standard-controls/06-site-adapters/07-feedback-flywheel/08-snapshot-refs-layer/09-snapshot-eval-harness) 从 backlog→planning，跳过 plan-ceo-review。开发顺序按依赖图：02 (0 deps, NEXT) → 08 → 09 → 03 → 05 → 04 → 06 → 07-flywheel。Available next 决策点：(a) plan-milestones on 02-playwright-runtime (推荐) | (b) 闭合 08-human-gate-tracker sub-epic: 03-interview-prep / 04-followup-cadence (独立路径，不依赖 Mode 2)."
 last_updated: "2026-05-11"

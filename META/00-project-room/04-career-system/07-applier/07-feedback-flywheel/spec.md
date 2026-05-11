@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/07-applier/07-feedback-flywheel`  
 **Type**: feature  
-**Lifecycle**: backlog  
+**Lifecycle**: planning (Mode 2 LOCKED 2026-05-11)  
 **Owner**: fullstack  
 **Parent**: `00-project-room/04-career-system/07-applier`  
 

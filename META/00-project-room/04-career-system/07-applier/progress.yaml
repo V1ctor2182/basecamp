@@ -1,16 +1,16 @@
 milestones: []
-current_sprint: "Sprint 12 — Mode 1 Simplify Hybrid"
+current_sprint: "Sprint 14 — Mode 2 Lock + Playwright Runtime kickoff"
 blockers: []
 completion: 11  # 100/9 = 11.1 → ~11 across 9 children (1 ROOM ✅)
 children_completion:
   "01-mode1-simplify-hybrid": 100  # 🎉 ROOM COMPLETE (5/5 milestones; full Mode 1 end-to-end loop)
-  "02-playwright-runtime": 0
+  "02-playwright-runtime": 0          # NEXT — 0 deps, Mode 2 根基, plan-milestones next
   "03-field-classifier": 0
   "04-multi-step-state-machine": 0
   "05-non-standard-controls": 0
   "06-site-adapters": 0
   "07-feedback-flywheel": 0
-  "08-snapshot-refs-layer": 0  # NEW 2026-05-11 — Vercel agent-browser snapshot+refs pattern port; foundation for 03/04/05/06
-  "09-snapshot-eval-harness": 0  # NEW 2026-05-11 — ATS fixture corpus + deterministic auto-tuner; calibration for 08, fixture shared with 03/04/06
-status_note: "🟢 07-applier 12% → 11% (1/9 ROOMs ✅; denominator +1 from new 09-snapshot-eval-harness). 09 is the deterministic auto-tuner / fixture corpus that addresses the '5% loss' identified in 08-snapshot-refs-layer review: instead of human-eyeballing role filter against real ATS pages, run `npm run tune-snapshot` and let a no-LLM algorithm converge. Same fixture corpus serves 03/04/06 horizontally. Mode 2 still flagged in parent intent for plan-ceo-review ROI evaluation BEFORE starting any of: 02-playwright-runtime / 03-field-classifier / 04-multi-step-state-machine / 05-non-standard-controls / 06-site-adapters / 07-feedback-flywheel / 08-snapshot-refs-layer / 09-snapshot-eval-harness. If Mode 2 cut → entire 07/02-09 sub-tree cut."
+  "08-snapshot-refs-layer": 0          # NEW 2026-05-11
+  "09-snapshot-eval-harness": 0        # NEW 2026-05-11
+status_note: "🟢 07-applier 11% (1/9 ROOMs ✅). **Mode 2 LOCKED 2026-05-11** — 跳过 plan-ceo-review，直接全力实施 Mode 2 全部 8 个 sub-Rooms (02-09)。所有 sub-Room lifecycle: backlog → planning。开发顺序按依赖图：02-playwright-runtime (0 deps, NEXT) → 08-snapshot-refs-layer → 09-snapshot-eval-harness → 03-field-classifier → 05-non-standard-controls → 04-multi-step-state-machine → 06-site-adapters → 07-feedback-flywheel (production 自迭代闭环)。08+09 也已就绪，等开发到 08 时一并 plan-milestones。"
 last_updated: "2026-05-11"
