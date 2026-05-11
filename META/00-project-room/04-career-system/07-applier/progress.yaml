@@ -1,7 +1,7 @@
 milestones: []
 current_sprint: "Sprint 12 — Mode 1 Simplify Hybrid"
 blockers: []
-completion: 14  # 100/7 = 14.3 → ~14 across 7 children (1 ROOM ✅)
+completion: 12  # 100/8 = 12.5 → ~12 across 8 children (1 ROOM ✅)
 children_completion:
   "01-mode1-simplify-hybrid": 100  # 🎉 ROOM COMPLETE (5/5 milestones; full Mode 1 end-to-end loop)
   "02-playwright-runtime": 0
@@ -10,5 +10,6 @@ children_completion:
   "05-non-standard-controls": 0
   "06-site-adapters": 0
   "07-feedback-flywheel": 0
-status_note: "🟢 07-applier 14% (1/7 ROOMs ✅). 01-mode1-simplify-hybrid just shipped — full Mode 1 daily-use flow end-to-end: drafts/{jobId}.json store + state machine (m1) → single-Sonnet draft pipeline (m2) → POST /apply/draft endpoint with 402 budget gate (m3) → POST /apply/submitted Applied transition + qa-bank/history.jsonl flywheel append (m4) → Apply.tsx UI page with field cards by class + Copy buttons + Mark Submitted with native confirm (m5). The career system now has the COMPLETE find→eval→tailor→apply→applied loop. Mode 2 (Playwright agent) flagged in parent intent for plan-ceo-review ROI evaluation BEFORE starting any of: 02-playwright-runtime / 03-field-classifier / 04-multi-step-state-machine / 05-non-standard-controls / 06-site-adapters / 07-feedback-flywheel."
-last_updated: "2026-05-10"
+  "08-snapshot-refs-layer": 0  # NEW 2026-05-11 — Vercel agent-browser snapshot+refs pattern port; foundation for 03/04/05
+status_note: "🟢 07-applier 14% → 12% (1/8 ROOMs ✅; denominator +1 from new 08-snapshot-refs-layer). 01-mode1-simplify-hybrid shipped end-to-end. 08-snapshot-refs-layer added 2026-05-11 as research-driven foundation Room: port Vercel agent-browser's snapshot+refs prompt pattern (~93% LLM token savings vs Playwright MCP) onto our own Playwright stack in ~300-500 LOC TS. Foundation for 03-field-classifier / 04-multi-step-state-machine / 05-non-standard-controls (all 3 consume snapshot/ref API). Mode 2 (Playwright agent) still flagged in parent intent for plan-ceo-review ROI evaluation BEFORE starting any of: 02-playwright-runtime / 03-field-classifier / 04-multi-step-state-machine / 05-non-standard-controls / 06-site-adapters / 07-feedback-flywheel / 08-snapshot-refs-layer. If Mode 2 cut → entire 07/02-08 sub-tree cut."
+last_updated: "2026-05-11"

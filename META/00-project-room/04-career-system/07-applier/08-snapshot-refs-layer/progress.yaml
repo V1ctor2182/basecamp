@@ -1,0 +1,7 @@
+milestones: []
+current_sprint: null
+blockers:
+  - "Waiting on plan-ceo-review of 07-applier Mode 2 to confirm whether to build 07-applier sub-Rooms at all"
+completion: 0
+status_note: "🔄 backlog. Foundation Room for 03-field-classifier / 04-multi-step-state-machine / 05-non-standard-controls. ~300-500 LOC TS planned. Blocked on plan-ceo-review for 07-applier Mode 2 ROI — if Mode 2 is cut, this Room is also cut. If Mode 2 ships, this Room MUST land BEFORE 03/04/05 because they consume snapshot/ref API."
+last_updated: "2026-05-11"

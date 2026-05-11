@@ -373,6 +373,7 @@ tree:
         - "00-project-room/04-career-system/07-applier/05-non-standard-controls"
         - "00-project-room/04-career-system/07-applier/06-site-adapters"
         - "00-project-room/04-career-system/07-applier/07-feedback-flywheel"
+        - "00-project-room/04-career-system/07-applier/08-snapshot-refs-layer"
     - id: "00-project-room/04-career-system/07-applier/01-mode1-simplify-hybrid"
       type: feature
       lifecycle: active
@@ -413,6 +414,12 @@ tree:
       type: feature
       lifecycle: backlog
       owner: fullstack
+      parent: "00-project-room/04-career-system/07-applier"
+      children: []
+    - id: "00-project-room/04-career-system/07-applier/08-snapshot-refs-layer"
+      type: feature
+      lifecycle: backlog
+      owner: backend
       parent: "00-project-room/04-career-system/07-applier"
       children: []
     - id: "00-project-room/04-career-system/08-human-gate-tracker"
