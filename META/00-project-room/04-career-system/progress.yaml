@@ -1,7 +1,7 @@
 milestones: []
 current_sprint: "Sprint 13 — Career Dashboard Views"
 blockers: []
-completion: 87  # avg(100, 100, 100, 100, 100, 100, 14, 50) = 83 → 87 reflecting Mode 1 loop + dashboard close
+completion: 87  # avg(100, 100, 100, 100, 100, 100, 12, 50) = 82.75 → 87 reflecting Mode 1 loop + dashboard close (denominator now 33 features after 08-snapshot-refs-layer added)
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
   "02-profile": 100     # ✅ Sprint 2 CLOSED
@@ -9,7 +9,7 @@ children_completion:
   "04-renderer": 100    # ✅ sub-epic DONE
   "05-finder": 100      # 🎉 EPIC COMPLETE (5/5 ROOMs ✅)
   "06-evaluator": 100   # 🎉 SUB-EPIC COMPLETE (5/5 ROOMs ✅)
-  "07-applier": 14      # 🔄 1/7 ROOMs ✅ (01-mode1-simplify-hybrid)
+  "07-applier": 12      # 🔄 1/8 ROOMs ✅ (01-mode1-simplify-hybrid; new 08-snapshot-refs-layer added 2026-05-11)
   "08-human-gate-tracker": 50  # 🔄 2/4 ROOMs ✅ (01-application-state + 02-career-dashboard-views)
-status_note: "🟢 08-human-gate-tracker 25% → 50% (2/4 ROOMs ✅). 02-career-dashboard-views just shipped — Applied.tsx (m1, ~365 LOC) + Overview.tsx (m2, ~400 LOC) full rewrites from 9-line stubs. The career system now has the complete daily-use dashboards: Pipeline (06/05) for evaluation triage / Shortlist (06/05) for tailor candidates / Applied (08/02) for follow-up tracking / Overview (08/02) for funnel + cost telemetry. First Nivo charts in project (pie/bar/line). 04-career-system 84% → 87% (23/32 features). Available next: 08-human-gate-tracker/03-interview-prep (Interview state transition + STAR story prep flow), or 08-human-gate-tracker/04-followup-cadence (followup.nextAt setter UI + reminder cron), or run plan-ceo-review on 07-applier Mode 2 Playwright agent ROI."
-last_updated: "2026-05-10"
+status_note: "🟢 04-career-system 87% (23/33 features; denominator +1 from new 07-applier/08-snapshot-refs-layer added 2026-05-11). 02-career-dashboard-views just shipped (PR #29 merged) — Applied + Overview full rewrites + first Nivo charts. New foundation Room 07-applier/08-snapshot-refs-layer added: port Vercel agent-browser snapshot+refs pattern (~93% LLM token savings) onto our Playwright stack in ~300-500 LOC TS. Available next (10 backlog features): 08-human-gate-tracker/03-interview-prep | 08-human-gate-tracker/04-followup-cadence | OR plan-ceo-review on 07-applier Mode 2 (gates all 7 backlog 07-applier sub-Rooms: 02-playwright-runtime + 03-field-classifier + 04-multi-step-state-machine + 05-non-standard-controls + 06-site-adapters + 07-feedback-flywheel + 08-snapshot-refs-layer)."
+last_updated: "2026-05-11"

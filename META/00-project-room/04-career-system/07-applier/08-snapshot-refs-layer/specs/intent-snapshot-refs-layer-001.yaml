@@ -1,0 +1,82 @@
+spec_id: "intent-snapshot-refs-layer-001"
+type: intent
+state: active
+intent:
+  summary: "Token-efficient LLM-facing page abstraction — snapshot + symbolic refs (借鉴 Vercel agent-browser)"
+  detail: |
+    Mode 2 Full Agent 的 LLM-facing 抽象层，sits between 02-playwright-runtime
+    (Chromium 底座) and 03-field-classifier / 04-multi-step-state-machine /
+    05-non-standard-controls (所有需要"看页面 → 决定动作"的消费者)。
+
+    核心问题：传统 Playwright + LLM 方案让模型看到完整 a11y 树 / DOM dump
+    (~7000-8000 tokens 每个 ATS apply 页面)，且模型要从 noise 里挑出 CSS
+    selector / XPath 写回 prompt — token 贵 + 模型瞎猜 selector 出错率高。
+
+    设计 (借鉴 vercel-labs/agent-browser 的 IP，不用其 Rust 二进制):
+      (1) snapshot(page, interactive=true) — 遍历 page.accessibility.snapshot()
+          过滤出 interactive roles {button, link, textbox, checkbox, radio,
+          combobox, menuitem, tab, heading, ...}，每个 node 输出一行：
+            - role "accessible-name" [ref=eN] [extra-attrs?]
+          一整个 ATS apply 页面压到 200-400 tokens（~20× 节省）
+      (2) Ref table — 计数器 mint `eN`，server 端 Map { eN → ElementHandle }
+          per-session 维护。Snapshot 返回时同时 freeze 这张表。
+      (3) Symbolic action API — `click @e2`, `fill @e3 "value"`,
+          `select @e4 "option"`, `press @e5 "Enter"`, `upload @e6 "/path.pdf"`
+          —— resolve `@eN` → 内部 handle → 调用 Playwright 原生方法。模型
+          NEVER sees DOM ids / classes / XPaths / coordinates.
+      (4) Invalidation — 监听 page `framenavigated` / `domcontentloaded` /
+          任何 mutating action 完成后，把当前 ref table 标 stale。模型再
+          引用 stale ref → 返回 "snapshot expired, re-snapshot first" 强制
+          self-correct。约定: snapshot → act → re-snapshot loop。
+      (5) Stale-ref guard — unknown ref / stale ref 用统一 error code 拒绝，
+          带 hint "call snapshot first"，避免模型瞎猜继续。
+      (6) Daemon warmth — 长期常驻 Node process (server.mjs 内 module 单例)
+          复用 Playwright browser context，每个 LLM tool call < 200ms (vs
+          Playwright cold-start 1-2s)。
+
+    Consumers (downstream Rooms):
+      - 03-field-classifier: snapshot 输出喂给 Sonnet 分类器，得到字段 class
+      - 04-multi-step-state-machine: 每步 snapshot 后 LLM 判断 "下一步 ref" /
+        "页面变了，re-snapshot"
+      - 05-non-standard-controls: 用 ref 定位非标控件 + 走特化策略
+
+    NOT in scope:
+      - 反检测 / stealth (那是 02-playwright-runtime)
+      - 视觉 fallback / multimodal screenshot 分析 (defer; DOM-only V1)
+      - 跨 tab / 跨 window 状态同步 (single-page V1)
+      - MCP server 包装 (defer to 07-feedback-flywheel 或单独 Room)
+
+    Estimated complexity: ~300-500 LOC TypeScript (serializer + ref table +
+    symbolic action wrappers + invalidation listener) + ~150-200 LOC smoke
+    (snapshot stability across mutations, ref resolve correctness, stale-ref
+    error path, token-budget assertion <500 tokens for typical Greenhouse JD).
+
+    验收：(a) 给一个真实 Greenhouse apply 页 URL，snapshot 输出 < 500 tokens
+    且能让 Sonnet 100% 识别 8 个核心字段 (Name/Email/Phone/Resume/LinkedIn/
+    Cover/EEO/Authorization); (b) ref click/fill 100% 命中 vs Playwright 直接
+    selector; (c) DOM 变更后 stale ref 100% 触发 "expired" 错误而非误操作;
+    (d) 同 tab 8 次 snapshot → act → re-snapshot 循环 daemon 内存稳定 (no
+    handle leak).
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [backend, playwright, llm-agent, token-efficiency, a11y]
+provenance:
+  source_type: research
+  confidence: 0.9
+  source_ref: "vercel-labs/agent-browser (Jan 2026) — snapshot+refs pattern; researched 2026-05-11"
+relations:
+  - type: depends_on
+    target: "intent-playwright-runtime-001"
+  - type: foundation_for
+    target: "00-project-room/04-career-system/07-applier/03-field-classifier"
+  - type: foundation_for
+    target: "00-project-room/04-career-system/07-applier/04-multi-step-state-machine"
+  - type: foundation_for
+    target: "00-project-room/04-career-system/07-applier/05-non-standard-controls"
+anchors: []
+created_at: "2026-05-11"
+updated_at: "2026-05-11"
