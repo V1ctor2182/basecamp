@@ -1,87 +1,95 @@
-// Ref table — maps symbolic refs (eN) to Playwright Locator descriptors.
+// Ref table — maps symbolic refs (eN) to Playwright Locators (m1) +
+// tracks generation for pessimistic invalidation (m2).
 //
-// 07-applier/08-snapshot-refs-layer m1.
+// 07-applier/08-snapshot-refs-layer m1+m2.
 //
-// Per-Page instance. Each successful snapshot() builds a NEW RefTable
-// (m1: full replacement; m2 adds generation tracking so stale refs from
-// prior snapshots return STALE_REF rather than silently resolving to
-// elements they no longer represent). m1 keeps it dead simple — refs
-// from the most recent snapshot are valid; nothing else is.
-//
-// The table stores semantic info (role/name/occurrenceIndex) rather than
-// ElementHandles or backendNodeIds. This is the Plan A choice from the
-// plan-milestones discussion: leverage Playwright's getByRole + nth() for
-// resolution at action-time, so we get Playwright's auto-wait + visibility
-// retries for free. The CDP-resolution alternative (Plan B) can be slotted
-// in per-action post-ROOM-COMPLETE when 09-snapshot-eval-harness flags
-// specific ATS pages where Locator fails.
+// Per-Page instance. Each snapshot() builds a NEW RefTable so refs from
+// prior snapshots are simply not in the new table (UNKNOWN_REF). m2 adds
+// IN-TABLE staleness: after any mutating action (click/fill/etc), the
+// table's generation counter bumps, marking ALL existing entries as
+// stale until the caller re-snapshots. This is C3's pessimistic
+// invalidation — SPA pushState bypasses framenavigated, so we rely on
+// post-action invalidation as the primary signal.
+
+import { SnapshotError } from './errors.mjs';
 
 /**
  * Per-Page ref table. Builds via mint() during snapshot enumeration; reads
- * via resolve() during action dispatch.
+ * via resolve() during action dispatch. Each mint records the table's
+ * current generation; resolve checks the recorded generation matches
+ * (else STALE_REF). invalidate() bumps the generation.
  */
 export class RefTable {
   /**
-   * @param {import('playwright').Page} [page] — the Page this table was
-   *   minted against. Stored so resolve() can detect cross-page misuse
-   *   (M5 fix from review). m2 will also use this to attach
-   *   framenavigated listeners for SPA pushState invalidation.
+   * @param {import('playwright').Page} [page] — owning Page (for WRONG_PAGE
+   *   detection)
    */
   constructor(page) {
-    /** @type {Map<string, { role: string, name: string, occurrenceIndex: number, frameIdx: number }>} */
+    /** @type {Map<string, { role: string, name: string, occurrenceIndex: number, frame: import('playwright').Frame | null }>} */
     this._entries = new Map();
+    /** @type {Map<string, number>} */
+    this._mintedGen = new Map();
     this._counter = 0;
+    this._currentGen = 0;
     this._page = page || null;
   }
 
   /**
-   * Mint a new ref for an interactive node. `occurrenceIndex` is the
-   * 0-based index of this (role, name) pair within the current snapshot
-   * (document order). m2 will extend with frameIdx for iframe support.
+   * Mint a new ref for an interactive node. Records the table's current
+   * generation alongside the entry so resolve() can detect staleness.
    *
    * @param {string} role
-   * @param {string} name
-   * @param {number} occurrenceIndex
-   * @param {number} [frameIdx=0] — 0 = top-level page; m2 sets this when
-   *   walking iframes
+   * @param {string} name — already normalized (control chars stripped)
+   * @param {number} occurrenceIndex — 0-based among (role, name) duplicates
+   * @param {import('playwright').Frame} [frame=null] — null for top-level
+   *   Page; iframe Frame for inline-recursed content (m2)
    * @returns {string} the minted ref like "e1"
    */
-  mint(role, name, occurrenceIndex, frameIdx = 0) {
+  mint(role, name, occurrenceIndex, frame = null) {
     this._counter += 1;
     const refId = `e${this._counter}`;
-    this._entries.set(refId, { role, name, occurrenceIndex, frameIdx });
+    this._entries.set(refId, { role, name, occurrenceIndex, frame });
+    this._mintedGen.set(refId, this._currentGen);
     return refId;
   }
 
   /**
-   * Resolve a ref to a Playwright Locator. m2 will replace the throw paths
-   * with unified SnapshotError instances (STALE_REF / UNKNOWN_REF). For m1
-   * we throw plain Error with the ref + context — good enough for tests +
-   * downstream code can already see clear messages.
+   * Pessimistic invalidation — bump the generation so all existing refs
+   * become STALE_REF on next resolve. Entries kept so the error message
+   * can still report what role/name the ref WAS for, which helps the LLM
+   * understand what changed.
+   */
+  invalidate() {
+    this._currentGen += 1;
+  }
+
+  /**
+   * Resolve a ref to a Playwright Locator scoped to its owning frame.
+   * Throws SnapshotError instances (m2 — was plain Error in m1).
    *
    * @param {string} refId
    * @param {import('playwright').Page} page
    * @returns {import('playwright').Locator}
    */
   resolve(refId, page) {
-    // M5 fix: detect cross-page misuse early with a clear error rather
-    // than letting it manifest as a Playwright timeout 10s later.
+    // M5 fix from m1 review: detect cross-page misuse early
     if (this._page && page && page !== this._page) {
-      throw new Error(
-        `WRONG_PAGE: refTable was minted against a different Page; ` +
-          `call snapshot(page) to mint a fresh table for this page.`,
-      );
+      throw SnapshotError.wrongPage();
     }
     const entry = this._entries.get(refId);
     if (!entry) {
-      // m2 will replace with SnapshotError.unknownRef(refId)
-      throw new Error(
-        `UNKNOWN_REF: ${refId} not in current snapshot. Call snapshot() first.`,
-      );
+      throw SnapshotError.unknownRef(refId);
     }
-    const { role, name, occurrenceIndex } = entry;
-    // exact:true so "Submit" doesn't accidentally match "Submit application"
-    return page.getByRole(role, { name, exact: true }).nth(occurrenceIndex);
+    const mintedGen = this._mintedGen.get(refId);
+    if (mintedGen !== this._currentGen) {
+      throw SnapshotError.staleRef(refId, entry, mintedGen, this._currentGen);
+    }
+    // m2: iframe support — entry.frame is null for top-level, set for iframe
+    if (entry.frame && entry.frame.isDetached()) {
+      throw SnapshotError.iframeDetached(refId, entry);
+    }
+    const target = entry.frame || page;
+    return target.getByRole(entry.role, { name: entry.name, exact: true }).nth(entry.occurrenceIndex);
   }
 
   /** @param {string} refId */
@@ -95,5 +103,24 @@ export class RefTable {
 
   size() {
     return this._entries.size;
+  }
+
+  /** Current generation — useful for tests. */
+  generation() {
+    return this._currentGen;
+  }
+
+  /**
+   * Iterate over (refId, entry) pairs in mint order. Public API for
+   * smokes + downstream Rooms that need to walk the table.
+   * (M4 fix: was accessing private _entries directly.)
+   */
+  *entries() {
+    yield* this._entries.entries();
+  }
+
+  /** Iterate over refIds in mint order. */
+  *refIds() {
+    yield* this._entries.keys();
   }
 }

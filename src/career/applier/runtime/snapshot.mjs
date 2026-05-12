@@ -76,12 +76,35 @@ async function getCDPSession(page) {
 async function ensureAccessibilityEnabled(cdp) {
   if (_enabledSessions.has(cdp)) return;
   await cdp.send('Accessibility.enable');
+  // M1 fix from review: Page.enable is NOT required for Page.getFrameTree.
+  // It only enables Page DOMAIN EVENTS (frameAttached/frameNavigated/etc).
+  // Methods work without it. Removed.
   _enabledSessions.add(cdp);
 }
 
 // Hard ceiling on Accessibility.getFullAXTree — extremely large or
 // pathological pages have hung in the wild. (M3 fix.)
 const SNAPSHOT_TIMEOUT_MS = 15_000;
+
+// m2: depth-first walk of Playwright Frame tree, returning frames in
+// the SAME order as Page.getFrameTree's CDP traversal. Both APIs return
+// tree-order (parent before children, siblings in document order), so
+// indices line up — top frame at [0], children DFS after.
+function _walkPlaywrightFrames(frame, out) {
+  out.push(frame);
+  for (const child of frame.childFrames()) {
+    _walkPlaywrightFrames(child, out);
+  }
+}
+
+function _walkCdpFrameTree(node, out) {
+  out.push(node.frame);
+  if (node.childFrames) {
+    for (const child of node.childFrames) {
+      _walkCdpFrameTree(child, out);
+    }
+  }
+}
 
 /**
  * Resolve an AX node's "accessible name" — the human-readable label LLM
@@ -202,39 +225,113 @@ function serializeNode(role, name, refId, states) {
  * @param {import('playwright').Page} page
  * @returns {Promise<{ text: string, table: RefTable }>}
  */
-export async function snapshot(page) {
-  const cdp = await getCDPSession(page);
-  await ensureAccessibilityEnabled(cdp);
-  // M3 fix: bound the CDP call. Pathological pages have hung in the wild.
-  const { nodes } = await Promise.race([
-    cdp.send('Accessibility.getFullAXTree'),
+/**
+ * Race a Promise against a timeout. Throws a clear SNAPSHOT_TIMEOUT error
+ * if exceeded. m2 reused for both top-level + per-iframe AX tree fetches.
+ */
+async function _raceTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
     new Promise((_, reject) =>
       setTimeout(
-        () =>
-          reject(
-            new Error(
-              `SNAPSHOT_TIMEOUT: Accessibility.getFullAXTree exceeded ${SNAPSHOT_TIMEOUT_MS}ms`,
-            ),
-          ),
-        SNAPSHOT_TIMEOUT_MS,
+        () => reject(new Error(`SNAPSHOT_TIMEOUT: ${label} exceeded ${ms}ms`)),
+        ms,
       ),
     ),
   ]);
-  const pruned = pruneAxTree(nodes);
+}
+
+/**
+ * Take a snapshot of the page's interactive a11y nodes, INCLUDING iframe
+ * content (Q1: inline-recurse). Returns text + RefTable.
+ *
+ * iframe handling (m2): walk page.frames() AND CDP Page.getFrameTree in
+ * parallel tree-order; for each frame fetch AX tree via
+ * Accessibility.getFullAXTree({ frameId }), merge with global eN
+ * numbering, tag refs with the originating Frame so resolve() routes
+ * actions to the correct frame's getByRole. Greenhouse's 90%-iframe form
+ * works transparently — the LLM sees one unified view.
+ *
+ * @param {import('playwright').Page} page
+ * @returns {Promise<{ text: string, table: RefTable }>}
+ */
+export async function snapshot(page) {
+  const cdp = await getCDPSession(page);
+  await ensureAccessibilityEnabled(cdp);
+
+  // Enumerate frames in tree-order from BOTH Playwright + CDP.
+  // Playwright Frame objects let us call getByRole at action time;
+  // CDP frame IDs let us scope getFullAXTree to the right frame.
+  const pwFrames = [];
+  _walkPlaywrightFrames(page.mainFrame(), pwFrames);
+
+  const { frameTree } = await _raceTimeout(
+    cdp.send('Page.getFrameTree'),
+    SNAPSHOT_TIMEOUT_MS,
+    'Page.getFrameTree',
+  );
+  const cdpFrames = [];
+  _walkCdpFrameTree(frameTree, cdpFrames);
+
+  // If frame counts diverge (mid-load detach race?), fall back to top
+  // frame only — better partial snapshot than throwing.
+  const frameCount = Math.min(pwFrames.length, cdpFrames.length);
 
   const table = new RefTable(page);
-  // Track occurrence index per (role, name) pair so identical fields get
-  // distinct nth() targets when resolved (Q8).
-  /** @type {Map<string, number>} */
-  const occurrenceCounts = new Map();
-
   const lines = [];
-  for (const { role, name, states } of pruned) {
-    const key = `${role}::${name}`;
-    const occurrenceIndex = occurrenceCounts.get(key) || 0;
-    occurrenceCounts.set(key, occurrenceIndex + 1);
-    const refId = table.mint(role, name, occurrenceIndex);
-    lines.push(serializeNode(role, name, refId, states));
+
+  for (let i = 0; i < frameCount; i++) {
+    const pwFrame = pwFrames[i];
+    const cdpFrame = cdpFrames[i];
+    // Skip detached frames — they're zombies from a mid-load race
+    if (pwFrame.isDetached()) continue;
+    // H1 fix from review: URL sanity check on the parallel zip. If a frame
+    // attached/detached between the synchronous pwFrames walk and the
+    // async Page.getFrameTree round-trip, indices can correspond to
+    // DIFFERENT frames. Skip rather than mint refs against the wrong
+    // frame. Top-level (i=0) may have `about:blank` from both sides at
+    // launch — accept that; otherwise URLs should match.
+    if (
+      i > 0 &&
+      pwFrame.url() &&
+      cdpFrame.url &&
+      pwFrame.url() !== cdpFrame.url
+    ) {
+      continue;
+    }
+    // Top frame: no frameId param (defaults to top); iframe: pass frameId
+    const args = i === 0 ? {} : { frameId: cdpFrame.id };
+    let nodes;
+    try {
+      const result = await _raceTimeout(
+        cdp.send('Accessibility.getFullAXTree', args),
+        SNAPSHOT_TIMEOUT_MS,
+        `Accessibility.getFullAXTree (frame ${i})`,
+      );
+      nodes = result.nodes;
+    } catch (err) {
+      // Per-frame fetch failure — skip this frame, keep going on others.
+      // Cross-origin iframes throw here; we silently skip rather than
+      // failing the whole snapshot.
+      continue;
+    }
+    const pruned = pruneAxTree(nodes);
+    // Pass null frame for top-level so resolve() uses Page; otherwise
+    // pass the Frame so resolve() scopes getByRole to that frame.
+    const refFrame = i === 0 ? null : pwFrame;
+    // Occurrence-index is PER FRAME — getByRole runs within frame scope
+    // so nth(N) only sees that frame's matches. Cross-frame role+name
+    // duplicates therefore share occurrenceIndex 0 each, but distinct
+    // refIds (the LLM-facing handle).
+    /** @type {Map<string, number>} */
+    const frameOccurrenceCounts = new Map();
+    for (const { role, name, states } of pruned) {
+      const key = `${role}::${name}`;
+      const occurrenceIndex = frameOccurrenceCounts.get(key) || 0;
+      frameOccurrenceCounts.set(key, occurrenceIndex + 1);
+      const refId = table.mint(role, name, occurrenceIndex, refFrame);
+      lines.push(serializeNode(role, name, refId, states));
+    }
   }
 
   return {

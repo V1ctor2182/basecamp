@@ -207,13 +207,16 @@ try {
     await page.close();
   });
 
-  // ── 7. UNKNOWN_REF: unminted ref throws with helpful message ──────────
-  await test('resolve(unknownRef) throws UNKNOWN_REF', async () => {
+  // ── 7. UNKNOWN_REF: unminted ref throws SnapshotError with code ───────
+  await test('resolve(unknownRef) throws SnapshotError with code UNKNOWN_REF', async () => {
     const page = await getPage();
     await page.goto(FIXTURE_DATA_URL);
     const { table } = await snapshot(page);
     assert.ok(!table.has('e999'));
-    assert.throws(() => table.resolve('e999', page), /UNKNOWN_REF.*e999/);
+    assert.throws(
+      () => table.resolve('e999', page),
+      (err) => err.code === 'UNKNOWN_REF' && err.refId === 'e999',
+    );
     await page.close();
   });
 
@@ -284,7 +287,10 @@ try {
     await pageB.goto('data:text/html,<input>');
     const { table } = await snapshot(pageA);
     // table was minted on pageA; trying to resolve via pageB must throw
-    assert.throws(() => table.resolve('e1', pageB), /WRONG_PAGE/);
+    assert.throws(
+      () => table.resolve('e1', pageB),
+      (err) => err.code === 'WRONG_PAGE',
+    );
     await pageA.close();
     await pageB.close();
   });
