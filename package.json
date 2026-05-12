@@ -34,6 +34,8 @@
     "marked": "^18.0.2",
     "mermaid": "^11.12.3",
     "playwright": "^1.59.1",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "react": "^19.2.0",
     "react-diff-viewer-continued": "^4.2.2",
     "react-dom": "^19.2.0",

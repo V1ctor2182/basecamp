@@ -23,6 +23,33 @@ Mode 2 Full Agent 的运行时基础。设计：(1) 独立 userDataDir 在 data/
 - [intent-playwright-runtime-001](specs/intent-playwright-runtime-001.yaml) — 独立 Chromium + 持久化 profile + 反检测 + 截图留证（Mode 2 底座）
 - [constraint-playwright-runtime-001](specs/constraint-playwright-runtime-001.yaml) — 必须 headful + userDataDir 隔离 + stealth 插件必载 + 不共享日常 Chrome cookies
 
+## 当前进度 — 🟢 planning (milestones locked 2026-05-11)
+
+**Plan A (Foundation-first) accepted**. 3 milestones (~450 LOC + ~330 smoke):
+
+| m | 内容 | LOC | 解锁 |
+|---|------|-----|------|
+| **m1** | Module-singleton browser + persistent profile + lazy init + SIGTERM cleanup | ~180 + ~100 smoke | **08-snapshot-refs-layer 起步** |
+| m2 | playwright-extra + stealth plugin + humanDelay 100-400ms | ~120 + ~80 smoke | 反 bot 检测 |
+| m3 | Per-step screenshot + crash recovery + integration smoke + ROOM COMPLETE | ~150 + ~150 smoke | self-iteration/01 fixture eval / 02 heuristics 学习 |
+
+### Locked OQ (planning 时决定)
+
+| OQ | 决定 |
+|----|------|
+| OQ1 stealth 选型 | `playwright-extra` + `puppeteer-extra-plugin-stealth` |
+| OQ2 smoke headless | `process.env.SMOKE === '1'` (dev/prod headful, CI/smoke headless) |
+| OQ3 stealth 测试 URL | `bot.sannysoft.com` (12-check 业内标准) |
+| OQ4 V1 并发? | 否, 单 context 串行 |
+| OQ5 Browser path | Bundled Chromium (pinned, CI-friendly) |
+| OQ6 Screenshot 格式 | JPEG quality 70 (5x 小 vs PNG) |
+| OQ7 Crash 策略 | Auto-recreate + log warning |
+| OQ8 Page lifecycle | Per-apply new Page (跟 agent-browser session-per-task 一致) |
+
+### Agent-browser inspiration
+
+**02 拿到 agent-browser daemon warmth 那一半** — 模块单例 + warm context, per-call < 200ms. **Snapshot+refs prompt 格式那一半在 08-snapshot-refs-layer** (LLM-facing 抽象, 跟 driver 解耦).
+
 ---
 
-_Generated 2026-04-22 by room-init._
+_Generated 2026-04-22 by room-init. Plan refined 2026-05-11 by plan-milestones._
