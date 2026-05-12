@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-snapshot-core-ref-table-locator-actions"
     name: "Snapshot serializer + ref table + click/fill via Playwright Locator bridge"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/runtime/snapshot.mjs"
       - "src/career/applier/runtime/refTable.mjs"
@@ -257,8 +257,16 @@ milestones:
           DOM.getBoxModel directly. Per-action migration, not a full Plan B
           rewrite. Cost: ~10-30 LOC per migrated action.
 
-commits: []
+commits:
+  - hash: "PENDING"
+    date: "2026-05-12"
+    message: "[04-career-system/07-applier/08-snapshot-refs-layer] m1: snapshot core + ref table + click/fill via Playwright Locator (smoke 12/12)"
+    files_changed: 4
+    specs_affected:
+      - "intent-snapshot-refs-layer-001 (anchors: snapshot.mjs + refTable.mjs + actions.mjs + smoke-snapshot-core.mjs)"
+    milestones_affected:
+      - "m1-snapshot-core-ref-table-locator-actions (→ completed)"
 current_sprint: "Sprint 14 — Mode 2 Foundation Shipping"
 blockers: []
-status_note: "🔄 planning (milestones locked 2026-05-12). **Hybrid plan accepted**: Plan A (Playwright Locator bridge) for V1 implementation, with CDP migration deferred to post-ROOM-COMPLETE based on real ATS data from 09-snapshot-eval-harness. 3 milestones (~670 LOC + ~420 smoke). All 9 OQ locked: Q1 inline-recurse / Q2 keep heading / Q3 10s timeout / Q4 aria-label→title→skip / Q5 V1 no drag-drop / Q6 e1 format / Q7 hybrid (A→B per-action when data drives it) / Q8 nth(idx) by document order / Q9 element-crop screenshot. m1 starts with snapshot core + Locator-bridge actions (the boring but foundational layer). Next action: dev m1."
+status_note: "🟢 1/3 milestones done. m1 shipped — snapshot+refs LLM-facing layer foundation (snapshot.mjs ~220 LOC + refTable.mjs ~100 LOC + actions.mjs ~70 LOC + smoke-snapshot-core.mjs ~280 LOC, 12/12 green). Plan-agent Phase 3.5 review: 3 CRITICAL + 6 HIGH + 6 MEDIUM + 6 LOW findings — applied 3C + 4H + 3M + 1L fixes (name display/storage divergence → normalize once + [truncated] marker; Unicode/zero-width char stripping for both display and storage; CDPSession Page-close eviction; WeakSet keyed on CDPSession not Page; snapshot timeout 15s; refTable WRONG_PAGE detection; _internal export dropped; multi-page smoke). Token-budget tightened from 3200→800 bytes for fixture. m1 unblocks m2 development. vite build clean. Next: dev m2 (invalidation + error codes + iframe inline-recurse)."
 last_updated: "2026-05-12"

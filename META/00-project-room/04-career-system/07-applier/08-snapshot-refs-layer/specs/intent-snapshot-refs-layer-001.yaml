@@ -157,6 +157,14 @@ open_questions:
     options: ["e1 (agent-browser parity)", "[1]", "r1"]
     lock_before: "plan-milestones"
     recommendation: "e1 — 跟 agent-browser 一致便于人脑切换工具 + 借鉴它的 prompt example"
-anchors: []
+anchors:
+  - file: "src/career/applier/runtime/snapshot.mjs"
+    description: "m1: ~220 LOC. LLM-facing snapshot serializer via CDP Accessibility.getFullAXTree (Playwright v1.50+ removed page.accessibility — verified). INTERACTIVE_ROLES allowlist of 9 roles (Q2: heading kept). normalizeName() strips Unicode control + zero-width chars (M2 fix) applied to BOTH display and storage so getByRole matches. serializeNode() emits one-line `- role 'name' [ref=eN] [state?]` with [truncated] marker for names >80 chars (C1 fix). Per-CDPSession Accessibility.enable via WeakSet (H4 fix — was Page-keyed, wrong scope). Per-Page CDPSession cache evicts on page.on('close') (H3 fix). 15s SNAPSHOT_TIMEOUT race on getFullAXTree (M3 fix). EMITTED_STATES = ['required', 'checked', 'selected', 'expanded', 'disabled']. Occurrence-index per (role, name) pair for disambiguation (Q8)."
+  - file: "src/career/applier/runtime/refTable.mjs"
+    description: "m1: ~100 LOC. RefTable class — per-Page snapshot generation, monotonic eN counter. Constructor takes Page reference for cross-page misuse detection (M5 fix — resolve() throws WRONG_PAGE if called with foreign page). mint(role, name, occurrenceIndex, frameIdx=0) returns 'eN'; resolve() returns page.getByRole(role, { name, exact:true }).nth(occurrenceIndex). m2 will add generation counter for STALE_REF support and replace plain Error with SnapshotError class. frameIdx parameter present but unused in m1 (m2 will wire it for iframe inline-recurse)."
+  - file: "src/career/applier/runtime/actions.mjs"
+    description: "m1: ~70 LOC. Symbolic action API — only verbs LLM-facing tool surface exposes (per C1 constraint: raw page.locator/eval MUST NOT leak). m1 ships click + fill via locator.click({timeout}) / locator.fill({timeout}). Default 10s timeout (Q3), per-action override accepted via opts. Errors wrapped with refId + JSON.stringify'd name (L1 fix — was raw quotes, could break on names with embedded \"). m2 will replace plain Error with unified SnapshotError codes (ACTION_TIMEOUT / ELEMENT_GONE etc) and add pessimistic invalidation. m3 adds select/press/upload."
+  - file: "scripts/smoke-snapshot-core.mjs"
+    description: "m1 smoke: ~280 LOC, 12 asserts (up from 9 after review fixes). 1=allowlist 9 roles, 2=text contract + role coverage minimums + inferred-role lock for textbox (H1+H6 fixes), 3=non-interactive filter, 4=[required] state suffix, 5=click @submit fires onclick, 6=fill @email sets value, 7=UNKNOWN_REF on bad ref, 8=duplicate role+name → distinct refs + occurrenceIndex 0/1, 9=tight byte budget <800 (H2 fix — was 3200), 10=multi-page snapshot independence (M4 fix), 11=WRONG_PAGE cross-page misuse (M5 fix), 12=[truncated] marker on names >80 chars (C1 fix). Pure-Node SMOKE=1; fixture isolation backs up real .playwright/profile."
 created_at: "2026-05-11"
-updated_at: "2026-05-11"
+updated_at: "2026-05-12"
