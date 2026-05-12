@@ -274,7 +274,7 @@ commits:
       - "intent-snapshot-refs-layer-001 (anchors: errors.mjs + m2 deltas to refTable.mjs/snapshot.mjs/actions.mjs + smoke-snapshot-invalidation.mjs)"
     milestones_affected:
       - "m2-invalidation-error-codes-iframe-inline (→ completed)"
-  - hash: "PENDING"
+  - hash: "e6c3189"
     date: "2026-05-12"
     message: "[04-career-system/07-applier/08-snapshot-refs-layer] m3: select/press/upload + element screenshot + ROOM COMPLETE (smoke 9/9)"
     files_changed: 4
