@@ -230,7 +230,7 @@ commits:
       - "intent-playwright-runtime-001 (anchors added: browser.mjs + smoke-applier-browser.mjs)"
     milestones_affected:
       - "m1-singleton-browser-persistent-profile (→ completed)"
-  - hash: "PENDING"
+  - hash: "a0f473b"
     date: "2026-05-11"
     message: "[04-career-system/07-applier/02-playwright-runtime] m2: stealth plugin + human-like timing helpers (smoke 13/13)"
     files_changed: 4
