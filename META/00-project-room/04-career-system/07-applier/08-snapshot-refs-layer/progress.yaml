@@ -266,7 +266,7 @@ commits:
       - "intent-snapshot-refs-layer-001 (anchors: snapshot.mjs + refTable.mjs + actions.mjs + smoke-snapshot-core.mjs)"
     milestones_affected:
       - "m1-snapshot-core-ref-table-locator-actions (→ completed)"
-  - hash: "PENDING"
+  - hash: "96b3738"
     date: "2026-05-12"
     message: "[04-career-system/07-applier/08-snapshot-refs-layer] m2: pessimistic invalidation + unified error codes + iframe inline-recurse (smoke 10/10)"
     files_changed: 5
