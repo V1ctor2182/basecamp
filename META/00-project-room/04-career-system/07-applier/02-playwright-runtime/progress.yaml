@@ -222,7 +222,7 @@ milestones:
           profile 文件
 
 commits:
-  - hash: "PENDING"
+  - hash: "e619833"
     date: "2026-05-11"
     message: "[04-career-system/07-applier/02-playwright-runtime] m1: singleton browser + persistent profile + lazy init + SIGTERM cleanup (smoke 9/9)"
     files_changed: 3
