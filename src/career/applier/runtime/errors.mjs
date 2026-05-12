@@ -36,6 +36,16 @@ export const SNAPSHOT_ERROR_CODES = Object.freeze({
   // owning Page (likely caller bug — never mint on Page A then resolve
   // with Page B).
   WRONG_PAGE: 'WRONG_PAGE',
+  // m3: action verb requires a specific role (e.g. select on combobox)
+  // and the ref's role doesn't match. Caller chose wrong verb for this
+  // element — table state remains valid, retry with the right verb.
+  ROLE_MISMATCH: 'ROLE_MISMATCH',
+  // m3: press() received a key outside the allowed whitelist. Prevents
+  // LLM from triggering browser shortcuts (Ctrl+T new tab, etc).
+  KEY_NOT_ALLOWED: 'KEY_NOT_ALLOWED',
+  // m3: upload() couldn't access the file (not absolute path / not a
+  // regular file / ENOENT). Pre-action validation, no table mutation.
+  UPLOAD_FAILED: 'UPLOAD_FAILED',
 });
 
 /**
@@ -131,6 +141,38 @@ export class SnapshotError extends Error {
       code: SNAPSHOT_ERROR_CODES.WRONG_PAGE,
       message: 'refTable was minted against a different Page',
       hint: 'Call snapshot(page) to mint a fresh table for this page.',
+    });
+  }
+
+  // m3 factories — H1 fix from review: prior inline `new SnapshotError({...})`
+  // construction at 5 call sites would drift apart on hint/message changes.
+
+  static roleMismatch(refId, entry, requiredRole, verb) {
+    return new SnapshotError({
+      code: SNAPSHOT_ERROR_CODES.ROLE_MISMATCH,
+      message: `${verb} requires role=${requiredRole}; ${refId} is role=${entry?.role ?? '?'}`,
+      hint: 'Use click() for buttons, fill() for textboxes, select() for combobox, or re-check the snapshot for the right ref.',
+      refId,
+      entry,
+    });
+  }
+
+  static keyNotAllowed(refId, key, allowedKeys) {
+    return new SnapshotError({
+      code: SNAPSHOT_ERROR_CODES.KEY_NOT_ALLOWED,
+      message: `key ${JSON.stringify(key)} is not in the allowed-key whitelist`,
+      hint: `Allowed keys: ${allowedKeys.join(', ')}.`,
+      refId,
+    });
+  }
+
+  static uploadFailed(refId, filePath, reason, cause) {
+    return new SnapshotError({
+      code: SNAPSHOT_ERROR_CODES.UPLOAD_FAILED,
+      message: `upload failed for ${JSON.stringify(filePath)}: ${reason}`,
+      hint: 'Pass an absolute path to a readable regular file (no directories or symlinks-to-missing).',
+      refId,
+      cause,
     });
   }
 }

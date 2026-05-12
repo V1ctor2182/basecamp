@@ -172,7 +172,7 @@ milestones:
 
   - id: "m3-remaining-actions-screenshot-integration-room-complete"
     name: "Remaining actions (select/press/upload) + element screenshot + integration + ROOM COMPLETE"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/runtime/actions.mjs"
       - "src/career/applier/runtime/elementScreenshot.mjs"
@@ -274,7 +274,16 @@ commits:
       - "intent-snapshot-refs-layer-001 (anchors: errors.mjs + m2 deltas to refTable.mjs/snapshot.mjs/actions.mjs + smoke-snapshot-invalidation.mjs)"
     milestones_affected:
       - "m2-invalidation-error-codes-iframe-inline (→ completed)"
+  - hash: "PENDING"
+    date: "2026-05-12"
+    message: "[04-career-system/07-applier/08-snapshot-refs-layer] m3: select/press/upload + element screenshot + ROOM COMPLETE (smoke 9/9)"
+    files_changed: 4
+    specs_affected:
+      - "intent-snapshot-refs-layer-001 (anchors: m3 deltas to actions.mjs/errors.mjs + elementScreenshot.mjs + smoke-snapshot-integration.mjs)"
+    milestones_affected:
+      - "m3-remaining-actions-screenshot-integration-room-complete (→ completed)"
+      - "ROOM COMPLETE — 08-snapshot-refs-layer lifecycle planning → active"
 current_sprint: "Sprint 14 — Mode 2 Foundation Shipping"
 blockers: []
-status_note: "🟢 2/3 milestones done. m1 ✅ (12/12 smoke). m2 ✅ (10/10 smoke) — errors.mjs NEW ~140 LOC (SnapshotError class + 6-code enum STALE_REF/UNKNOWN_REF/ELEMENT_GONE/ACTION_TIMEOUT/IFRAME_DETACHED/WRONG_PAGE + classifyPlaywrightError mapper), refTable.mjs +~50 LOC (_currentGen counter, _mintedGen Map, generation()/invalidate(), entries()/refIds() public iterators, IFRAME_DETACHED check on resolve), snapshot.mjs +~80 LOC (_walkPlaywrightFrames + _walkCdpFrameTree tree-order DFS; per-frame getFullAXTree via Accessibility.getFullAXTree({frameId}); per-frame occurrenceCounts so getByRole.nth scopes correctly; URL sanity check on frame zip H1 fix), actions.mjs ~+40 LOC (_runAction wraps Playwright errors via classifyPlaywrightError, POST-action invalidate via finally; removed dead try/catch wrapper C1+L3 fix), smoke-snapshot-invalidation.mjs NEW ~290 LOC (10 asserts: generation/STALE_REF/UNKNOWN_REF/ELEMENT_GONE/classify unit/iframe-recurse/iframe-routing/IFRAME_DETACHED M5 added/toLLMMessage). Plan-agent Phase 3.5 review: 2 CRITICAL + 4 HIGH + 7 MEDIUM + 5 LOW findings — applied 2C + 2H + 4M (C1 dead wrapper, H1 URL sanity check, H2 expanded classify patterns, M1 dropped unnecessary Page.enable, M3 reorder regex resolved-to-0 before timeout, M4 public refIds()/entries() iterators, M5 IFRAME_DETACHED smoke); deferred H3 message wording, L1-L5 minor. All 55 smokes green (08 12+10 + 02 9+13+11). vite clean. Next: dev m3 (select/press/upload + element screenshot + ROOM COMPLETE)."
+status_note: "🎉 ROOM COMPLETE 2026-05-12 (3/3 milestones, 100%). m1 ✅ (12/12 smoke; snapshot core + ref table + click/fill via Playwright Locator). m2 ✅ (10/10 smoke; pessimistic invalidation + 6-code SnapshotError enum + iframe inline-recurse). m3 ✅ (9/9 smoke; select/press/upload + element screenshot + 8-cycle handle-leak verification + end-to-end). m3 added: actions.mjs +~120 LOC (select with label/value/index variants per C2 fix; press whitelist of 14 keys; upload with absolute-path + is-file + ref-check-first validation per M5 fix; ROLE_MISMATCH/KEY_NOT_ALLOWED/UPLOAD_FAILED error codes via factories per H1 fix), elementScreenshot.mjs NEW ~95 LOC (JPEG q70 element-crop at element-{eN}-{label}.jpg complementing 02's full-page captureStep; routes Playwright errors via classifyPlaywrightError per M3 fix), errors.mjs +~50 LOC (3 new codes + roleMismatch/keyNotAllowed/uploadFailed factories), smoke-snapshot-integration.mjs NEW ~325 LOC (9 asserts including label/value/index variants, error precedence ROLE_MISMATCH vs UNKNOWN_REF per H2 fix, KEY_NOT_ALLOWED hint verification per M1 fix, 3 upload paths + unknown-ref per M5/M6 fixes, JPEG SOF0 dimensions check per H4 fix, tightened 8-cycle bound + memory delta per H3 fix, end-to-end with submitFired assertion per C1 fix). Plan-agent Phase 3.5 review: 2 CRITICAL + 4 HIGH + 7 MEDIUM + 6 LOW — applied 2C + 4H + 5M (C1 broken end-to-end + missing submitFired assertion, C2 select label-only → label/value/index variants, H1 factory pattern, H2 select precedence + UNKNOWN_REF test, H3 tightened handle-leak bound + memory delta, H4 verify cropped JPEG dims, M1 hint coverage, M3 captureElement classify errors, M5 upload ref-check-first, M6 directory upload test, M7 generation bump verification). Total Room: ~975 LOC src + ~895 smoke + 31 asserts across 3 files. ROOM COMPLETE rollups: room.yaml lifecycle planning → active; _tree.yaml synced; 07-applier 25% → 38% (3/8 children ✅); 04-career-system 88% → 89% (25/34 features). 下游 unblocked: 03-field-classifier + 04-multi-step-state-machine + 05-non-standard-controls + 06-site-adapters; self-iteration/01-code-calibration eval harness can use snapshot output; self-iteration/02-data-flywheel qa-bank fuzzy match keys off (role, name) pairs. All 64 smokes green (08: 12+10+9, 02: 9+13+11). vite build clean."
 last_updated: "2026-05-12"
