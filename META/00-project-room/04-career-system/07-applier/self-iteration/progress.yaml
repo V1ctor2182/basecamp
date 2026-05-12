@@ -1,0 +1,7 @@
+milestones: []
+current_sprint: null
+blockers:
+  - "Depends on 02-playwright-runtime m1+ and 08-snapshot-refs-layer m1+ (need browser runtime + snapshot serializer to feed iteration loops)"
+completion: 0
+status_note: "🔄 planning. Sub-epic restructure 2026-05-11 — synthesizes original 07-feedback-flywheel (PRD) + 09-snapshot-eval-harness (research-driven) + new 03-iteration-dashboard into one coherent self-iteration sub-system. 3 子 Room: 01-code-calibration (改代码), 02-data-flywheel (改数据), 03-iteration-dashboard (可视化). Shared evidence-store contract. Blocked on 02-playwright-runtime + 08-snapshot-refs-layer foundations. Open 估计 ~1200-1700 LOC across 3 子 Room (~ 8-10 milestones total)."
+last_updated: "2026-05-11"

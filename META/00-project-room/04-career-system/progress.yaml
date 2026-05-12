@@ -1,7 +1,7 @@
 milestones: []
-current_sprint: "Sprint 14 — Mode 2 Lock"
+current_sprint: "Sprint 14 — Mode 2 Lock + Self-Iteration Restructure"
 blockers: []
-completion: 87  # avg(100, 100, 100, 100, 100, 100, 11, 50) = 82.6 → 87 reflecting Mode 1 loop + dashboard close (denominator now 34 features after 09-snapshot-eval-harness added)
+completion: 87  # avg(100, 100, 100, 100, 100, 100, 14, 50) = 83 → 87 reflecting Mode 1 loop + dashboard close
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
   "02-profile": 100     # ✅ Sprint 2 CLOSED
@@ -9,7 +9,7 @@ children_completion:
   "04-renderer": 100    # ✅ sub-epic DONE
   "05-finder": 100      # 🎉 EPIC COMPLETE (5/5 ROOMs ✅)
   "06-evaluator": 100   # 🎉 SUB-EPIC COMPLETE (5/5 ROOMs ✅)
-  "07-applier": 11      # 🔄 1/9 ROOMs ✅; Mode 2 LOCKED 2026-05-11, 8 sub-Rooms (02-09) backlog→planning
-  "08-human-gate-tracker": 50  # 🔄 2/4 ROOMs ✅ (01-application-state + 02-career-dashboard-views)
-status_note: "🟢 04-career-system 87% (23/34 features). **Mode 2 LOCKED 2026-05-11** — 07-applier 全部 8 个 sub-Room (02-playwright-runtime/03-field-classifier/04-multi-step-state-machine/05-non-standard-controls/06-site-adapters/07-feedback-flywheel/08-snapshot-refs-layer/09-snapshot-eval-harness) 从 backlog→planning，跳过 plan-ceo-review。开发顺序按依赖图：02 (0 deps, NEXT) → 08 → 09 → 03 → 05 → 04 → 06 → 07-flywheel。Available next 决策点：(a) plan-milestones on 02-playwright-runtime (推荐) | (b) 闭合 08-human-gate-tracker sub-epic: 03-interview-prep / 04-followup-cadence (独立路径，不依赖 Mode 2)."
+  "07-applier": 14      # 🔄 1/8 children (after self-iteration sub-epic restructure 2026-05-11)
+  "08-human-gate-tracker": 50  # 🔄 2/4 ROOMs ✅
+status_note: "🟢 04-career-system 87%. **07-applier restructured 2026-05-11**: old 07-feedback-flywheel + 09-snapshot-eval-harness 合并进新 sub-epic `self-iteration/` 包含 3 子 Rooms (01-code-calibration / 02-data-flywheel / 03-iteration-dashboard NEW). 07-applier 子节点 9 → 8 (6 feature + 1 sub-epic + 1 ROOM COMPLETE; gap at 07/09 保留 git 历史). Total feature count 34 unchanged (sub-epic 容 3 子 vs 原 2 散+1 新). Available next: plan-milestones on 02-playwright-runtime (Mode 2 根基), 或者 detour 08-human-gate-tracker/03-interview-prep + /04-followup-cadence (独立路径)."
 last_updated: "2026-05-11"

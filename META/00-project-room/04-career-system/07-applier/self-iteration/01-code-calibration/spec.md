@@ -1,10 +1,10 @@
-# Snapshot Eval Harness
+# Code Calibration (was Snapshot Eval Harness)
 
-**Room ID**: `00-project-room/04-career-system/07-applier/09-snapshot-eval-harness`
+**Room ID**: `00-project-room/04-career-system/07-applier/self-iteration/01-code-calibration`
 **Type**: feature
 **Lifecycle**: planning (Mode 2 LOCKED 2026-05-11)
 **Owner**: backend
-**Parent**: `00-project-room/04-career-system/07-applier`
+**Parent**: `00-project-room/04-career-system/07-applier/self-iteration`
 
 ## Intent
 
@@ -30,7 +30,7 @@ ATS fixture corpus + ground truth + deterministic auto-tuner for snapshot+refs r
 
 ## Specs in this Room
 
-- [intent-snapshot-eval-harness-001](specs/intent-snapshot-eval-harness-001.yaml) — ATS fixture corpus + ground truth + deterministic auto-tuner
+- [intent-code-calibration-001](specs/intent-code-calibration-001.yaml) — ATS fixture corpus + ground truth + deterministic auto-tuner
 
 ## Why this Room exists
 
