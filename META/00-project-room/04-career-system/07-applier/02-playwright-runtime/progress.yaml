@@ -1,5 +1,228 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-singleton-browser-persistent-profile"
+    name: "Module-singleton browser + persistent profile + lazy init + SIGTERM cleanup"
+    status: pending
+    estimated_files:
+      - "src/career/applier/runtime/browser.mjs"
+      - "scripts/smoke-applier-browser.mjs"
+      - ".gitignore"
+    estimated_lines: 180
+    depends_on: []
+    complexity_flags: ["external_api", "first_of_kind", "design_decisions"]
+    open_questions: []
+    description: |
+      Module-singleton Playwright browser backed by launchPersistentContext.
+      First use of Playwright in this project (CLAUDE.md mentions but no
+      earlier Room actually launched a browser).
+
+      设计哲学 (locked):
+        - **单例 = agent-browser daemon warmth 模式的等价物**. 第一次
+          getBrowser() 启动 Chromium (~1s), 之后每次 .getPage() 复用现成
+          context (~50-100ms). 这是 08-snapshot-refs-layer 的 "C4 stale-ref
+          错误码 + 快速响应" 能成立的前提.
+        - **Per-apply new Page** (跟 agent-browser session-per-task 一致).
+          100ms newPage 启动 cost 可接受, 干净状态省 debug 时间. NOT 复用
+          Page (上次 navigate 痕迹会污染状态).
+        - **Bundled Chromium** (pinned 版本可 reproduce, CI 友好). NOT 系统
+          Chrome.
+
+      Files:
+        - src/career/applier/runtime/browser.mjs (~180 LOC):
+          · Constants:
+              USER_DATA_DIR  = path.resolve('data/career/.playwright/profile')
+              SCREENSHOTS_DIR = path.resolve('data/career/.playwright/screenshots')
+              BROWSER_LAUNCH_TIMEOUT_MS = 30_000
+          · Module-level mutable singleton:
+              let _context: BrowserContext | null = null
+              let _starting: Promise<BrowserContext> | null = null  // race guard
+          · async getBrowser():
+              if (_context && !_context.isClosed()) return _context
+              if (_starting) return _starting
+              _starting = launch()  // creates dir, calls chromium.launchPersistentContext
+              try { _context = await _starting } finally { _starting = null }
+              return _context
+          · async getPage(jobId?): per-apply new Page
+              const ctx = await getBrowser()
+              const page = await ctx.newPage()
+              if (jobId) page._jobId = jobId  // for later screenshot path
+              return page
+          · async closeBrowser(): graceful cleanup; idempotent
+          · process.on('SIGTERM', () => closeBrowser()); same for SIGINT
+          · launchPersistentContext options (m1 baseline — m2 adds stealth):
+              { headless: process.env.SMOKE === '1',  // OQ2 locked
+                userDataDir: USER_DATA_DIR,
+                viewport: { width: 1440, height: 900 },
+                args: ['--no-first-run', '--disable-blink-features=AutomationControlled'] }
+
+        - scripts/smoke-applier-browser.mjs (~100 LOC, ~6 asserts, port 4584):
+          · getBrowser() returns instance; second call returns SAME instance
+            (singleton identity)
+          · getPage() returns NEW Page each time (per-apply isolation)
+          · launchPersistentContext uses correct userDataDir
+            (data/career/.playwright/profile/ exists after first call)
+          · closeBrowser() idempotent: 2 calls don't throw
+          · After closeBrowser(), next getBrowser() launches fresh instance
+          · SIGTERM path doesn't leave zombie Chromium (kill -0 verification)
+
+        - .gitignore (1 line added):
+            data/career/.playwright/
+
+      验收:
+        - npm run smoke:applier-browser → 6/6 green
+        - `ls data/career/.playwright/profile/` 在 smoke 跑完后含 Chromium
+          user data (Cookies / Local Storage 文件存在)
+        - 第二次 getBrowser() 不 spawn 新 Chromium 进程 (验证: pgrep -f
+          chromium 数量不变)
+
+  - id: "m2-stealth-plugin-human-timing"
+    name: "playwright-extra + stealth plugin + 100-400ms random delays"
+    status: pending
+    estimated_files:
+      - "src/career/applier/runtime/browser.mjs"
+      - "src/career/applier/runtime/humanize.mjs"
+      - "scripts/smoke-applier-stealth.mjs"
+      - "package.json"
+    estimated_lines: 120
+    depends_on: ["m1-singleton-browser-persistent-profile"]
+    complexity_flags: ["external_api", "first_of_kind", "error_handling_heavy"]
+    open_questions: []
+    description: |
+      Anti-detection layer: load stealth plugin via playwright-extra, wrap
+      Page interactions with 100-400ms random delays. 关键步骤防 ATS
+      bot detection 识破.
+
+      Locked design:
+        - stealth via **playwright-extra + puppeteer-extra-plugin-stealth**
+          (OQ1, 成熟生态, spec 写的)
+        - **bot.sannysoft.com** for stealth verification (OQ3, 12-check
+          业内标准)
+        - smoke headless via SMOKE=1 (OQ2)
+
+      Files:
+        - package.json (~2 deps 加):
+            "playwright-extra": "^4.x",
+            "puppeteer-extra-plugin-stealth": "^2.x"
+
+        - src/career/applier/runtime/browser.mjs (~+40 LOC modifications):
+          · 顶部 import:
+              import { chromium as chromiumExtra } from 'playwright-extra'
+              import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+              chromiumExtra.use(StealthPlugin())
+          · 把 m1 的 chromium.launchPersistentContext(...) 改成
+            chromiumExtra.launchPersistentContext(...)
+          · launchPersistentContext args 加 user-agent 真实化 (使用 stealth
+            plugin 内置, 不手写)
+
+        - src/career/applier/runtime/humanize.mjs (~80 LOC):
+          · humanDelay(min=100, max=400): Promise<void>
+              const ms = min + Math.random() * (max - min)
+              await new Promise(r => setTimeout(r, ms))
+          · async humanType(page, selector, text):
+              for char of text: page.keyboard.type(char); await humanDelay(50, 150)
+          · async humanClick(page, locator):
+              await humanDelay(200, 500); await locator.click()
+          · async humanNavigate(page, url):
+              await page.goto(url, { waitUntil: 'domcontentloaded' })
+              await humanDelay(800, 1500)  // 模拟人类读页面
+          · NOTE: 这些 helper 在 08-snapshot-refs-layer 的 action wrapper
+            里最终被调用 (08 的 fill @e3 内部走 humanType). 02 只暴露原料.
+
+        - scripts/smoke-applier-stealth.mjs (~80 LOC, ~4 asserts, port 4583):
+          · Stealth flag check: navigator.webdriver === undefined (eval in
+            page context after getPage + goto about:blank)
+          · bot.sannysoft.com 加载完取 .passed tag 计数 ≥ 8/12 (offline
+            smoke 可 skip 这条, 看 SMOKE_NETWORK=1 env)
+          · humanDelay 随机性: 100 次调用 mean 在 [200, 300]ms, no outlier
+            > 600ms
+          · humanType 模拟打字: page.keyboard.type 调用次数 == text.length
+
+      验收:
+        - smoke 4/4 green
+        - 手动 SMOKE_NETWORK=1 跑 bot.sannysoft.com → ≥ 8/12 checks pass
+        - WebDriver 检测项 (navigator.webdriver, navigator.plugins, etc) 全
+          pass
+
+  - id: "m3-screenshot-crash-recovery-room-complete"
+    name: "Per-step screenshot + crash recovery + integration smoke + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "src/career/applier/runtime/screenshot.mjs"
+      - "src/career/applier/runtime/browser.mjs"
+      - "scripts/smoke-applier-runtime.mjs"
+    estimated_lines: 150
+    depends_on: ["m2-stealth-plugin-human-timing"]
+    complexity_flags: ["error_handling_heavy", "design_decisions"]
+    open_questions: []
+    description: |
+      Screenshot 留证 + crash recovery (auto-recreate). 闭合 02 Room.
+
+      Locked design:
+        - **JPEG quality 70** (OQ6, 5x 小 vs PNG, 留证用够)
+        - **Auto-recreate on crash + log warning** (OQ7, 用户体验流畅, 不
+          惊扰 dashboard)
+        - 路径: data/career/.playwright/screenshots/{jobId}/{stepN}.jpg
+
+      Files:
+        - src/career/applier/runtime/screenshot.mjs (~80 LOC):
+          · async captureStep(page, jobId, stepN, label?):
+              const dir = path.join(SCREENSHOTS_DIR, jobId)
+              await fs.mkdir(dir, { recursive: true })
+              const filename = `${String(stepN).padStart(3,'0')}-${label || 'step'}.jpg`
+              const filepath = path.join(dir, filename)
+              await page.screenshot({ path: filepath, type: 'jpeg', quality: 70,
+                                       fullPage: true })
+              return filepath
+          · async listScreenshots(jobId): readdir + sort by stepN
+          · async clearScreenshots(jobId): fs.rm recursive (failed apply 时
+            08-snapshot-refs-layer 的 [Promote] 流程会调它)
+
+        - src/career/applier/runtime/browser.mjs (~+30 LOC modifications):
+          · Crash detection:
+              _context.on('close', handleContextClose)
+              const handleContextClose = () => {
+                console.warn('[applier/runtime] Chromium context closed, marking singleton dirty')
+                _context = null  // next getBrowser() re-launches
+              }
+          · Same handler for Browser.on('disconnected') (in case browser
+            process crashed)
+
+        - scripts/smoke-applier-runtime.mjs (~150 LOC, ~5 asserts, port 4582):
+          · End-to-end: getBrowser → getPage → humanNavigate to
+            example.com → captureStep(jobId='aaaaaaaaaaaa', stepN=1) →
+            screenshot file exists at correct path
+          · captureStep idempotent: 同 stepN 调 2 次, 第二次覆盖第一次
+          · Crash recovery: 手动 _context.close() → 下次 getBrowser() 启动
+            NEW context (不 throw)
+          · listScreenshots returns sorted by stepN (001 → 002 → 003)
+          · gitignore verification: data/career/.playwright/ 不在 git
+            status output (避免误 commit Chromium profile)
+
+      ROOM COMPLETE rollups:
+        - room.yaml: lifecycle planning → active
+        - _tree.yaml: 02-playwright-runtime planning → active
+        - 07-applier parent: 14% → 25% (2/8 children ✅)
+        - 04-career-system: 87% → 88% (24/34 features)
+
+      下游 unblocked:
+        - 08-snapshot-refs-layer (拿到 getBrowser + getPage + humanDelay
+          原料 + screenshot helper)
+        - self-iteration/01-code-calibration (eval runner 用 getBrowser
+          加载离线 fixture HTML)
+        - self-iteration/02-data-flywheel (heuristics 学习需要 captureStep
+          数据反馈)
+
+      验收:
+        - 5/5 smoke green
+        - 手动跑: getPage → goto example.com → captureStep('test', 1) →
+          打开 data/career/.playwright/screenshots/test/001-step.jpg 能看
+          到截图内容
+        - 手动 kill Chromium 进程 (pkill -9 chromium) → 下次 getBrowser()
+          自动 launch 新 context, server.mjs 没崩
+        - .gitignore 含 data/career/.playwright/ → git status 不暴露
+          profile 文件
+
+commits: []
+current_sprint: "Sprint 14 — Mode 2 Lock + Playwright Runtime"
 blockers: []
-status_note: "Feature 暂搁置（backlog），未来再评估优先级。"
-last_updated: "2026-04-22"
+status_note: "🔄 planning (milestones locked 2026-05-11). Plan A (Foundation-first) accepted. 3 milestones (~450 LOC + ~330 smoke). OQ1-7 locked: stealth via playwright-extra + puppeteer-extra-plugin-stealth, smoke headless via SMOKE env, bot.sannysoft.com test, V1 sequential, bundled Chromium, JPEG q70 screenshots, auto-recreate on crash. OQ8 (added during planning): per-apply new Page (跟 agent-browser session-per-task 一致). m1 解锁 08-snapshot-refs-layer 起步. Next action: dev m1-singleton-browser-persistent-profile."
+last_updated: "2026-05-11"
