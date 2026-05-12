@@ -238,7 +238,7 @@ commits:
       - "intent-playwright-runtime-001 (anchors added: humanize.mjs + smoke-applier-stealth.mjs)"
     milestones_affected:
       - "m2-stealth-plugin-human-timing (→ completed)"
-  - hash: "PENDING"
+  - hash: "1ea61d4"
     date: "2026-05-11"
     message: "[04-career-system/07-applier/02-playwright-runtime] m3: screenshot capture + crash recovery + ROOM COMPLETE (smoke 11/11)"
     files_changed: 5
