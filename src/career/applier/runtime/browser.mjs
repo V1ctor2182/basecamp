@@ -1,6 +1,6 @@
 // Playwright browser singleton — module-scoped daemon for 07-applier Mode 2.
 //
-// 07-applier/02-playwright-runtime m1.
+// 07-applier/02-playwright-runtime m1 + m2.
 //
 // First use of Playwright in this project. Other Rooms (08-snapshot-refs-
 // layer, self-iteration/01-code-calibration, etc.) will import getBrowser /
@@ -16,14 +16,28 @@
 //   - SIGTERM / SIGINT cleanup so we don't leak Chromium zombies
 //   - race guard around getBrowser() — concurrent first-callers share one
 //     launch Promise instead of spawning duplicate Chromium processes
+//   - m2: stealth plugin via playwright-extra — suppresses navigator.webdriver,
+//     fakes plugins/languages/permissions, hides automation flags
 //
-// 设计哲学: 单例 = agent-browser daemon warmth 模式. m2 加 stealth plugin
-// (重新 import chromium from playwright-extra), m3 加 crash detection + per-
-// step screenshot helper. m1 only ships the bare lifecycle.
+// 设计哲学: 单例 = agent-browser daemon warmth 模式. m3 will add crash
+// detection + per-step screenshot helper.
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { chromium } from 'playwright';
+import { chromium as chromiumExtra } from 'playwright-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+
+// m2: install stealth at module load. Guard is necessary because test
+// runners (Vitest / Jest with module reset) re-evaluate this module while
+// `chromiumExtra` itself stays in the underlying require cache — without
+// the guard, `.use(StealthPlugin())` would append to the plugin array
+// every reset, causing each evasion's `Object.defineProperty` calls to
+// re-fire on a non-configurable target and throw. (C2 fix from review.)
+const STEALTH_INSTALLED = Symbol.for('learn.applier.stealthInstalled');
+if (!chromiumExtra[STEALTH_INSTALLED]) {
+  chromiumExtra.use(StealthPlugin());
+  chromiumExtra[STEALTH_INSTALLED] = true;
+}
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -64,13 +78,15 @@ const CLOSE_TIMEOUT_MS = 5_000;
 async function launch() {
   await fs.mkdir(USER_DATA_DIR, { recursive: true });
 
-  const ctx = await chromium.launchPersistentContext(USER_DATA_DIR, {
+  const ctx = await chromiumExtra.launchPersistentContext(USER_DATA_DIR, {
     headless: HEADLESS,
     viewport: { width: 1440, height: 900 },
     args: [
       '--no-first-run',
-      // Pre-stealth (m2 will add full stealth plugin); this single flag
-      // covers the most-checked navigator.webdriver path on its own.
+      // Belt-and-suspenders: stealth plugin handles webdriver via JS
+      // injection; this flag also disables the underlying Chromium feature
+      // that exposes it. Removing either path is fine; keeping both is
+      // defense-in-depth for older Chromium versions.
       '--disable-blink-features=AutomationControlled',
     ],
     timeout: BROWSER_LAUNCH_TIMEOUT_MS,

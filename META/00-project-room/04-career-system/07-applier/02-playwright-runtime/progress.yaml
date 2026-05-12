@@ -76,7 +76,7 @@ milestones:
 
   - id: "m2-stealth-plugin-human-timing"
     name: "playwright-extra + stealth plugin + 100-400ms random delays"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/runtime/browser.mjs"
       - "src/career/applier/runtime/humanize.mjs"
@@ -230,7 +230,15 @@ commits:
       - "intent-playwright-runtime-001 (anchors added: browser.mjs + smoke-applier-browser.mjs)"
     milestones_affected:
       - "m1-singleton-browser-persistent-profile (→ completed)"
+  - hash: "PENDING"
+    date: "2026-05-11"
+    message: "[04-career-system/07-applier/02-playwright-runtime] m2: stealth plugin + human-like timing helpers (smoke 13/13)"
+    files_changed: 4
+    specs_affected:
+      - "intent-playwright-runtime-001 (anchors added: humanize.mjs + smoke-applier-stealth.mjs)"
+    milestones_affected:
+      - "m2-stealth-plugin-human-timing (→ completed)"
 current_sprint: "Sprint 14 — Mode 2 Lock + Playwright Runtime"
 blockers: []
-status_note: "🟢 1/3 milestones done. m1 shipped — singleton browser module (~225 LOC + ~254 LOC smoke, 9/9 green). Race guard (_closing) + WeakMap for jobId + 5s ctx.close() timeout + persistence round-trip smoke + navigator.webdriver verification — all added during Phase 3.5 review (plan-agent surfaced 3 CRITICAL + 1 HIGH + 1 MEDIUM + smoke coverage gaps, all addressed). vite build clean. 08-snapshot-refs-layer now UNBLOCKED to start its plan-milestones. Next: dev m2-stealth-plugin-human-timing (playwright-extra + stealth + humanDelay) OR pause to plan-milestones 08 (parallel-development unblock)."
+status_note: "🟢 2/3 milestones done. m1 ✅ (~225 LOC browser.mjs + ~254 LOC smoke, 9/9). m2 ✅ (humanize.mjs NEW ~110 LOC + browser.mjs +stealth integration + smoke-applier-stealth.mjs NEW ~245 LOC, 13/13). m2 Phase 3.5 review: 2 CRITICAL + 4 HIGH + 6 MEDIUM + 1 LOW fixed (Intl.Segmenter for grapheme-safe humanType, Symbol.for() idempotency guard for stealth.use, humanClick visibility-wait, humanNavigate waitUntil option, smoke bounds widened for CI jitter, 4 new smoke cases: auto-spawn-page-stealth / keydown-count / NFD-grapheme / waitUntil-propagation + L6 stealth-survives-relaunch). m2 also refactored API: humanType/humanClick both take Locator (consistent), humanNavigate stays Page-scoped. 18 smoke total (9 m1 + 13 m2) all green; vite build clean. Next: dev m3-screenshot-crash-recovery + ROOM COMPLETE."
 last_updated: "2026-05-11"
