@@ -46,6 +46,10 @@ export const SNAPSHOT_ERROR_CODES = Object.freeze({
   // m3: upload() couldn't access the file (not absolute path / not a
   // regular file / ENOENT). Pre-action validation, no table mutation.
   UPLOAD_FAILED: 'UPLOAD_FAILED',
+  // H5 from holistic review: select() called with an option value/label/
+  // index that doesn't exist in the combobox's options. Playwright throws
+  // a specific error we now classify rather than re-throwing raw.
+  OPTION_NOT_FOUND: 'OPTION_NOT_FOUND',
 });
 
 /**
@@ -175,6 +179,17 @@ export class SnapshotError extends Error {
       cause,
     });
   }
+
+  static optionNotFound(refId, entry, option, cause) {
+    return new SnapshotError({
+      code: SNAPSHOT_ERROR_CODES.OPTION_NOT_FOUND,
+      message: `option ${JSON.stringify(option)} not present in combobox ${refId} (role=${entry?.role} name=${JSON.stringify(entry?.name)})`,
+      hint: 'Call snapshot() to inspect available options, or use {value} / {index} variant.',
+      refId,
+      entry,
+      cause,
+    });
+  }
 }
 
 /**
@@ -225,6 +240,16 @@ export function classifyPlaywrightError(err) {
     )
   ) {
     return SNAPSHOT_ERROR_CODES.ACTION_TIMEOUT;
+  }
+  // H5 fix from holistic review: selectOption with a bogus value/label/index
+  // surfaces in Playwright as a TimeoutError whose body contains
+  // "did not find some options" (Playwright retries indefinitely hoping
+  // the option appears, hits the timeout, then throws). Match BEFORE
+  // the generic timeout catch-all below so OPTION_NOT_FOUND wins.
+  // Older Playwright versions may have used "not present in the list"
+  // / "no such option" — kept those patterns for compat.
+  if (/did not find some options?|not present in the list|no such option/i.test(msg)) {
+    return SNAPSHOT_ERROR_CODES.OPTION_NOT_FOUND;
   }
   // Strict mode (multiple matches) — usually means our nth() resolved
   // ambiguously; treat as element-gone for retry semantics

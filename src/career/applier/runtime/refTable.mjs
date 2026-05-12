@@ -25,7 +25,7 @@ export class RefTable {
    *   detection)
    */
   constructor(page) {
-    /** @type {Map<string, { role: string, name: string, occurrenceIndex: number, frame: import('playwright').Frame | null }>} */
+    /** @type {Map<string, { role: string, name: string, occurrenceIndex: number, frame: import('playwright').Frame | null, backendNodeId: number | null }>} */
     this._entries = new Map();
     /** @type {Map<string, number>} */
     this._mintedGen = new Map();
@@ -43,12 +43,22 @@ export class RefTable {
    * @param {number} occurrenceIndex — 0-based among (role, name) duplicates
    * @param {import('playwright').Frame} [frame=null] — null for top-level
    *   Page; iframe Frame for inline-recursed content (m2)
+   * @param {number | null} [backendNodeId=null] — CDP backend DOM node id
+   *   from the AX tree. Stored for forward-compat with the Plan A→B
+   *   hybrid migration (per-action CDP swap needs this for box-model
+   *   lookups / Input event dispatch). H7 fix from holistic review.
    * @returns {string} the minted ref like "e1"
    */
-  mint(role, name, occurrenceIndex, frame = null) {
+  mint(role, name, occurrenceIndex, frame = null, backendNodeId = null) {
     this._counter += 1;
     const refId = `e${this._counter}`;
-    this._entries.set(refId, { role, name, occurrenceIndex, frame });
+    this._entries.set(refId, {
+      role,
+      name,
+      occurrenceIndex,
+      frame,
+      backendNodeId,
+    });
     this._mintedGen.set(refId, this._currentGen);
     return refId;
   }
@@ -66,6 +76,12 @@ export class RefTable {
   /**
    * Resolve a ref to a Playwright Locator scoped to its owning frame.
    * Throws SnapshotError instances (m2 — was plain Error in m1).
+   *
+   * **INTERNAL** — H4 from holistic review: this returns a raw Playwright
+   * Locator, which is exactly what C1 forbids leaking to the LLM tool
+   * surface. Only the action verbs (click/fill/select/press/upload) and
+   * captureElement should call resolve(). MUST NOT be re-exported to
+   * any LLM-facing MCP/tool-registration layer.
    *
    * @param {string} refId
    * @param {import('playwright').Page} page
@@ -97,8 +113,36 @@ export class RefTable {
     return this._entries.has(refId);
   }
 
+  /**
+   * Return the raw entry for a refId. **INTERNAL** — entry.frame is a
+   * raw Playwright Frame object; entry.backendNodeId is a CDP-internal
+   * ID. C1 forbids leaking these to the LLM tool surface. If you need
+   * a sanitized projection for logging / dashboard rendering, use
+   * publicEntry() instead.
+   */
   get(refId) {
     return this._entries.get(refId);
+  }
+
+  /**
+   * Sanitized projection of an entry safe to expose to LLM logs /
+   * dashboards. Strips frame + backendNodeId (raw Playwright/CDP refs).
+   * Returns null on unknown ref. H4 fix from holistic review.
+   *
+   * @param {string} refId
+   * @returns {{ refId: string, role: string, name: string, occurrenceIndex: number, frameIdx: number } | null}
+   */
+  publicEntry(refId) {
+    const e = this._entries.get(refId);
+    if (!e) return null;
+    return {
+      refId,
+      role: e.role,
+      name: e.name,
+      occurrenceIndex: e.occurrenceIndex,
+      // Just a boolean signal "is this in an iframe" — no Frame ref leaked
+      frameIdx: e.frame ? 1 : 0,
+    };
   }
 
   size() {

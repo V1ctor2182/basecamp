@@ -24,6 +24,8 @@ import {
   select,
   press,
   upload,
+  check,
+  uncheck,
 } from '../src/career/applier/runtime/actions.mjs';
 import { captureElement } from '../src/career/applier/runtime/elementScreenshot.mjs';
 import { SNAPSHOT_ERROR_CODES } from '../src/career/applier/runtime/errors.mjs';
@@ -339,6 +341,61 @@ try {
       memDeltaMB < 10,
       `external memory grew ${memDeltaMB.toFixed(1)}MB across 8 cycles — possible leak`,
     );
+    await page.close();
+  });
+
+  // ── 8b. check/uncheck verbs (H3 from holistic review) ──────────────
+  // Greenhouse EEO consent + Workday "I agree" checkboxes — previously
+  // had to use click() which silently failed on fancy ATS toggles.
+  await test('check(@checkbox) toggles a checkbox; uncheck reverses', async () => {
+    const page = await getPage();
+    await page.goto(
+      'data:text/html;charset=utf-8,' +
+        encodeURIComponent(
+          `<input type="checkbox" id="cb" aria-label="I agree"><label for="cb">I agree</label>`,
+        ),
+    );
+    let { text, table } = await snapshot(page);
+    const cbRef = text
+      .split('\n')
+      .find((l) => l.includes('"I agree"'))
+      .match(/\[ref=(e\d+)\]/)[1];
+    assert.equal(await page.locator('#cb').isChecked(), false, 'pre: unchecked');
+    await check(page, table, cbRef);
+    assert.equal(await page.locator('#cb').isChecked(), true, 'after check: checked');
+    assert.equal(table.generation(), 1, 'check bumps generation');
+    // uncheck — needs fresh snapshot since table is stale
+    ({ text, table } = await snapshot(page));
+    const cbRef2 = text.split('\n').find((l) => l.includes('"I agree"')).match(/\[ref=(e\d+)\]/)[1];
+    await uncheck(page, table, cbRef2);
+    assert.equal(await page.locator('#cb').isChecked(), false, 'after uncheck: unchecked');
+    await page.close();
+  });
+
+  // ── 8c. check on a button → ROLE_MISMATCH ────────────────────────────
+  await test('check on non-checkbox throws ROLE_MISMATCH', async () => {
+    const page = await getPage();
+    await page.goto(ATS_DATA_URL);
+    const { text, table } = await snapshot(page);
+    const submitRef = text.split('\n').find((l) => l.includes('"Submit Application"')).match(/\[ref=(e\d+)\]/)[1];
+    let caught;
+    try { await check(page, table, submitRef); } catch (e) { caught = e; }
+    assert.equal(caught?.code, 'ROLE_MISMATCH');
+    assert.equal(table.generation(), 0, 'caller error must not invalidate');
+    await page.close();
+  });
+
+  // ── 8d. select with bogus option → OPTION_NOT_FOUND (H5 holistic) ──
+  await test('select with non-existent option throws OPTION_NOT_FOUND', async () => {
+    const page = await getPage();
+    await page.goto(ATS_DATA_URL);
+    const { text, table } = await snapshot(page);
+    const expRef = text.split('\n').find((l) => l.includes('"Years of Experience"')).match(/\[ref=(e\d+)\]/)[1];
+    let caught;
+    try { await select(page, table, expRef, 'BogusOption'); } catch (e) { caught = e; }
+    assert.equal(caught?.code, 'OPTION_NOT_FOUND', `expected OPTION_NOT_FOUND, got ${caught?.code}`);
+    // OPTION_NOT_FOUND happens INSIDE _runAction → IS invalidating (action-time failure)
+    assert.equal(table.generation(), 1, 'action-time failure still invalidates');
     await page.close();
   });
 

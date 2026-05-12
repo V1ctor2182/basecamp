@@ -67,6 +67,12 @@ async function _runAction({ page, refTable, refId, actionName, timeout }, fn) {
     if (code === SNAPSHOT_ERROR_CODES.ELEMENT_GONE) {
       throw SnapshotError.elementGone(refId, entry, err);
     }
+    // H5 fix from holistic review: route OPTION_NOT_FOUND for select() misses.
+    // We don't have the option arg here, but the Playwright error message
+    // already includes it; factory preserves the cause for downstream parse.
+    if (code === SNAPSHOT_ERROR_CODES.OPTION_NOT_FOUND) {
+      throw SnapshotError.optionNotFound(refId, entry, '(see cause)', err);
+    }
     // Unknown error pattern — re-throw original so we don't silently
     // swallow real bugs. Downstream Rooms can log + decide.
     throw err;
@@ -191,6 +197,55 @@ export async function press(page, refTable, refId, key, opts = {}) {
  * @param {string} filePath — absolute path to the file
  * @param {{ timeout?: number }} [opts]
  */
+/**
+ * Check a checkbox / radio identified by `refId`. Uses Playwright's
+ * locator.check() which auto-waits + verifies the post-state — robust
+ * against fancy ATS-styled toggles that swallow plain `click`. H3 fix
+ * from holistic review — was a known reliability hole on Greenhouse
+ * EEO consent checkboxes when downstream Rooms tried plain `click()`.
+ *
+ * Refuses early with ROLE_MISMATCH if the ref's role isn't checkbox
+ * or radio.
+ *
+ * @param {import('playwright').Page} page
+ * @param {import('./refTable.mjs').RefTable} refTable
+ * @param {string} refId
+ * @param {{ timeout?: number }} [opts]
+ */
+export async function check(page, refTable, refId, opts = {}) {
+  const { timeout = DEFAULT_TIMEOUT_MS } = opts;
+  const entry = refTable.get(refId);
+  if (entry !== undefined && !['checkbox', 'radio'].includes(entry.role)) {
+    throw SnapshotError.roleMismatch(refId, entry, 'checkbox|radio', 'check');
+  }
+  return _runAction(
+    { page, refTable, refId, actionName: 'check', timeout },
+    (locator) => locator.check({ timeout }),
+  );
+}
+
+/**
+ * Uncheck a checkbox identified by `refId`. Mirror of check() — radios
+ * are not unchecked individually (selecting another radio replaces),
+ * so this is checkbox-only.
+ *
+ * @param {import('playwright').Page} page
+ * @param {import('./refTable.mjs').RefTable} refTable
+ * @param {string} refId
+ * @param {{ timeout?: number }} [opts]
+ */
+export async function uncheck(page, refTable, refId, opts = {}) {
+  const { timeout = DEFAULT_TIMEOUT_MS } = opts;
+  const entry = refTable.get(refId);
+  if (entry !== undefined && entry.role !== 'checkbox') {
+    throw SnapshotError.roleMismatch(refId, entry, 'checkbox', 'uncheck');
+  }
+  return _runAction(
+    { page, refTable, refId, actionName: 'uncheck', timeout },
+    (locator) => locator.uncheck({ timeout }),
+  );
+}
+
 export async function upload(page, refTable, refId, filePath, opts = {}) {
   const { timeout = DEFAULT_TIMEOUT_MS } = opts;
   // M5 fix from review: check ref FIRST so unknown/stale refs surface

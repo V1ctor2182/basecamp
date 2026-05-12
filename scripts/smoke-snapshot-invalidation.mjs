@@ -275,6 +275,78 @@ try {
     await page.close();
   });
 
+  // ── 8c. iframe refs emit [iframe] state tag (H1 from holistic review) ──
+  // LLM needs visual disambiguation when outer + iframe both have same role+name.
+  await test('iframe-scoped refs include [iframe] state tag for LLM disambiguation', async () => {
+    const page = await getPage();
+    await page.goto(IFRAME_DATA_URL);
+    await page.locator('iframe').first().waitFor({ state: 'attached' });
+    const innerFrame = page.frames().find((f) => f !== page.mainFrame());
+    await innerFrame.waitForLoadState('domcontentloaded');
+    const { text } = await snapshot(page);
+    // Outer "OuterButton" line should NOT have [iframe]
+    const outerLine = text.split('\n').find((l) => l.includes('"OuterButton"'));
+    assert.ok(outerLine, 'expected outer button line');
+    assert.ok(!outerLine.includes('[iframe]'), `outer must not have [iframe]: ${outerLine}`);
+    // Inner "InnerSubmit" line SHOULD have [iframe]
+    const innerLine = text.split('\n').find((l) => l.includes('"InnerSubmit"'));
+    assert.ok(innerLine, 'expected inner submit line');
+    assert.ok(innerLine.includes('[iframe]'), `inner must have [iframe]: ${innerLine}`);
+    await page.close();
+  });
+
+  // ── 8d. skippedFrames returned in snapshot result (C1 from holistic) ──
+  await test('snapshot return value includes skippedFrames count', async () => {
+    const page = await getPage();
+    await page.goto('data:text/html,<button>only</button>');
+    const result = await snapshot(page);
+    assert.equal(typeof result.skippedFrames, 'number');
+    assert.equal(result.skippedFrames, 0, 'no skipped frames on simple page');
+    await page.close();
+  });
+
+  // ── 8e. RefTable.publicEntry sanitizes (no Frame/backendNodeId leak, H4) ─
+  await test('refTable.publicEntry strips Frame + backendNodeId (LLM-safe projection)', async () => {
+    const page = await getPage();
+    await page.goto(IFRAME_DATA_URL);
+    await page.locator('iframe').first().waitFor({ state: 'attached' });
+    const innerFrame = page.frames().find((f) => f !== page.mainFrame());
+    await innerFrame.waitForLoadState('domcontentloaded');
+    const { text, table } = await snapshot(page);
+    const innerRef = text
+      .split('\n')
+      .find((l) => l.includes('"InnerSubmit"'))
+      .match(/\[ref=(e\d+)\]/)[1];
+    const projection = table.publicEntry(innerRef);
+    assert.ok(projection, 'expected public entry');
+    assert.equal(projection.refId, innerRef);
+    assert.equal(projection.role, 'button');
+    assert.equal(projection.name, 'InnerSubmit');
+    assert.equal(projection.frameIdx, 1, 'iframe ref has frameIdx=1');
+    // Critical: no Frame object leak, no backendNodeId leak
+    assert.equal(projection.frame, undefined, 'must NOT include raw Frame');
+    assert.equal(projection.backendNodeId, undefined, 'must NOT include backendNodeId');
+    // Null on unknown ref
+    assert.equal(table.publicEntry('e999'), null);
+    await page.close();
+  });
+
+  // ── 8f. RefTable carries backendNodeId for forward-compat (H7) ─────
+  await test('refTable entry carries backendNodeId from AX tree (forward-compat to CDP)', async () => {
+    const page = await getPage();
+    await page.goto('data:text/html,<button>X</button>');
+    const { table } = await snapshot(page);
+    for (const refId of table.refIds()) {
+      const entry = table.get(refId);
+      assert.ok(
+        typeof entry.backendNodeId === 'number',
+        `entry ${refId} should have backendNodeId; got ${entry.backendNodeId}`,
+      );
+      assert.ok(entry.backendNodeId > 0);
+    }
+    await page.close();
+  });
+
   // ── 9. SnapshotError.toLLMMessage produces single-line LLM-readable text ─
   await test('SnapshotError.toLLMMessage returns single-line message with code + hint', async () => {
     const err = SnapshotError.staleRef('e3', { role: 'button', name: 'Save' }, 0, 1);

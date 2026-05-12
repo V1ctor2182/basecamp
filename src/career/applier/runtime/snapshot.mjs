@@ -163,7 +163,13 @@ function readStates(axNode) {
  * and emit one record per node in document order. CDP returns nodes
  * in tree-traversal order so document-order is already correct.
  *
- * @returns {{ role: string, name: string, states: string[] }[]}
+ * Carries backendNodeId per H7 holistic review — needed for future
+ * hybrid Plan A→B migration (per-action CDP swap requires
+ * backendNodeId to compute box model / dispatch Input events). Storing
+ * it now is ~3 LOC; retrofitting during migration would be a Room-wide
+ * refactor.
+ *
+ * @returns {{ role: string, name: string, states: string[], backendNodeId: number | null }[]}
  */
 function pruneAxTree(rawNodes) {
   const result = [];
@@ -173,7 +179,8 @@ function pruneAxTree(rawNodes) {
     const name = resolveAccessibleName(n);
     if (!name) continue; // Q4: no name → skip (m1 simplification)
     const states = readStates(n);
-    result.push({ role, name, states });
+    const backendNodeId = n.backendDOMNodeId ?? null;
+    result.push({ role, name, states, backendNodeId });
   }
   return result;
 }
@@ -187,7 +194,17 @@ const NAME_DISPLAY_CAP = 80;
 
 function normalizeName(rawName) {
   if (!rawName) return '';
-  return rawName.replace(CONTROL_CHARS_RE, '').replace(/\s+/g, ' ').trim();
+  // H2 fix: replace ASCII double-quote with single-quote in the stored
+  // name BEFORE it reaches the RefTable + display. This way display and
+  // storage stay identical (Playwright's getByRole({ name }) sees the
+  // same string) AND the emitted snapshot lines are parseable by the
+  // simple `"[^"]*"` regex downstream Rooms use. ~Zero LLM-disambig
+  // value lost since ATS field labels almost never contain literal `"`.
+  return rawName
+    .replace(CONTROL_CHARS_RE, '')
+    .replace(/"/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
@@ -195,21 +212,18 @@ function normalizeName(rawName) {
  *   `- role "name" [ref=eN] [state1] [state2]`
  *
  * The `name` passed in MUST already be the normalized form stored in the
- * RefTable — we do NOT re-sanitize here, so display and storage stay in
- * sync. (C1 + C2 fix from review.) If the name is longer than
- * NAME_DISPLAY_CAP we emit a `[truncated]` marker so the LLM knows two
- * identically-displayed lines may not represent identical elements.
+ * RefTable — normalizeName() handled control chars, zero-width, AND
+ * quote-to-apostrophe (H2 fix from holistic review) so we don't need
+ * escaping here. Display = storage = what getByRole sees.
  *
- * Quotes inside name are escaped to '\\"' (JSON-style) so the line stays
- * parseable as a simple `- role "..." [ref=...]` regex.
+ * isIframe=true emits `[iframe]` state so the LLM can disambiguate
+ * cross-frame role+name duplicates (H1 fix from holistic review).
  */
-function serializeNode(role, name, refId, states) {
+function serializeNode(role, name, refId, states, isIframe = false) {
   const truncated = name.length > NAME_DISPLAY_CAP;
-  const displayName = (truncated ? name.slice(0, NAME_DISPLAY_CAP) : name).replace(
-    /"/g,
-    '\\"',
-  );
+  const displayName = truncated ? name.slice(0, NAME_DISPLAY_CAP) : name;
   let line = `- ${role} "${displayName}" [ref=${refId}]`;
+  if (isIframe) line += ' [iframe]';
   if (truncated) line += ' [truncated]';
   for (const state of states) {
     line += ` [${state}]`;
@@ -279,27 +293,33 @@ export async function snapshot(page) {
 
   const table = new RefTable(page);
   const lines = [];
+  // C1 fix from holistic review: track skipped frames so callers know
+  // the snapshot is partial. Silent skipping would make debugging real-
+  // ATS issues a nightmare for 6 downstream Rooms.
+  let skippedFrames = 0;
 
   for (let i = 0; i < frameCount; i++) {
     const pwFrame = pwFrames[i];
     const cdpFrame = cdpFrames[i];
-    // Skip detached frames — they're zombies from a mid-load race
-    if (pwFrame.isDetached()) continue;
-    // H1 fix from review: URL sanity check on the parallel zip. If a frame
-    // attached/detached between the synchronous pwFrames walk and the
-    // async Page.getFrameTree round-trip, indices can correspond to
-    // DIFFERENT frames. Skip rather than mint refs against the wrong
-    // frame. Top-level (i=0) may have `about:blank` from both sides at
-    // launch — accept that; otherwise URLs should match.
+    // Skip detached frames — zombies from a mid-load race
+    if (pwFrame.isDetached()) {
+      skippedFrames++;
+      continue;
+    }
+    // URL sanity check (H1 from m2 review) — guard mid-snapshot races
     if (
       i > 0 &&
       pwFrame.url() &&
       cdpFrame.url &&
       pwFrame.url() !== cdpFrame.url
     ) {
+      console.warn(
+        `[snapshot] frame ${i} URL mismatch (pw=${pwFrame.url()} cdp=${cdpFrame.url}) — skipping; possible mid-snapshot race`,
+      );
+      skippedFrames++;
       continue;
     }
-    // Top frame: no frameId param (defaults to top); iframe: pass frameId
+    // Top frame: no frameId; iframe: pass frameId
     const args = i === 0 ? {} : { frameId: cdpFrame.id };
     let nodes;
     try {
@@ -310,33 +330,33 @@ export async function snapshot(page) {
       );
       nodes = result.nodes;
     } catch (err) {
-      // Per-frame fetch failure — skip this frame, keep going on others.
-      // Cross-origin iframes throw here; we silently skip rather than
-      // failing the whole snapshot.
+      // Per-frame fetch failure (cross-origin iframe etc.) — count it
+      // and continue. C1 fix: was silently skipping; now logged + counted.
+      console.warn(
+        `[snapshot] frame ${i} AX tree fetch failed (${err.message}) — skipping; likely cross-origin`,
+      );
+      skippedFrames++;
       continue;
     }
     const pruned = pruneAxTree(nodes);
-    // Pass null frame for top-level so resolve() uses Page; otherwise
-    // pass the Frame so resolve() scopes getByRole to that frame.
     const refFrame = i === 0 ? null : pwFrame;
-    // Occurrence-index is PER FRAME — getByRole runs within frame scope
-    // so nth(N) only sees that frame's matches. Cross-frame role+name
-    // duplicates therefore share occurrenceIndex 0 each, but distinct
-    // refIds (the LLM-facing handle).
+    const isIframe = i > 0;
     /** @type {Map<string, number>} */
     const frameOccurrenceCounts = new Map();
-    for (const { role, name, states } of pruned) {
+    for (const { role, name, states, backendNodeId } of pruned) {
       const key = `${role}::${name}`;
       const occurrenceIndex = frameOccurrenceCounts.get(key) || 0;
       frameOccurrenceCounts.set(key, occurrenceIndex + 1);
-      const refId = table.mint(role, name, occurrenceIndex, refFrame);
-      lines.push(serializeNode(role, name, refId, states));
+      const refId = table.mint(role, name, occurrenceIndex, refFrame, backendNodeId);
+      lines.push(serializeNode(role, name, refId, states, isIframe));
     }
   }
 
+  // C1: return skippedFrames so callers can detect partial snapshots.
   return {
     text: lines.join('\n'),
     table,
+    skippedFrames,
   };
 }
 
