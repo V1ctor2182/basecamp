@@ -17,6 +17,10 @@ provenance:
   confidence: 0.9
   source_ref: "career-architecture/06-applier.md#6.1-运行时环境"
 relations: []
-anchors: []
+anchors:
+  - file: "src/career/applier/runtime/browser.mjs"
+    description: "m1: ~225 LOC singleton Playwright browser. Module-scoped mutable state (_context/_starting/_closing) backed by launchPersistentContext at data/career/.playwright/profile/. getBrowser() lazy-launches with race guard (concurrent first-callers share one launch Promise; _closing blocks new launches during in-flight teardown). getPage(jobId?) returns per-apply newPage with WeakMap jobId tag (NOT Object.defineProperty — survives Playwright internal Page wrapping). closeBrowser() builds _closing promise atomically + closes individual pages first (avoids mid-nav stderr noise) + races ctx.close() against 5s timeout (H3 hang protection). SIGTERM/SIGINT handlers async with explicit process.exit + fallback timer. HEADLESS = process.env.SMOKE==='1' (dev/prod headful per C1). args: ['--no-first-run', '--disable-blink-features=AutomationControlled'] (pre-stealth, m2 adds full plugin). Exports: getBrowser/getPage/getJobId/closeBrowser/_hasWarmContext/USER_DATA_DIR/PLAYWRIGHT_DIR/SCREENSHOTS_DIR/BROWSER_LAUNCH_TIMEOUT_MS."
+  - file: "scripts/smoke-applier-browser.mjs"
+    description: "m1 smoke: ~254 LOC, 9 asserts, pure-Node (SMOKE=1 enforced). 1=singleton identity, 1b=concurrent first-callers share launch (race guard), 2=getPage distinct + WeakMap jobId round-trip, 3=userDataDir + Default/ materialization, 4=closeBrowser idempotent, 5=fresh launch after close, 5b=localStorage/cookie persistence round-trip across closeBrowser/getBrowser cycle (THE core launchPersistentContext guarantee, H6 from review), 5c=navigator.webdriver != true (--disable-blink-features verification), 6=SIGTERM via child process (setInterval keep-alive, exit code 0/143/null all accepted). Fixture isolation: rename dev's real .playwright/profile → backup-suffix, restore on teardown."
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-11"

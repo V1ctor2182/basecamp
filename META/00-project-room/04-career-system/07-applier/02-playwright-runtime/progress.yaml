@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-singleton-browser-persistent-profile"
     name: "Module-singleton browser + persistent profile + lazy init + SIGTERM cleanup"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/runtime/browser.mjs"
       - "scripts/smoke-applier-browser.mjs"
@@ -221,8 +221,16 @@ milestones:
         - .gitignore 含 data/career/.playwright/ → git status 不暴露
           profile 文件
 
-commits: []
+commits:
+  - hash: "PENDING"
+    date: "2026-05-11"
+    message: "[04-career-system/07-applier/02-playwright-runtime] m1: singleton browser + persistent profile + lazy init + SIGTERM cleanup (smoke 9/9)"
+    files_changed: 3
+    specs_affected:
+      - "intent-playwright-runtime-001 (anchors added: browser.mjs + smoke-applier-browser.mjs)"
+    milestones_affected:
+      - "m1-singleton-browser-persistent-profile (→ completed)"
 current_sprint: "Sprint 14 — Mode 2 Lock + Playwright Runtime"
 blockers: []
-status_note: "🔄 planning (milestones locked 2026-05-11). Plan A (Foundation-first) accepted. 3 milestones (~450 LOC + ~330 smoke). OQ1-7 locked: stealth via playwright-extra + puppeteer-extra-plugin-stealth, smoke headless via SMOKE env, bot.sannysoft.com test, V1 sequential, bundled Chromium, JPEG q70 screenshots, auto-recreate on crash. OQ8 (added during planning): per-apply new Page (跟 agent-browser session-per-task 一致). m1 解锁 08-snapshot-refs-layer 起步. Next action: dev m1-singleton-browser-persistent-profile."
+status_note: "🟢 1/3 milestones done. m1 shipped — singleton browser module (~225 LOC + ~254 LOC smoke, 9/9 green). Race guard (_closing) + WeakMap for jobId + 5s ctx.close() timeout + persistence round-trip smoke + navigator.webdriver verification — all added during Phase 3.5 review (plan-agent surfaced 3 CRITICAL + 1 HIGH + 1 MEDIUM + smoke coverage gaps, all addressed). vite build clean. 08-snapshot-refs-layer now UNBLOCKED to start its plan-milestones. Next: dev m2-stealth-plugin-human-timing (playwright-extra + stealth + humanDelay) OR pause to plan-milestones 08 (parallel-development unblock)."
 last_updated: "2026-05-11"
