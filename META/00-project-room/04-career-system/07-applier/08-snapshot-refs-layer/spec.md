@@ -42,7 +42,56 @@ Mode 2 Full Agent 的 LLM-facing 抽象层，sits between 02-playwright-runtime 
 
 ## Estimated scope
 
-~300-500 LOC TypeScript + ~150-200 LOC smoke (~2-3 milestones)，单独可测可独立 commit。
+~670 LOC TypeScript + ~420 smoke (3 milestones)，单独可测可独立 commit。
+
+## 当前进度 — 🟢 planning (milestones locked 2026-05-12)
+
+**Hybrid plan accepted**: Plan A (Playwright Locator bridge) for V1 implementation, with CDP migration deferred to post-ROOM-COMPLETE based on real ATS data from 09-snapshot-eval-harness.
+
+| m | 内容 | LOC | 解锁 |
+|---|------|-----|------|
+| **m1** | Snapshot core (CDP a11y) + ref table + click/fill via Playwright Locator | ~280 + 150 smoke | 基础 LLM-facing API |
+| m2 | Pessimistic invalidation + unified error codes + iframe inline-recurse | ~220 + 120 smoke | 真 ATS 健壮性 |
+| m3 | select/press/upload + element screenshot + integration + ROOM COMPLETE | ~170 + 150 smoke | 03/04/05/06 + self-iteration/01+02 |
+
+### Locked OQ
+
+| OQ | 决定 |
+|----|------|
+| Q1 iframe | inline-recurse (default) |
+| Q2 heading | keep (Workday 多步表单需要) |
+| Q3 timeout | 10s + per-action override |
+| Q4 icon button | fallback aria-label → title → skip |
+| Q5 drag-drop V1 | 不支持 (归 06-site-adapters) |
+| Q6 ref ID format | `e1` (agent-browser parity) |
+| **Q7 NEW** plan A vs B | **Hybrid — Plan A m1 起步, 后期数据驱动迁移 CDP** |
+| **Q8 NEW** disambiguator | `nth(occurrenceIndex)` 按文档顺序 |
+| **Q9 NEW** screenshot | element crop (clip 到 boundingBox) |
+
+### Hybrid migration path (post-ROOM-COMPLETE)
+
+**不是 milestone, 是机制说明**: Room ship 后跑 09-snapshot-eval-harness 找出 Playwright Locator auto-wait 解决不了的 case (e.g., Workday animated submit button)，**按需 per-action 迁移到 CDP**。每次迁移 ~10-30 LOC，不需要整 Room 重写。这样我们买 Plan A 的快速 ship + Plan B 的最终鲁棒性。
+
+**注**: m1 起 RefTable.mint 就携带 `backendNodeId` (H7 from holistic review)，CDP migration 时直接拿来用 — 不需要先做 Room-wide refactor.
+
+### Humanize boundary (H6 from holistic review)
+
+本 Room 的 action 动词 (click/fill/select/press/upload/check/uncheck) **故意不走 humanize.mjs 的 100-400ms 随机延迟** — 它们是 LLM-facing **fast path**，每个 action 已经被 pessimistic invalidation + re-snapshot 节奏控制了。
+
+如果下游 Room 真需要拟人化（非 LLM-driven、或反检测要求严格的某些 ATS），caller 自己 wrap：
+
+```js
+import { humanDelay } from '../runtime/humanize.mjs';
+import { click } from '../runtime/actions.mjs';
+await humanDelay(200, 500);
+await click(page, table, '@e2');
+```
+
+02-playwright-runtime 的 constraint "页面 interaction MUST 加 100-400ms 延迟" 是针对 **agent loop 节奏**而非每个 Playwright API call — pessimistic invalidation + snapshot 间隔已经 enforce 了人类节奏 (>500ms 间)。
+
+### CDP fact-check (2026-05-12)
+
+Playwright v1.50+ 移除了 `page.accessibility.snapshot()` API。所以**两个 plan 都用 CDP 做 snapshot 枚举** — 差别只在 action 层 (Locator vs raw CDP)。验证过 `Accessibility.getFullAXTree` via CDPSession 可用，返回 `role/name/backendNodeId` 节点列表。
 
 ## 验收 criteria (locked)
 

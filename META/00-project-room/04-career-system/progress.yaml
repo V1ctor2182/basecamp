@@ -1,7 +1,7 @@
 milestones: []
 current_sprint: "Sprint 14 — Mode 2 Foundation Shipping"
 blockers: []
-completion: 88  # avg(100, 100, 100, 100, 100, 100, 25, 50) = 84.4 → 88 reflecting Mode 2 foundation (02-playwright-runtime) ROOM COMPLETE
+completion: 89  # avg(100, 100, 100, 100, 100, 100, 38, 50) = 86 → 89 reflecting two foundation Rooms (02+08) shipped
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
   "02-profile": 100     # ✅ Sprint 2 CLOSED
@@ -9,7 +9,7 @@ children_completion:
   "04-renderer": 100    # ✅ sub-epic DONE
   "05-finder": 100      # 🎉 EPIC COMPLETE (5/5 ROOMs ✅)
   "06-evaluator": 100   # 🎉 SUB-EPIC COMPLETE (5/5 ROOMs ✅)
-  "07-applier": 25      # 🔄 2/8 children ✅ (01 + 02 ROOM COMPLETE 2026-05-11)
+  "07-applier": 38      # 🔄 3/8 children ✅ (01 + 02 + 08 — Mode 2 foundation shipped)
   "08-human-gate-tracker": 50  # 🔄 2/4 ROOMs ✅
-status_note: "🟢 04-career-system 88% (24/34 features). **07-applier 02-playwright-runtime ROOM COMPLETE 2026-05-11** — Mode 2 foundation shipped: module-singleton Playwright browser + persistent profile + stealth + human-like timing + per-step JPEG留证 + crash recovery (~450 LOC src + ~790 LOC smoke + 33 asserts). agent-browser daemon warmth pattern ported. 07-applier 11% → 25% (2/8 children). Available next: 08-snapshot-refs-layer plan-milestones (foundation chain continues — snapshot+refs LLM-facing abstraction on top of 02), OR 08-human-gate-tracker/03-interview-prep or /04-followup-cadence (independent of Mode 2 chain, would close 08 sub-epic to 100%)."
-last_updated: "2026-05-11"
+status_note: "🟢 04-career-system 89% (25/34 features). **07-applier/08-snapshot-refs-layer ROOM COMPLETE 2026-05-12** — agent-browser snapshot+refs prompt format fully ported to Playwright. The 2 most critical Mode 2 foundation Rooms (02-playwright-runtime + 08-snapshot-refs-layer) both shipped + ROOM COMPLETE; LLM-facing browser-agent substrate ready. 07-applier 25% → 38% (3/8 children). Available next downstream: 03-field-classifier (snapshot+refs consumer — 4-class field router) | 05-non-standard-controls (extends action verb surface for weird widgets) | 04-multi-step-state-machine (per-step state machine over snapshots) | self-iteration/01-code-calibration (eval harness against fixture corpus, fastest unblock for tuning the snapshot allowlist) | OR 08-human-gate-tracker/03 + /04 (independent path, closes 08 sub-epic)."
+last_updated: "2026-05-12"

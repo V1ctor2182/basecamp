@@ -1,7 +1,289 @@
-milestones: []
-current_sprint: null
-blockers:
-  - "Depends on 02-playwright-runtime m1+ (need Playwright browser + Page lifecycle to attach snapshot+refs onto)"
-completion: 0
-status_note: "🔄 planning. Mode 2 LOCKED 2026-05-11 — this Room is GO. Foundation Room for 03/04/05/06. ~300-500 LOC TS. MUST land after 02-playwright-runtime m1 (need a Playwright Page to snapshot against). 6 constraints (C1-C6) + 6 open questions (Q1-Q6) locked from review pass — Q1-Q6 final decisions deferred to plan-milestones with recommendations already given."
-last_updated: "2026-05-11"
+milestones:
+  - id: "m1-snapshot-core-ref-table-locator-actions"
+    name: "Snapshot serializer + ref table + click/fill via Playwright Locator bridge"
+    status: completed
+    estimated_files:
+      - "src/career/applier/runtime/snapshot.mjs"
+      - "src/career/applier/runtime/refTable.mjs"
+      - "src/career/applier/runtime/actions.mjs"
+      - "scripts/smoke-snapshot-core.mjs"
+    estimated_lines: 280
+    depends_on: []
+    complexity_flags: ["design_decisions", "external_api"]
+    open_questions: []
+    description: |
+      LLM-facing snapshot+refs core — enumerate interactive a11y nodes via
+      CDP, emit compact text, map symbolic refs to Playwright Locators.
+      Plan A (Locator bridge) chosen as V1 implementation per OQ7. Future
+      CDP migration triggered by 09-snapshot-eval-harness data (specific
+      ATS cases where Playwright auto-wait fails).
+
+      Locked design:
+        - Snapshot via CDP Accessibility.getFullAXTree (Playwright dropped
+          page.accessibility in v1.50+ — verified empirically 2026-05-12)
+        - Filter to INTERACTIVE_ROLES allowlist (Q2: heading kept as
+          navigation aid for Workday multi-step)
+        - Emit text: `- role "accessible-name" [ref=eN] [state?]`
+        - Ref ID format: `e1`/`e2`/... (Q6 — agent-browser parity)
+        - Ref table: eN → { role, name, occurrenceIndex } (Q8: nth() by
+          document order disambiguator)
+        - Icon button name='' → fallback aria-label → title → skip (Q4)
+        - Actions resolve via `page.getByRole(role, { name }).nth(idx)`
+        - Default action timeout 10s, per-action override accepted (Q3)
+
+      Files:
+        - src/career/applier/runtime/snapshot.mjs (~150 LOC):
+          · INTERACTIVE_ROLES allowlist (start: button/link/textbox/checkbox/
+            radio/combobox/menuitem/tab/heading — 09 will tune via tuner)
+          · async getCDPSession(page) — lazy-cache CDPSession per Page in
+            WeakMap (Accessibility.enable once)
+          · async snapshot(page) — returns { text, table }:
+              text:  multi-line "- role 'name' [ref=eN]" output
+              table: RefTable instance (see refTable.mjs)
+          · serializeNode(node, refIdx) — emit one line + relevant ARIA
+            state (required/checked/selected/expanded/disabled)
+          · resolveAccessibleName(node) — Q4 fallback chain
+          · pruneAxTree(rawNodes) — filter to allowlist + walk children
+
+        - src/career/applier/runtime/refTable.mjs (~50 LOC):
+          · class RefTable — per-Page generation, monotonic eN counter
+          · mint(role, name, occurrenceIndex) → "eN"
+          · resolve(refId, page) → Playwright Locator
+              const locator = page.getByRole(role, { name, exact: true })
+                .nth(occurrenceIndex)
+          · has(refId) — check ref exists in current generation
+          · size() — count of refs (smoke verification)
+
+        - src/career/applier/runtime/actions.mjs (~80 LOC):
+          · click(page, refTable, refId, opts?) — resolve + locator.click
+          · fill(page, refTable, refId, value, opts?) — resolve + locator.fill
+            Both: { timeout: 10_000 } default, override per opts (Q3)
+          · Wrap Playwright errors with our context (refId / role / name)
+          · m2 will add invalidation + unified error codes
+
+        - scripts/smoke-snapshot-core.mjs (~150 LOC, ~7 asserts):
+          · snapshot on simple fixture page (3 inputs + 2 buttons) returns
+            expected ref count + text format
+          · serializeNode output matches exact text contract (regex-test
+            against each line)
+          · INTERACTIVE_ROLES allowlist filter — non-interactive nodes
+            (generic / paragraph / image) dropped
+          · Icon-button name='' fallback: aria-label preferred over title,
+            title over skip (Q4)
+          · click @e2 on a button → button's onclick fires
+          · fill @e3 "alice@example.com" → input.value === "alice@..."
+          · refTable.has(unknownRef) === false; resolve(unknownRef) throws
+            UNKNOWN_REF error
+
+      验收:
+        - 7/7 smoke green
+        - 手动: load real Greenhouse Anthropic apply page (saved as fixture),
+          snapshot returns < 800 tokens (loose bound for m1; m2 iframe
+          adds more, 验收 (a) of 500 tokens really applies at m2)
+        - Sonnet sees the 4 main fields (First Name / Email / Phone / Resume)
+          in the text output (verified by manual eval, not auto)
+
+  - id: "m2-invalidation-error-codes-iframe-inline"
+    name: "Pessimistic invalidation + unified error codes + iframe inline-recurse"
+    status: completed
+    estimated_files:
+      - "src/career/applier/runtime/refTable.mjs"
+      - "src/career/applier/runtime/actions.mjs"
+      - "src/career/applier/runtime/snapshot.mjs"
+      - "src/career/applier/runtime/errors.mjs"
+      - "scripts/smoke-snapshot-invalidation.mjs"
+    estimated_lines: 220
+    depends_on: ["m1-snapshot-core-ref-table-locator-actions"]
+    complexity_flags: ["error_handling_heavy", "design_decisions"]
+    open_questions: []
+    description: |
+      Make snapshot+refs robust to real ATS reality:
+        (a) pessimistic invalidation after each mutating action (C3)
+        (b) unified error codes Playwright natives can't speak (C4)
+        (c) iframe inline-recurse — Greenhouse 90% form is in iframe (Q1)
+
+      Locked design:
+        - State machine: ref table has a generation counter; each action
+          increments generation; any ref from prior generation = STALE_REF
+        - Error codes: STALE_REF / UNKNOWN_REF / ELEMENT_GONE / ACTION_TIMEOUT
+          / IFRAME_DETACHED — each with hint "call snapshot first"
+        - iframe inline: walk page.frames(), enumerate AX tree per frame,
+          merge into one snapshot with global eN numbering; ref table
+          tracks which frame each ref belongs to
+        - SPA pushState invalidates ref table (page.on('framenavigated'
+          for top-level only, plus pessimistic post-action)
+
+      Files:
+        - src/career/applier/runtime/errors.mjs (~50 LOC):
+          · SnapshotError class extends Error
+          · Static factory: SnapshotError.staleRef(refId, currentGen, refGen)
+            / unknownRef(refId) / elementGone(refId, role, name) /
+            actionTimeout(refId, action, timeoutMs) / iframeDetached(frameUrl)
+          · Each carries: code (enum) / refId / message / hint /
+            { cause: PlaywrightError? }
+          · stringify() returns single-line LLM-readable error
+
+        - src/career/applier/runtime/refTable.mjs (~+40 LOC):
+          · Add _generation counter — incremented on invalidate()
+          · Add _refGen Map: refId → generation it was minted in
+          · resolve() throws SnapshotError.staleRef if generation mismatch
+          · invalidate() — increments generation, doesn't clear table
+            (lets stale-ref error report the actual previous role/name)
+
+        - src/career/applier/runtime/actions.mjs (~+40 LOC):
+          · Each action wraps Playwright call in try/catch:
+              - TimeoutError → ACTION_TIMEOUT
+              - "TargetClosed" / "ElementHandle" → ELEMENT_GONE
+              - "no element found" → ELEMENT_GONE
+              - everything else → re-throw (likely bug, don't swallow)
+          · Post-action: refTable.invalidate() — pessimistic
+
+        - src/career/applier/runtime/snapshot.mjs (~+50 LOC):
+          · enumerateFrames(page) — recursive page.frames() walk
+          · perFrameAxTree(frame, cdp) — get AX tree per frame
+            (cross-frame backendNodeIds are frame-local, so we tag refs
+            with frame index)
+          · Merge into single text output with global ref numbering;
+            ref table tracks { ..., frameIdx } for each entry
+          · resolve() routes via frame.getByRole instead of page.getByRole
+            when frameIdx > 0
+
+        - scripts/smoke-snapshot-invalidation.mjs (~120 LOC, ~6 asserts):
+          · snapshot → click @e1 → re-use @e1 without re-snapshot →
+            STALE_REF (not silent wrong action)
+          · snapshot → use @e99 (never minted) → UNKNOWN_REF
+          · snapshot → manually remove element from DOM → click → ELEMENT_GONE
+            (with role/name in error message for debugging)
+          · Greenhouse-style nested iframe fixture: snapshot includes BOTH
+            outer header (heading "Anthropic Careers") AND inner form
+            field (textbox "First Name"), unified numbering
+          · SPA history.pushState → top-level framenavigated fires →
+            refTable auto-invalidates → next action on any old ref →
+            STALE_REF
+          · 10s timeout actually fires on hung locator (test against
+            non-existent role) → ACTION_TIMEOUT (not raw "Timeout 30000ms")
+
+      验收:
+        - 6/6 smoke green
+        - 验收 (d): all 4 error codes round-trip on synthetic failures
+        - 验收 (e): SPA pushState fixture invalidates correctly
+        - Greenhouse iframe fixture: snapshot shows both layers,
+          ref click on iframe-inner button actually clicks correct frame
+
+  - id: "m3-remaining-actions-screenshot-integration-room-complete"
+    name: "Remaining actions (select/press/upload) + element screenshot + integration + ROOM COMPLETE"
+    status: completed
+    estimated_files:
+      - "src/career/applier/runtime/actions.mjs"
+      - "src/career/applier/runtime/elementScreenshot.mjs"
+      - "scripts/smoke-snapshot-integration.mjs"
+    estimated_lines: 170
+    depends_on: ["m2-invalidation-error-codes-iframe-inline"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Round out the action verb surface + closing integration smoke.
+
+      Locked design:
+        - select @eN "option" — locator.selectOption({ label: option }) for
+          combobox; supports value/label/index variants
+        - press @eN "Enter" — locator.press(key); whitelist common keys
+          (Enter / Tab / Escape / ArrowUp / ArrowDown — locks LLM out of
+          arbitrary key sequences that could trigger browser shortcuts)
+        - upload @eN "/path.pdf" — locator.setInputFiles(path); V1 only
+          supports <input type=file> (Q5: drag-drop deferred to
+          06-site-adapters)
+        - elementScreenshot @eN — Q9: element crop via locator.screenshot
+          with quality 70, full element bounding box; complements 02's
+          full-page captureStep
+
+      Files:
+        - src/career/applier/runtime/actions.mjs (~+80 LOC):
+          · select(page, refTable, refId, option, opts?) — combobox or
+            select element only; throws if locator role !== combobox
+          · press(page, refTable, refId, key, opts?) — key in ALLOWED_KEYS
+            whitelist
+          · upload(page, refTable, refId, filePath, opts?) — verify
+            absolute path + file exists before invoking setInputFiles;
+            unified error UPLOAD_FAILED if not a file input
+          · All actions: post-action invalidation (consistent with m2)
+          · Unified error code wrapping (consistent with m2)
+
+        - src/career/applier/runtime/elementScreenshot.mjs (~40 LOC):
+          · captureElement(page, refTable, refId, jobId, label?) — resolve
+            locator, await locator.screenshot({ type: 'jpeg', quality: 70 }),
+            write to data/career/.playwright/screenshots/{jobId}/
+            element-{eN}-{label}.jpg
+          · Distinct from 02's captureStep (full-page); this is element
+            crop for evidence on specific failures
+
+        - scripts/smoke-snapshot-integration.mjs (~150 LOC, ~6 asserts):
+          · select on combobox fixture — option round-trips
+          · select on non-combobox → throws "not a combobox" error
+          · press whitelist: Enter accepted, "Backspace+x+modifier" rejected
+          · upload to <input type=file>: file path verified + form sees it
+          · upload to drag-drop dropzone: V1 rejects with explicit error
+            "drag-drop upload not supported V1; route via 06-site-adapters"
+          · elementScreenshot crops to bounding box, JPEG magic bytes valid
+          · 8-cycle snapshot → click → re-snapshot loop — Playwright
+            context handle count doesn't monotonically grow (验收 f)
+
+      ROOM COMPLETE rollups:
+        - room.yaml: lifecycle planning → active
+        - _tree.yaml: 08-snapshot-refs-layer planning → active
+        - 07-applier parent: 25% → 38% (3/8 children ✅)
+        - 04-career-system: 88% → 89% (25/34 features)
+
+      下游 unblocked:
+        - 03-field-classifier (consumes snapshot output for field-class prompt)
+        - 04-multi-step-state-machine (uses snapshot for each step's page state)
+        - 05-non-standard-controls (extends action verb surface for 21 weird widgets)
+        - 06-site-adapters (uses snapshot+refs as the substrate)
+        - self-iteration/01-code-calibration (eval harness uses snapshot output)
+        - self-iteration/02-data-flywheel (qa-bank fuzzy match keys off
+          snapshot's role+name pairs)
+
+      验收 (Room close):
+        - 验收 (a)-(f) all locked from spec all green on real ATS fixtures
+        - Greenhouse: < 500 tokens snapshot, 8 fields recognized
+        - Workday worst-case: < 1500 tokens
+        - SPA, iframe, stale-ref, handle-leak all verified
+
+      Post-ROOM-COMPLETE hybrid migration path (NOT a milestone, deferred):
+        - Run 09-snapshot-eval-harness against real ATS samples
+        - For specific actions that fail with Playwright Locator (e.g.
+          Workday animated submit button that Playwright auto-wait misses),
+          rewrite ONLY that action's resolve path to use CDP Input.* /
+          DOM.getBoxModel directly. Per-action migration, not a full Plan B
+          rewrite. Cost: ~10-30 LOC per migrated action.
+
+commits:
+  - hash: "ccf0840"
+    date: "2026-05-12"
+    message: "[04-career-system/07-applier/08-snapshot-refs-layer] m1: snapshot core + ref table + click/fill via Playwright Locator (smoke 12/12)"
+    files_changed: 4
+    specs_affected:
+      - "intent-snapshot-refs-layer-001 (anchors: snapshot.mjs + refTable.mjs + actions.mjs + smoke-snapshot-core.mjs)"
+    milestones_affected:
+      - "m1-snapshot-core-ref-table-locator-actions (→ completed)"
+  - hash: "96b3738"
+    date: "2026-05-12"
+    message: "[04-career-system/07-applier/08-snapshot-refs-layer] m2: pessimistic invalidation + unified error codes + iframe inline-recurse (smoke 10/10)"
+    files_changed: 5
+    specs_affected:
+      - "intent-snapshot-refs-layer-001 (anchors: errors.mjs + m2 deltas to refTable.mjs/snapshot.mjs/actions.mjs + smoke-snapshot-invalidation.mjs)"
+    milestones_affected:
+      - "m2-invalidation-error-codes-iframe-inline (→ completed)"
+  - hash: "e6c3189"
+    date: "2026-05-12"
+    message: "[04-career-system/07-applier/08-snapshot-refs-layer] m3: select/press/upload + element screenshot + ROOM COMPLETE (smoke 9/9)"
+    files_changed: 4
+    specs_affected:
+      - "intent-snapshot-refs-layer-001 (anchors: m3 deltas to actions.mjs/errors.mjs + elementScreenshot.mjs + smoke-snapshot-integration.mjs)"
+    milestones_affected:
+      - "m3-remaining-actions-screenshot-integration-room-complete (→ completed)"
+      - "ROOM COMPLETE — 08-snapshot-refs-layer lifecycle planning → active"
+current_sprint: "Sprint 14 — Mode 2 Foundation Shipping"
+blockers: []
+status_note: "🎉 ROOM COMPLETE 2026-05-12 (3/3 milestones, 100%). m1 ✅ (12/12 smoke; snapshot core + ref table + click/fill via Playwright Locator). m2 ✅ (10/10 smoke; pessimistic invalidation + 6-code SnapshotError enum + iframe inline-recurse). m3 ✅ (9/9 smoke; select/press/upload + element screenshot + 8-cycle handle-leak verification + end-to-end). m3 added: actions.mjs +~120 LOC (select with label/value/index variants per C2 fix; press whitelist of 14 keys; upload with absolute-path + is-file + ref-check-first validation per M5 fix; ROLE_MISMATCH/KEY_NOT_ALLOWED/UPLOAD_FAILED error codes via factories per H1 fix), elementScreenshot.mjs NEW ~95 LOC (JPEG q70 element-crop at element-{eN}-{label}.jpg complementing 02's full-page captureStep; routes Playwright errors via classifyPlaywrightError per M3 fix), errors.mjs +~50 LOC (3 new codes + roleMismatch/keyNotAllowed/uploadFailed factories), smoke-snapshot-integration.mjs NEW ~325 LOC (9 asserts including label/value/index variants, error precedence ROLE_MISMATCH vs UNKNOWN_REF per H2 fix, KEY_NOT_ALLOWED hint verification per M1 fix, 3 upload paths + unknown-ref per M5/M6 fixes, JPEG SOF0 dimensions check per H4 fix, tightened 8-cycle bound + memory delta per H3 fix, end-to-end with submitFired assertion per C1 fix). Plan-agent Phase 3.5 review: 2 CRITICAL + 4 HIGH + 7 MEDIUM + 6 LOW — applied 2C + 4H + 5M (C1 broken end-to-end + missing submitFired assertion, C2 select label-only → label/value/index variants, H1 factory pattern, H2 select precedence + UNKNOWN_REF test, H3 tightened handle-leak bound + memory delta, H4 verify cropped JPEG dims, M1 hint coverage, M3 captureElement classify errors, M5 upload ref-check-first, M6 directory upload test, M7 generation bump verification). Total Room: ~975 LOC src + ~895 smoke + 31 asserts across 3 files. ROOM COMPLETE rollups: room.yaml lifecycle planning → active; _tree.yaml synced; 07-applier 25% → 38% (3/8 children ✅); 04-career-system 88% → 89% (25/34 features). 下游 unblocked: 03-field-classifier + 04-multi-step-state-machine + 05-non-standard-controls + 06-site-adapters; self-iteration/01-code-calibration eval harness can use snapshot output; self-iteration/02-data-flywheel qa-bank fuzzy match keys off (role, name) pairs. All 64 smokes green (08: 12+10+9, 02: 9+13+11). vite build clean."
+last_updated: "2026-05-12"

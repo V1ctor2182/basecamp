@@ -1,15 +1,15 @@
 milestones: []
-current_sprint: "Sprint 14 — Mode 2 Lock + Playwright Runtime COMPLETE"
+current_sprint: "Sprint 14 — Mode 2 Foundation Shipping"
 blockers: []
-completion: 25  # 200/8 = 25 across 8 children (2 ROOMs ✅ after self-iteration restructure)
+completion: 38  # 300/8 = 37.5 → ~38 across 8 children (3 ROOMs ✅)
 children_completion:
-  "01-mode1-simplify-hybrid": 100  # 🎉 ROOM COMPLETE (5/5 milestones; full Mode 1 end-to-end loop)
-  "02-playwright-runtime": 100         # 🎉 ROOM COMPLETE 2026-05-11 (3/3 m; singleton + stealth + screenshot)
+  "01-mode1-simplify-hybrid": 100  # 🎉 ROOM COMPLETE
+  "02-playwright-runtime": 100         # 🎉 ROOM COMPLETE 2026-05-11
   "03-field-classifier": 0
   "04-multi-step-state-machine": 0
   "05-non-standard-controls": 0
   "06-site-adapters": 0
-  "08-snapshot-refs-layer": 0          # NEXT — foundation Room, deps 02 ✅
-  "self-iteration": 0                  # sub-epic (3 子 Rooms: 01-code-calibration / 02-data-flywheel / 03-iteration-dashboard)
-status_note: "🟢 07-applier 25% (2/8 children ✅ — after self-iteration sub-epic restructure). 02-playwright-runtime ROOM COMPLETE 2026-05-11: ~450 LOC src (browser.mjs + humanize.mjs + screenshot.mjs) + ~790 LOC smoke (33 asserts across m1/m2/m3) + 3 review passes by plan-agent (m1 3C+1H, m2 2C+4H+6M+1L, m3 3C+5H+3M, all addressed). agent-browser daemon warmth pattern materialized via module singleton; stealth via playwright-extra + puppeteer-extra-plugin-stealth; JPEG q70 screenshots; per-context crash recovery via WeakMap state. Next: 08-snapshot-refs-layer plan-milestones (deps 02 now satisfied — foundation chain continues toward 03/04/05/06). OR detour 08-human-gate-tracker/03-interview-prep or /04-followup-cadence (independent of Mode 2 dependency chain)."
-last_updated: "2026-05-11"
+  "08-snapshot-refs-layer": 100        # 🎉 ROOM COMPLETE 2026-05-12 (3/3 m; snapshot/refTable/actions + iframe + element screenshot)
+  "self-iteration": 0                  # sub-epic (3 子 Rooms)
+status_note: "🟢 07-applier 38% (3/8 children ✅). 08-snapshot-refs-layer ROOM COMPLETE 2026-05-12: ~975 LOC src (snapshot.mjs CDP a11y + iframe inline-recurse + ref table + 5 symbolic action verbs + element screenshot + unified error codes + classifyPlaywrightError mapper) + ~895 LOC smoke (31 asserts across 3 files all green). The agent-browser snapshot+refs prompt format is now fully ported to Playwright on top of 02's daemon-warmth singleton. LLM-facing tool surface locked at ~10 symbolic verbs (snapshot/click/fill/select/press/upload/captureElement) — raw Playwright API NOT exposed per C1 constraint. Hybrid Plan A locked at planning time still holds: post-ROOM-COMPLETE, 09-snapshot-eval-harness can flag specific Playwright Locator failures and we migrate per-action to CDP. 下游 unblocked: 03-field-classifier (consumes snapshot output), 04-multi-step-state-machine (uses snapshot per step), 05-non-standard-controls (extends action surface), 06-site-adapters (uses snapshot as substrate), self-iteration/01-code-calibration (eval harness consumes snapshot), self-iteration/02-data-flywheel (qa-bank keys off role+name)."
+last_updated: "2026-05-12"
