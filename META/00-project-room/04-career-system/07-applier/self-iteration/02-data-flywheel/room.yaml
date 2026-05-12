@@ -1,11 +1,11 @@
 room:
-  id: "00-project-room/04-career-system/07-applier/07-feedback-flywheel"
-  name: "Feedback Flywheel"
-  parent: "00-project-room/04-career-system/07-applier"
+  id: "00-project-room/04-career-system/07-applier/self-iteration/02-data-flywheel"
+  name: "Data Flywheel"
+  parent: "00-project-room/04-career-system/07-applier/self-iteration"
   type: feature
-  lifecycle: backlog
+  lifecycle: planning
   created_at: "2026-04-22"
-  updated_at: "2026-04-22"
+  updated_at: "2026-05-11"
   owner: fullstack
   contributors: []
   prompt_test:

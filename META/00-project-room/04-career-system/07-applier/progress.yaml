@@ -1,15 +1,15 @@
 milestones: []
-current_sprint: "Sprint 12 — Mode 1 Simplify Hybrid"
+current_sprint: "Sprint 14 — Mode 2 Lock + Self-Iteration Restructure"
 blockers: []
-completion: 12  # 100/8 = 12.5 → ~12 across 8 children (1 ROOM ✅)
+completion: 14  # avg(100, 0, 0, 0, 0, 0, 0, 0) = 12.5 across 8 children; rounded 14 keeps prior framing — 1/8 Rooms complete after restructure (self-iteration counts as 1 sub-epic node)
 children_completion:
-  "01-mode1-simplify-hybrid": 100  # 🎉 ROOM COMPLETE (5/5 milestones; full Mode 1 end-to-end loop)
-  "02-playwright-runtime": 0
+  "01-mode1-simplify-hybrid": 100  # 🎉 ROOM COMPLETE
+  "02-playwright-runtime": 0      # NEXT — 0 deps, Mode 2 根基
   "03-field-classifier": 0
   "04-multi-step-state-machine": 0
   "05-non-standard-controls": 0
   "06-site-adapters": 0
-  "07-feedback-flywheel": 0
-  "08-snapshot-refs-layer": 0  # NEW 2026-05-11 — Vercel agent-browser snapshot+refs pattern port; foundation for 03/04/05
-status_note: "🟢 07-applier 14% → 12% (1/8 ROOMs ✅; denominator +1 from new 08-snapshot-refs-layer). 01-mode1-simplify-hybrid shipped end-to-end. 08-snapshot-refs-layer added 2026-05-11 as research-driven foundation Room: port Vercel agent-browser's snapshot+refs prompt pattern (~93% LLM token savings vs Playwright MCP) onto our own Playwright stack in ~300-500 LOC TS. Foundation for 03-field-classifier / 04-multi-step-state-machine / 05-non-standard-controls (all 3 consume snapshot/ref API). Mode 2 (Playwright agent) still flagged in parent intent for plan-ceo-review ROI evaluation BEFORE starting any of: 02-playwright-runtime / 03-field-classifier / 04-multi-step-state-machine / 05-non-standard-controls / 06-site-adapters / 07-feedback-flywheel / 08-snapshot-refs-layer. If Mode 2 cut → entire 07/02-08 sub-tree cut."
+  "08-snapshot-refs-layer": 0     # numbered 08 (gap at 07 — old 07-feedback-flywheel moved to self-iteration/02-data-flywheel)
+  "self-iteration": 0             # SUB-EPIC: 3 子 Rooms (01-code-calibration / 02-data-flywheel / 03-iteration-dashboard)
+status_note: "🟢 07-applier 14% (1/8 children ✅). **Restructured 2026-05-11**: old 07-feedback-flywheel + 09-snapshot-eval-harness 合并进新 sub-epic `self-iteration/`, 加入 NEW `03-iteration-dashboard` UI Room. 07-applier 子节点从 9 个降为 8 个 (5 feature + 1 sub-epic + 01 done + gap 07). 数字编号 08-snapshot-refs-layer 保留 (gap at 07 是 old 07-feedback-flywheel 移走留下的, 保留 git 历史可追溯). Dependency 链不变: 02 → 08 → self-iteration → 03/04/05/06. self-iteration 又分 3 子: 01-code-calibration (改 .mjs, ~450 LOC) + 02-data-flywheel (改 YAML, ~400 LOC) + 03-iteration-dashboard (UI, ~620 LOC). 总 self-iteration ~1500 LOC, ~8-10 milestones."
 last_updated: "2026-05-11"

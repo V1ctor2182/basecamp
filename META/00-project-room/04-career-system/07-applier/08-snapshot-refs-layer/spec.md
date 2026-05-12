@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/07-applier/08-snapshot-refs-layer`
 **Type**: feature
-**Lifecycle**: backlog
+**Lifecycle**: planning (Mode 2 LOCKED 2026-05-11)
 **Owner**: backend
 **Parent**: `00-project-room/04-career-system/07-applier`
 

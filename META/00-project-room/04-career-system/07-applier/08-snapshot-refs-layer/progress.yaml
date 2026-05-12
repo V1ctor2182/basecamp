@@ -1,7 +1,7 @@
 milestones: []
 current_sprint: null
 blockers:
-  - "Waiting on plan-ceo-review of 07-applier Mode 2 to confirm whether to build 07-applier sub-Rooms at all"
+  - "Depends on 02-playwright-runtime m1+ (need Playwright browser + Page lifecycle to attach snapshot+refs onto)"
 completion: 0
-status_note: "🔄 backlog. Foundation Room for 03-field-classifier / 04-multi-step-state-machine / 05-non-standard-controls. ~300-500 LOC TS planned. Blocked on plan-ceo-review for 07-applier Mode 2 ROI — if Mode 2 is cut, this Room is also cut. If Mode 2 ships, this Room MUST land BEFORE 03/04/05 because they consume snapshot/ref API."
+status_note: "🔄 planning. Mode 2 LOCKED 2026-05-11 — this Room is GO. Foundation Room for 03/04/05/06. ~300-500 LOC TS. MUST land after 02-playwright-runtime m1 (need a Playwright Page to snapshot against). 6 constraints (C1-C6) + 6 open questions (Q1-Q6) locked from review pass — Q1-Q6 final decisions deferred to plan-milestones with recommendations already given."
 last_updated: "2026-05-11"

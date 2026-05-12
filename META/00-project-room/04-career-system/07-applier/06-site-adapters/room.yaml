@@ -3,9 +3,9 @@ room:
   name: "Site Adapters"
   parent: "00-project-room/04-career-system/07-applier"
   type: feature
-  lifecycle: backlog
+  lifecycle: planning
   created_at: "2026-04-22"
-  updated_at: "2026-04-22"
+  updated_at: "2026-05-11"
   owner: backend
   contributors: []
   prompt_test:

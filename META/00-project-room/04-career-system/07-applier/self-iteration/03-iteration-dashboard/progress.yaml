@@ -1,0 +1,7 @@
+milestones: []
+current_sprint: null
+blockers:
+  - "Depends on self-iteration/01-code-calibration + 02-data-flywheel — needs real evidence store + qa-bank changelog + tuner log to render against"
+completion: 0
+status_note: "🔄 planning. UX layer of self-iteration sub-epic. 5 UI sections (Health 顶栏 / 事件流 / Pending Actions / 覆盖率 / Trend charts). ~400 LOC React + ~120 LOC server + ~100 LOC smoke. Blocked on 01 + 02 having real data to display (don't build empty dashboard). Estimated 3 milestones. Q1-Q3 open questions with recommendations for plan-milestones."
+last_updated: "2026-05-11"

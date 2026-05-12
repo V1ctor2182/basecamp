@@ -1,0 +1,7 @@
+milestones: []
+current_sprint: null
+blockers:
+  - "Depends on 08-snapshot-refs-layer m1+ (need snapshot serializer to eval against)"
+completion: 0
+status_note: "🔄 planning. Mode 2 LOCKED 2026-05-11 — this Room is GO. Calibration/eval harness for 08-snapshot-refs-layer + horizontal fixture corpus for 03/04/06. ~450 LOC TS + ~300KB fixture data. MUST land after 08 m1 (need snapshot serializer to eval). 5 constraints (EH1-EH5) + 3 open questions (Q1-Q3) locked from spec — Q1-Q3 final decisions deferred to plan-milestones with recommendations given."
+last_updated: "2026-05-11"

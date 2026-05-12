@@ -1,0 +1,95 @@
+spec_id: "intent-self-iteration-001"
+type: intent
+state: active
+intent:
+  summary: "Applier 自我迭代体系：代码层闭环 + 数据层闭环 + 可视化看板"
+  detail: |
+    把 applier 的"越用越准"从一句口号变成具体架构。两个独立闭环 + 一个
+    UI 看板，组成完整的 self-iteration sub-system。
+
+    设计哲学 (locked 2026-05-11):
+      **改数据 vs 改代码 = 安全边界 + 审核成本边界**
+
+      | | 02-data-flywheel | 01-code-calibration |
+      |---|---|---|
+      | 改什么 | qa-bank/heuristics/recovery-stats (YAML) | filter.mjs/actions.mjs/serializer.mjs (TS) |
+      | 触发 | 每次 apply 后自动 | escalation from 02 OR 你周期性 tune |
+      | 频率 | 几十次/天 | 几次/月 |
+      | 失败半径 | 一个 apply 错 | 所有 future apply 错 |
+      | 审核 | 数据 diff 自动审 (异常才人审) | 必须人审 + smoke + PR |
+      | 工具 | fuzzy lookup + weighted reinforcement | tuner + failure clusterer + alarm |
+
+    三个子 Room (按职责清晰拆分):
+
+      (1) **01-code-calibration** (was 09-snapshot-eval-harness, 改名 + 扩 scope)
+          解决"agent 看得到所有字段 / 能 act on 任何 control"。Tier 1 自动
+          (snapshot role tuner), Tier 2-3 半自动 (failure pattern clusterer
+          + action gap reporter)。**改 .mjs 源码**.
+          ATS 增长曲线: 10-20 fixture 后 Tier 1 饱和 (~95%), Tier 2-3 长尾.
+
+      (2) **02-data-flywheel** (was 07-feedback-flywheel, 改名 + 强调数据)
+          解决"agent 知道每个字段该填什么"。Fuzzy lookup + weighted
+          reinforcement: 每次 apply 命中 cache 就 +1 weight, miss 就调
+          LLM 然后存进 qa-bank, 下次 cache hit 0 LLM. **改 YAML 数据**.
+          Apply 增长曲线: 50 apply ~75% 命中, 200 apply ~95% 命中.
+
+      (3) **03-iteration-dashboard** (NEW)
+          UI 把两个闭环可视化成时间线 + 看板。让"applier 在进化"这件事
+          可观察。包含: health 顶栏 / 进化事件流 / pending action 队列 /
+          fixture+qa-bank 覆盖率 / trend charts. /career/iteration 新页面.
+
+    Cross-cutting contract — Evidence Store (shared):
+      所有失败 apply 自动捕获 HTML + metadata 进 data/career/applier/
+      evidence/{jobId}-{ts}.{html,json}. 写者: 02 production runtime.
+      读者: 01 (你 promote → fixture corpus), 03 (dashboard 时间线展示).
+      30 天 GC. 这是把两个 Room 联系起来的具体接口.
+
+    Escalation 协议 (02 → 01):
+      02 fail 后能自己解决 → DONE (qa-bank 学新答案 / 调权重 / 学
+      heuristic).
+      02 解决不了 (LLM 也没法回答 / snapshot 根本没看到该字段) → 写入
+      evidence + 在 03-dashboard 标红 "🔴 Needs Code Fix" → 你 promote
+      → 01 接手 (fixture + tuner + PR).
+
+    NOT in scope (留给其他 Room):
+      - 反检测 / stealth (那是 02-playwright-runtime)
+      - 字段分类 prompt 本身 (那是 03-field-classifier, 但其 prompt
+        可以被本 sub-epic 的 02-data-flywheel 反馈数据改进)
+      - 多步 state machine 算法 (那是 04-multi-step-state-machine)
+
+    Estimated total scope: ~1200-1700 LOC across 3 子 Room. 关键是
+    在 02-playwright-runtime + 08-snapshot-refs-layer 起来后才能真正
+    干起来 — self-iteration 没有底座可观察就是空想.
+
+    验收 (sub-epic 级):
+      (a) 跑 50 次 apply 后 dashboard 显示: cache hit rate ≥ 70%, success
+          rate ≥ 80%, fixture coverage ≥ 95% on at least 10 ATS samples
+      (b) 至少 1 次 02→01 escalation 完整流程跑通 (evidence 自动捕获 →
+          你 promote → tuner 改 .mjs → PR → merge)
+      (c) Dashboard 时间线 30 天回看，能看清每个 iteration 事件 (qa-bank
+          adds/reinforcements/tuner runs/promotes)
+constraints: []
+indexing:
+  type: intent
+  priority: high
+  layer: sub-epic
+  domain: "04-career-system"
+  tags: [self-iteration, applier, flywheel, calibration, observability]
+provenance:
+  source_type: derived
+  confidence: 0.95
+  source_ref: "Designed 2026-05-11 — synthesis of 07-feedback-flywheel (original PRD) + 09-snapshot-eval-harness (research-driven from agent-browser review) + iteration-dashboard (UX need surfaced by user)."
+relations:
+  - type: depends_on
+    target: "intent-playwright-runtime-001"
+  - type: depends_on
+    target: "intent-snapshot-refs-layer-001"
+  - type: contains
+    target: "00-project-room/04-career-system/07-applier/self-iteration/01-code-calibration"
+  - type: contains
+    target: "00-project-room/04-career-system/07-applier/self-iteration/02-data-flywheel"
+  - type: contains
+    target: "00-project-room/04-career-system/07-applier/self-iteration/03-iteration-dashboard"
+anchors: []
+created_at: "2026-05-11"
+updated_at: "2026-05-11"

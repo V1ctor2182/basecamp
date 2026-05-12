@@ -1,0 +1,152 @@
+spec_id: "intent-iteration-dashboard-001"
+type: intent
+state: active
+intent:
+  summary: "/career/iteration UI — 把 01 + 02 闭环可视化 + manual touchpoint 操作面板"
+  detail: |
+    Self-iteration sub-epic 的 UX 层。让"applier 正在进化"这件事**可观察**：
+    用户能看到 (a) 系统在背后自动做什么 (cache hit / 权重调整 / heuristic
+    学习 / evidence 捕获), (b) 系统等用户做什么 (promote evidence / review
+    tuner PR / 设计 Tier 2/3 修复).
+
+    新页面: `/career/iteration` (carrer dashboard 新 tab 或顶栏入口).
+
+    UI Sections:
+
+      A. Health 顶栏 (一眼看):
+         ┌─────────────────────────────────────────────────┐
+         │ APPLY: 247 │ SUCCESS: 94.3% (30d) │           │
+         │ 01 cover: 96.2% │ 02 cache hit: 87.5% │       │
+         │ Pending: 🔴 2 promote · 🟠 1 PR review        │
+         └─────────────────────────────────────────────────┘
+
+      B. 进化事件流 (核心 — 反时序):
+         每条事件长这样:
+           2026-05-17 14:22  🟣 [01] Tuner ran: added 'spinbutton'
+                                  → +3 fields detected
+                                  ↳ PR #45 merged [view diff]
+         事件类型:
+           🟢 qa-bank.entry.added       (02 学新答案)
+           🟡 qa-bank.entry.reinforced  (02 cache hit + weight ++)
+           🔵 qa-bank.entry.de-ranked   (02 用户改了 draft)
+           🟠 heuristic.learned         (02 学新 quirk)
+           🔴 evidence.captured         (失败, 可 promote)
+           🟣 tuner.run                 (01 改 .mjs)
+           🟤 fixture.added             (你 promote)
+           ⚪ pattern.detected          (Tier 2-3 需人审)
+
+      C. Pending Actions 队列 (你要做的事):
+         🔴 Promote queue (N)
+         🟠 PR review (N)
+         ⚪ Tier 2 backlog (N) — 失败 pattern 已聚类等你设计
+         ⚫ Tier 3 backlog (N) — 架构改动建议
+
+      D. 覆盖率 / Health 详情 (可折叠):
+         Fixture corpus: per-fixture score table
+         qa-bank: entry 总数 / by-category / cache hit rate trend
+
+      E. Trend charts (V2, 可选):
+         Cache hit rate 90 天 sparkline
+         Success rate 90 天 sparkline
+         Tier 2 backlog 30 天 (反映你处理速度)
+
+    后端 API endpoints (新建):
+      GET /api/career/iteration/health         → A 区数据
+      GET /api/career/iteration/events?limit=N → B 区事件流 (从 evidence
+                                                  store + qa-bank changelog
+                                                  + tuner run log 聚合)
+      GET /api/career/iteration/pending        → C 区队列
+      POST /api/career/iteration/promote/:id   → 你点 Promote 按钮触发的
+                                                  evidence → fixture 流程
+      GET /api/career/iteration/coverage       → D 区详情
+
+    Manual touchpoint UI (按钮 / 弹窗):
+      - [Promote] on each evidence card → 弹窗 让你 review Claude Code
+        起草的 truth.yml → confirm 后调 promote API
+      - [Investigate] on Tier 2/3 pattern → 展开失败聚类详情 + 相关
+        evidence HTML 链接 + 你写解决方案的入口
+      - [View Diff] on tuner run → 跳 GitHub PR
+
+    Locked design choices:
+      - Polling 30s (匹配 Applied / Overview 现有 cadence)
+      - 事件流 client-side 渲染 paginate (无穷滚动, 30/page)
+      - 时间显示用 formatRelative (跟 Applied 一致)
+      - 颜色 tier 跟 Applied STATUS_COLORS 系统对齐避免引入新调色板
+
+    NOT in scope V1:
+      - Trend charts (E 区, 等数据有 30 天再加)
+      - 全局搜索 / 过滤事件流
+      - Export feedback 数据
+      - Multi-user (这是个人 dashboard)
+
+    Estimated complexity: ~400 LOC React (新 Iteration.tsx + iteration.css
+    + 4 component) + ~120 LOC server.mjs (5 个新 API endpoint 聚合 evidence
+    store + qa-bank changelog + tuner log) + ~100 LOC smoke (3-4 endpoint
+    contract test + Iteration.tsx 渲染 smoke).
+
+    验收:
+      (a) 跑 10 次 apply 后 /career/iteration 页面渲染: 顶栏数字正确 /
+          事件流至少 20 条 / pending queue 反映真实 evidence 数
+      (b) 至少完成 1 次 manual promote 流程: 点 Promote → 弹窗 review
+          → confirm → fixture 进 corpus → tuner 自动跑 → PR notification
+      (c) Tier 2 pattern 至少捕获 1 类 (eg "iframe nesting") 并在 backlog
+          显示 (即使你不立刻 investigate)
+      (d) 30s polling 跟 Applied/Overview 不冲突 (服务端 cache hit, 不重
+          复扫 evidence store)
+      (e) 0 引入新调色板 / 复用 STATUS_COLORS
+constraints:
+  - id: "constraint-D1-no-new-palette"
+    severity: must
+    rule: "MUST 复用现有 STATUS_COLORS / sl-/ad-/ov- 系列调色板. 不引入新颜色避免设计语言碎裂."
+  - id: "constraint-D2-polling-cadence"
+    severity: must
+    rule: "Polling 30s 跟 Applied/Overview/Shortlist 对齐. AbortController cleanup. 30s 之内多次切 tab 不会重复 fetch."
+  - id: "constraint-D3-promote-confirm-gate"
+    severity: must
+    rule: "MUST 弹窗让用户 review 自动起草的 truth.yml 后才执行 promote (写 fixtures/). 不能一键 promote 跳过 review — 错的 ground truth 污染 corpus."
+  - id: "constraint-D4-tuner-pr-link-not-trigger"
+    severity: must
+    rule: "Dashboard 不直接触发 tuner run (避免重 IO + IPC race). [Run Tuner] 按钮只是 link 到 docs / `npm run tune-snapshot` 命令复制. tuner 由 Claude Code 在 terminal 跑."
+  - id: "constraint-D5-no-llm-on-render"
+    severity: must
+    rule: "Dashboard render path 0 LLM call. 所有数据来自已有 store (evidence/qa-bank/tuner log). AI summary 如有需要走后台 cron 预算定时刷新."
+indexing:
+  type: intent
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [frontend, react, dashboard, observability, manual-touchpoint]
+provenance:
+  source_type: derived
+  confidence: 0.95
+  source_ref: "Designed 2026-05-11 — user explicitly asked for dashboard to see what's evolving. UX surfaced during self-iteration sub-epic restructure."
+relations:
+  - type: depends_on
+    target: "intent-code-calibration-001"
+  - type: depends_on
+    target: "intent-data-flywheel-001"
+  - type: consumes
+    target: "data/career/applier/evidence/ (shared evidence-store)"
+  - type: consumes
+    target: "qa-bank changelog"
+  - type: consumes
+    target: "tuner iteration log"
+open_questions:
+  - id: "Q1-tuner-trigger"
+    question: "Dashboard 是否需要 [Run Tuner] 按钮触发 tuner？"
+    options: ["否, 只 link 到命令", "是, POST API 后台跑"]
+    lock_before: "plan-milestones"
+    recommendation: "否 — tuner 是 IO-heavy, Claude Code terminal 跑更可观察 (constraint D4)"
+  - id: "Q2-event-stream-storage"
+    question: "事件流的 backing store 是 SQLite / JSONL append-only / qa-bank+evidence 实时聚合？"
+    options: ["SQLite", "JSONL append-only", "实时聚合 (无 store)"]
+    lock_before: "plan-milestones"
+    recommendation: "JSONL append-only (matches existing llm-costs.jsonl pattern, easy to GC + grep)"
+  - id: "Q3-pending-action-routing"
+    question: "Pending action 队列点击后跳哪？"
+    options: ["都跳 dashboard 内 modal", "跳 GitHub PR (tuner) / fixture editor (promote) / 各种独立 page"]
+    lock_before: "plan-milestones"
+    recommendation: "混合 — Promote 内 modal (本地操作), PR review 跳 GitHub (外部协作)"
+anchors: []
+created_at: "2026-05-11"
+updated_at: "2026-05-11"
