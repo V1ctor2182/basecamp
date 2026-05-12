@@ -144,7 +144,7 @@ milestones:
 
   - id: "m3-screenshot-crash-recovery-room-complete"
     name: "Per-step screenshot + crash recovery + integration smoke + ROOM COMPLETE"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/runtime/screenshot.mjs"
       - "src/career/applier/runtime/browser.mjs"
@@ -238,7 +238,16 @@ commits:
       - "intent-playwright-runtime-001 (anchors added: humanize.mjs + smoke-applier-stealth.mjs)"
     milestones_affected:
       - "m2-stealth-plugin-human-timing (→ completed)"
+  - hash: "PENDING"
+    date: "2026-05-11"
+    message: "[04-career-system/07-applier/02-playwright-runtime] m3: screenshot capture + crash recovery + ROOM COMPLETE (smoke 11/11)"
+    files_changed: 5
+    specs_affected:
+      - "intent-playwright-runtime-001 (anchors added: screenshot.mjs + smoke-applier-runtime.mjs + browser.mjs m3 delta)"
+    milestones_affected:
+      - "m3-screenshot-crash-recovery-room-complete (→ completed)"
+      - "ROOM COMPLETE — 02-playwright-runtime lifecycle planning → active"
 current_sprint: "Sprint 14 — Mode 2 Lock + Playwright Runtime"
 blockers: []
-status_note: "🟢 2/3 milestones done. m1 ✅ (~225 LOC browser.mjs + ~254 LOC smoke, 9/9). m2 ✅ (humanize.mjs NEW ~110 LOC + browser.mjs +stealth integration + smoke-applier-stealth.mjs NEW ~245 LOC, 13/13). m2 Phase 3.5 review: 2 CRITICAL + 4 HIGH + 6 MEDIUM + 1 LOW fixed (Intl.Segmenter for grapheme-safe humanType, Symbol.for() idempotency guard for stealth.use, humanClick visibility-wait, humanNavigate waitUntil option, smoke bounds widened for CI jitter, 4 new smoke cases: auto-spawn-page-stealth / keydown-count / NFD-grapheme / waitUntil-propagation + L6 stealth-survives-relaunch). m2 also refactored API: humanType/humanClick both take Locator (consistent), humanNavigate stays Page-scoped. 18 smoke total (9 m1 + 13 m2) all green; vite build clean. Next: dev m3-screenshot-crash-recovery + ROOM COMPLETE."
+status_note: "🎉 ROOM COMPLETE 2026-05-11 (3/3 milestones, 100%). m1 ✅ (singleton+persistent profile+race guards+SIGTERM, 9/9 smoke). m2 ✅ (stealth+humanize, 13/13 smoke). m3 ✅ (screenshot.mjs NEW ~145 LOC + browser.mjs m3 delta ~+45 LOC + smoke-applier-runtime.mjs NEW ~290 LOC, 11/11). m3 Phase 3.5 review surfaced 3 CRITICAL + 6 HIGH + 6 MEDIUM — applied 3C+5H+3M fixes: per-context WeakMap _ctxState replacing module-level _expectingClose (C1), handler dedupe via state.handlerFired (C3), captureStep error wrapping with jobId/stepN context (H4), listScreenshots orphan-file warning (H5), pad3 reject stepN=0 (M1), mtime-based overwrite assertion (H3), poll-and-wait crash recovery test (H2), graceful closeBrowser silent-warn verification (C1 spec test), console.warn stubbed in test 6 (M5). Total Room: ~450 LOC src + ~790 LOC smoke + ~110 LOC humanize + 33 smoke asserts across 3 files. 02-playwright-runtime unblocks: 08-snapshot-refs-layer (getBrowser/getPage/humanize/captureStep all ready); self-iteration/01-code-calibration (eval runner uses getBrowser); self-iteration/02-data-flywheel (evidence captures via captureStep). 04-career-system 87% → 88% (24/34 features). Next decision: 08-snapshot-refs-layer plan-milestones (foundation chain continues) OR 08-human-gate-tracker/03+04 (independent path)."
 last_updated: "2026-05-11"

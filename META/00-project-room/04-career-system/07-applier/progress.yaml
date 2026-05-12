@@ -1,15 +1,15 @@
 milestones: []
-current_sprint: "Sprint 14 — Mode 2 Lock + Self-Iteration Restructure"
+current_sprint: "Sprint 14 — Mode 2 Lock + Playwright Runtime COMPLETE"
 blockers: []
-completion: 14  # avg(100, 0, 0, 0, 0, 0, 0, 0) = 12.5 across 8 children; rounded 14 keeps prior framing — 1/8 Rooms complete after restructure (self-iteration counts as 1 sub-epic node)
+completion: 25  # 200/8 = 25 across 8 children (2 ROOMs ✅ after self-iteration restructure)
 children_completion:
-  "01-mode1-simplify-hybrid": 100  # 🎉 ROOM COMPLETE
-  "02-playwright-runtime": 0      # NEXT — 0 deps, Mode 2 根基
+  "01-mode1-simplify-hybrid": 100  # 🎉 ROOM COMPLETE (5/5 milestones; full Mode 1 end-to-end loop)
+  "02-playwright-runtime": 100         # 🎉 ROOM COMPLETE 2026-05-11 (3/3 m; singleton + stealth + screenshot)
   "03-field-classifier": 0
   "04-multi-step-state-machine": 0
   "05-non-standard-controls": 0
   "06-site-adapters": 0
-  "08-snapshot-refs-layer": 0     # numbered 08 (gap at 07 — old 07-feedback-flywheel moved to self-iteration/02-data-flywheel)
-  "self-iteration": 0             # SUB-EPIC: 3 子 Rooms (01-code-calibration / 02-data-flywheel / 03-iteration-dashboard)
-status_note: "🟢 07-applier 14% (1/8 children ✅). **Restructured 2026-05-11**: old 07-feedback-flywheel + 09-snapshot-eval-harness 合并进新 sub-epic `self-iteration/`, 加入 NEW `03-iteration-dashboard` UI Room. 07-applier 子节点从 9 个降为 8 个 (5 feature + 1 sub-epic + 01 done + gap 07). 数字编号 08-snapshot-refs-layer 保留 (gap at 07 是 old 07-feedback-flywheel 移走留下的, 保留 git 历史可追溯). Dependency 链不变: 02 → 08 → self-iteration → 03/04/05/06. self-iteration 又分 3 子: 01-code-calibration (改 .mjs, ~450 LOC) + 02-data-flywheel (改 YAML, ~400 LOC) + 03-iteration-dashboard (UI, ~620 LOC). 总 self-iteration ~1500 LOC, ~8-10 milestones."
+  "08-snapshot-refs-layer": 0          # NEXT — foundation Room, deps 02 ✅
+  "self-iteration": 0                  # sub-epic (3 子 Rooms: 01-code-calibration / 02-data-flywheel / 03-iteration-dashboard)
+status_note: "🟢 07-applier 25% (2/8 children ✅ — after self-iteration sub-epic restructure). 02-playwright-runtime ROOM COMPLETE 2026-05-11: ~450 LOC src (browser.mjs + humanize.mjs + screenshot.mjs) + ~790 LOC smoke (33 asserts across m1/m2/m3) + 3 review passes by plan-agent (m1 3C+1H, m2 2C+4H+6M+1L, m3 3C+5H+3M, all addressed). agent-browser daemon warmth pattern materialized via module singleton; stealth via playwright-extra + puppeteer-extra-plugin-stealth; JPEG q70 screenshots; per-context crash recovery via WeakMap state. Next: 08-snapshot-refs-layer plan-milestones (deps 02 now satisfied — foundation chain continues toward 03/04/05/06). OR detour 08-human-gate-tracker/03-interview-prep or /04-followup-cadence (independent of Mode 2 dependency chain)."
 last_updated: "2026-05-11"

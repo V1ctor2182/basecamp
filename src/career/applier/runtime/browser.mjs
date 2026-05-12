@@ -73,6 +73,14 @@ const _pageJobIds = new WeakMap();
 // when underlying Chromium gets kill -9'd but parent still tracks it.
 const CLOSE_TIMEOUT_MS = 5_000;
 
+// Per-context teardown state — C1 fix from m3 review. A previous module-
+// level _expectingClose flag had races: timeout-swallowed close races with
+// late-firing 'close' event, and unrelated crashes during a closeBrowser
+// on a stale handle would be wrongly suppressed. WeakMap keys by context
+// so each launch gets its own flag pair, GC'd when the context is.
+/** @type {WeakMap<import('playwright').BrowserContext, { expectingClose: boolean, handlerFired: boolean }>} */
+const _ctxState = new WeakMap();
+
 // ── Internal launch ──────────────────────────────────────────────────────
 
 async function launch() {
@@ -91,6 +99,31 @@ async function launch() {
     ],
     timeout: BROWSER_LAUNCH_TIMEOUT_MS,
   });
+
+  // m3 crash recovery: when the context closes unexpectedly (Chromium
+  // crashed, user force-quit, OOM kill), mark the singleton dirty so the
+  // next getBrowser() launches fresh. Per-context state via WeakMap (C1
+  // fix); closure-local `handlerFired` dedupes the case where both
+  // ctx.on('close') and browser.on('disconnected') fire (C3 fix).
+  const state = { expectingClose: false, handlerFired: false };
+  _ctxState.set(ctx, state);
+  const handleContextClose = () => {
+    if (state.handlerFired) return; // C3: dedupe close + disconnected double-fire
+    state.handlerFired = true;
+    if (state.expectingClose) return; // graceful — no warn
+    console.warn(
+      '[applier/runtime] Chromium context closed unexpectedly — marking ' +
+        'singleton dirty; next getBrowser() will launch a fresh instance.',
+    );
+    if (_context === ctx) _context = null;
+  };
+  ctx.on('close', handleContextClose);
+  // Browser.disconnected fires if the underlying browser process died
+  // (kill -9, OOM, etc). Same handler.
+  const browser = ctx.browser();
+  if (browser) {
+    browser.on('disconnected', handleContextClose);
+  }
 
   return ctx;
 }
@@ -205,6 +238,11 @@ export async function closeBrowser() {
     const ctx = _context;
     _context = null; // clear singleton first so concurrent callers re-launch
     if (!ctx) return;
+    // C1 fix: flag THIS context (not module-level) as graceful, so concurrent
+    // closes on stale handles + late-firing close events on the OTHER context
+    // are correctly classified.
+    const state = _ctxState.get(ctx);
+    if (state) state.expectingClose = true;
     // M5 fix: close pages explicitly first to avoid mid-nav stderr noise
     try {
       await Promise.all(ctx.pages().map((p) => p.close().catch(() => {})));
