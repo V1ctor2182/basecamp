@@ -308,7 +308,7 @@ commits:
       - "intent-multi-step-state-machine-001 (anchors: applySessionsStore.mjs + smoke-apply-sessions-store.mjs)"
     milestones_affected:
       - "m1-apply-session-store (→ completed)"
-  - hash: "<pending-pin>"
+  - hash: "9cc1cfa"
     date: "2026-05-13"
     message: "[04-career-system/07-applier/04-multi-step-state-machine] m2: site adapter + total-step probe + Next button helpers (smoke 43/43)"
     files_changed: 3
