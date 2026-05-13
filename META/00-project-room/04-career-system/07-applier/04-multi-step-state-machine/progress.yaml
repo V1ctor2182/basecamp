@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-apply-session-store"
     name: "ApplySessionStore — data/career/apply-sessions/{jobId}.json schema + atomic CRUD"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/multistep/applySessionsStore.mjs"
       - "scripts/smoke-apply-sessions-store.mjs"
@@ -299,8 +299,16 @@ milestones:
         - Resume e2e: kill machine mid-flow, restart, advance to
           completion
 
-commits: []
+commits:
+  - hash: "<pending-pin>"
+    date: "2026-05-13"
+    message: "[04-career-system/07-applier/04-multi-step-state-machine] m1: ApplySessionStore — Zod schema + atomic CRUD + per-jobId mutex (smoke 43/43)"
+    files_changed: 2
+    specs_affected:
+      - "intent-multi-step-state-machine-001 (anchors: applySessionsStore.mjs + smoke-apply-sessions-store.mjs)"
+    milestones_affected:
+      - "m1-apply-session-store (→ completed)"
 current_sprint: "Sprint 16 — Mode 2 Multi-Step State Machine"
 blockers: []
-status_note: "🆕 Planned 2026-05-13: 4-milestone Plan A locked. ~1030 LOC src + ~1330 smoke est., comparable to 03-field-classifier (~885 + ~1500). Depends on 02-playwright-runtime + 03-field-classifier (both shipped). 7 OQs locked at planning: (1) per-step drafts inside session JSON, (2) dependent-field via polling re-snapshot (not MutationObserver), (3) approve = injected callback (m4 endpoint wraps), (4) inline site adapter mini-registry (06 supersedes), (5) 24h abandon sweep lazy on read, (6) m4 minimal endpoint + UI in 08-human-gate-tracker, (7) field_memory key = lookupKey primary + normalized name fallback. Ready for dev m1."
+status_note: "🟢 1/4 milestones done. m1 shipped — ApplySessionStore (applySessionsStore.mjs ~310 LOC: Zod schema + atomic CRUD + per-jobId mutex withSessionLock + lazy 24h abandon detection + ghost-timestamp guardrail) + smoke-apply-sessions-store.mjs ~520 LOC, 43/43 green. Plan-agent Phase 3.5 review: 0 CRITICAL + 3 HIGH + 4 MEDIUM + 4 LOW — applied all 3H + 3M + 1L (H1 tmp-file randomBytes(4) suffix prevents same-ms collision, H2 withSessionLock for read-modify-write serialization per jobId (parallel across jobs), H3 writeSession refuses bump-activity on status='abandoned' to prevent ghost timestamps, M1 field_memory cap 500 entries + per_step_draft/status cap 50 entries, M2 PerStepDraftFieldSchema .catchall(typed) instead of .passthrough so classifier extras still pass but can't balloon, L3 current_step ≤ total_steps invariant). Smoke covers: concurrent-write race, mutex serialization, parallel cross-jobId, ghost-timestamp guard + bypass, M1/M2 caps, L3 invariant, strict schema, corrupt JSON, ZodError on bad schema, contract returns, 4000-char boundary, sorted listing. m1 unblocks m2 (siteAdapter+stepProbe consume nothing here but m3 calls readSession/writeSession every step)."
 last_updated: "2026-05-13"
