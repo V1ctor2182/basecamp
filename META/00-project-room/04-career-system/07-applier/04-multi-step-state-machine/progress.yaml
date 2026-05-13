@@ -62,7 +62,7 @@ milestones:
 
   - id: "m2-site-adapter-step-probe"
     name: "Site adapter detection + total-step probing + Next button helpers"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/multistep/siteAdapter.mjs"
       - "src/career/applier/multistep/stepProbe.mjs"
@@ -308,7 +308,15 @@ commits:
       - "intent-multi-step-state-machine-001 (anchors: applySessionsStore.mjs + smoke-apply-sessions-store.mjs)"
     milestones_affected:
       - "m1-apply-session-store (→ completed)"
+  - hash: "<pending-pin>"
+    date: "2026-05-13"
+    message: "[04-career-system/07-applier/04-multi-step-state-machine] m2: site adapter + total-step probe + Next button helpers (smoke 43/43)"
+    files_changed: 3
+    specs_affected:
+      - "intent-multi-step-state-machine-001 (anchors: siteAdapter.mjs + stepProbe.mjs + smoke-multistep-site-adapter.mjs)"
+    milestones_affected:
+      - "m2-site-adapter-step-probe (→ completed)"
 current_sprint: "Sprint 16 — Mode 2 Multi-Step State Machine"
 blockers: []
-status_note: "🟢 1/4 milestones done. m1 shipped — ApplySessionStore (applySessionsStore.mjs ~310 LOC: Zod schema + atomic CRUD + per-jobId mutex withSessionLock + lazy 24h abandon detection + ghost-timestamp guardrail) + smoke-apply-sessions-store.mjs ~520 LOC, 43/43 green. Plan-agent Phase 3.5 review: 0 CRITICAL + 3 HIGH + 4 MEDIUM + 4 LOW — applied all 3H + 3M + 1L (H1 tmp-file randomBytes(4) suffix prevents same-ms collision, H2 withSessionLock for read-modify-write serialization per jobId (parallel across jobs), H3 writeSession refuses bump-activity on status='abandoned' to prevent ghost timestamps, M1 field_memory cap 500 entries + per_step_draft/status cap 50 entries, M2 PerStepDraftFieldSchema .catchall(typed) instead of .passthrough so classifier extras still pass but can't balloon, L3 current_step ≤ total_steps invariant). Smoke covers: concurrent-write race, mutex serialization, parallel cross-jobId, ghost-timestamp guard + bypass, M1/M2 caps, L3 invariant, strict schema, corrupt JSON, ZodError on bad schema, contract returns, 4000-char boundary, sorted listing. m1 unblocks m2 (siteAdapter+stepProbe consume nothing here but m3 calls readSession/writeSession every step)."
+status_note: "🟢 2/4 milestones done. m2 shipped — siteAdapter.mjs ~135 LOC (inline mini-registry: 4 adapters workday/icims/successfactors/generic + KNOWN_IDS contract assertion at module load) + stepProbe.mjs ~245 LOC (3-strategy probeTotalSteps: progressbar valuetext → sidebar listitem count → exploratory null + findNextButton + isOnSubmitStep, all wrapped in 5s timeouts) + smoke-multistep-site-adapter.mjs ~520 LOC, 43/43 green. m2 functions accept any object implementing the Playwright Page subset they touch (getByRole + Locator with count/first/nth/getAttribute/textContent/isVisible) so smoke uses pure-Node MockLocator harness (no Chromium spawn). Plan-agent Phase 3.5 review: 0 CRITICAL + 2 HIGH + 6 MEDIUM + 4 LOW — applied 2H + 5M + 1L (H1 isOnSubmitStep anchored regex prevents 'Apply Filter' false-match killing STEP_LOOP, H2 probeProgressBar enforces current≤total≥1 invariant rejecting garbage server bugs, M1 detectAdapter URL.hostname parse + fallback for tighter match, M2 probeStepList hoists locator avoiding double query, M3 escapeRegex hint symmetry, M4 KNOWN_IDS contract + module-load assertion, M5 JSDoc total:null authoritative, L1 cap findNextButton iteration at actual count). Smoke covers: 4 URL patterns + path-injection rejection + hostname-only match, registry shape + frozen + KNOWN_IDS subset, 3 progressbar regex variants + aria-valuenow fallback + invariant rejection (current>total, current=0, current=total), sidebar listitem count + scoped descendant query, combined probe precedence + adapter-as-id-or-descriptor, findNextButton hint iteration + visibility filter + case-insensitive, isOnSubmitStep anchored match + false-match coverage, timeout error resilience + hung-Locator returns null within ~5s. m1 regression: 43/43 unchanged. m2 unblocks m3 (state machine consumes probeTotalSteps + findNextButton + isOnSubmitStep)."
 last_updated: "2026-05-13"
