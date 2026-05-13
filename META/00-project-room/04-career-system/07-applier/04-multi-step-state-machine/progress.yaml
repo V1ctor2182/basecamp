@@ -300,7 +300,7 @@ milestones:
           completion
 
 commits:
-  - hash: "<pending-pin>"
+  - hash: "778a7aa"
     date: "2026-05-13"
     message: "[04-career-system/07-applier/04-multi-step-state-machine] m1: ApplySessionStore — Zod schema + atomic CRUD + per-jobId mutex (smoke 43/43)"
     files_changed: 2
