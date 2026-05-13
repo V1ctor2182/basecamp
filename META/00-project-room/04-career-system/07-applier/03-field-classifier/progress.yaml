@@ -221,7 +221,7 @@ milestones:
 
   - id: "m3-snapshot-integration-draft-writer-room-complete"
     name: "Snapshot → classifyAndFill pipeline + Draft writer + integration smoke + ROOM COMPLETE"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/classifier/runner.mjs"
       - "scripts/smoke-field-classifier-e2e.mjs"
@@ -303,7 +303,21 @@ commits:
       - "intent-field-classifier-001 (anchors extended: openFiller.mjs + fileFiller.mjs + classifier/index.mjs classifyAndFill + smoke-field-classifier-fillers.mjs)"
     milestones_affected:
       - "m2-open-class-llm-filler-file-resolver (→ completed)"
-current_sprint: "Sprint 15 — Mode 2 Field Classifier"
+  - hash: "<pending-pin>"
+    date: "2026-05-13"
+    message: "[04-career-system/07-applier/03-field-classifier] m3: snapshot→Draft pipeline + ROOM COMPLETE (smoke 20/20, 95 total)"
+    files_changed: 6
+    specs_affected:
+      - "intent-field-classifier-001 (anchors extended: classifier/runner.mjs + smoke-field-classifier-e2e.mjs)"
+      - "Mode 1 + Mode 2 now share drafts/{jobId}.json contract (DraftSchema unchanged)"
+    milestones_affected:
+      - "m3-snapshot-integration-draft-writer-room-complete (→ completed)"
+    rollups:
+      - "room.yaml lifecycle: planning → active"
+      - "_tree.yaml 03-field-classifier: planning → active"
+      - "07-applier parent: 38% → 50% (4/8 children ✅)"
+      - "04-career-system: 89% → 90% (26/34 features)"
+current_sprint: "Sprint 15 — Mode 2 Field Classifier (ROOM COMPLETE)"
 blockers: []
-status_note: "🟢 2/3 milestones done. m2 shipped — Open-class LLM filler (openFiller.mjs ~310 LOC: qa-bank fuzzy cache → budget gate → Sonnet with stripAnswerWrappers, all deps injected) + file path resolver (fileFiller.mjs ~210 LOC: jobId 12-hex + resumeId whitelist + path-escape guard for traversal protection) + classifyAndFill orchestrator (index.mjs ~+50 LOC: routes hard/legal/unknown via m1, file→fileFiller, open→openFiller; preserves cost_usd/used on all paths) + smoke-field-classifier-fillers.mjs ~720 LOC, 36/36 green. Plan-agent Phase 3.5 review: 3 CRITICAL + 6 HIGH + 9 MEDIUM + 9 LOW — applied all 3C + all 6H + 4M (C1 path traversal regex+isPathSafe, C2 cache rejection clears on retry, C3 history load wrapped in try/catch fallback to [], H1 stripAnswerWrappers peels markdown/quote/preamble wrappers, H4 partial.subclass instead of redundant classifyField re-run, H5 fire-and-forget recordCost via Promise.resolve().then so slow ledger can't stall, H6 costUsd captured in outer scope before post-call throw, M3 narrativeVoice/jdSummary trim guards, M6 whitespace-only field_label skipped + null target name guard, M9 cost_usd:0 / used:'none' on non-LLM paths so downstream ledger sees uniform shape). 36 smokes green (24 base + 12 review-fix coverage including path-traversal regression, markdown stripping, fire-and-forget timing, cost preservation under recordCost throw). m1 regression: 39/39 unchanged. m2 unblocks m3 (snapshot integration + Draft writer + ROOM COMPLETE)."
-last_updated: "2026-05-10"
+status_note: "🎉 ROOM COMPLETE 2026-05-13 (3/3 milestones). m3 shipped — snapshot→classifyAndFill→DraftSchema→drafts/{jobId}.json pipeline (runner.mjs ~245 LOC: classifyAndDraft orchestrator + toDraftField adapter mapping m2's richer output {5 classes, 4 confidence tiers, nullable value, extras} to existing strict DraftSchema {4 classes, 3 tiers, required string value} + per-field try/catch error stub + file>hard>legal>open priority truncation under 50-cap + jobId 12-hex fail-fast + negative cost guard) + smoke-field-classifier-e2e.mjs ~520 LOC, 20/20 green. Mode 1 + Mode 2 now share drafts contract — UI/dashboard consume one shape regardless of mode. Plan-agent Phase 3.5 review: 0 CRITICAL + 4 HIGH + 6 MEDIUM + 6 LOW — applied 4H + 4M (H1 negative cost crashes Zod post-LLM-spend, H2 entry.name empty fallback + don't leak err.message into source_ref, H3 untested try/catch + _classifyAndFill DI for testing, H4 cross-Room contract doc for error-stub class='open' to prevent multi-step LLM retry burn, M1 priority truncation file>hard>legal>open so resume upload isn't dropped under Workday-style snapshot order, M3 over-cap source_ref dropped not truncated, M6 llmCalls sentinel assertion, jobId regex fail-fast pre-classifier so bad jobId can't spend $ before writeDraft catches it). Smoke regression: m1 39/39 + m2 36/36 unchanged. **Total: 95/95 green across the Room.** 下游 unblocked: 04-multi-step-state-machine (consumes classifier per step), 05-non-standard-controls (extends for weird controls), 06-site-adapters (per-ATS rule overrides), self-iteration/02-data-flywheel (qa-bank cache writer closes the cache reuse loop)."
+last_updated: "2026-05-13"
