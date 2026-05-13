@@ -325,7 +325,7 @@ commits:
       - "constraint-multi-step-state-machine-001 — per-step approval + field_memory + 30-min retention + DOM-stable wait + dependent-field re-classify all covered"
     milestones_affected:
       - "m3-state-machine-core-field-memory (→ completed)"
-  - hash: "<pending-pin>"
+  - hash: "2ab6938"
     date: "2026-05-13"
     message: "[04-career-system/07-applier/04-multi-step-state-machine] m4: HTTP endpoint + resume + ROOM COMPLETE (smoke 30/30, Room total 153/153)"
     files_changed: 4
