@@ -394,7 +394,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/07-applier/04-multi-step-state-machine"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: backend
       parent: "00-project-room/04-career-system/07-applier"
       children: []
