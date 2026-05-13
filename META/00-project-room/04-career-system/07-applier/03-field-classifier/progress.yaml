@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-regex-rules-identity-legal-lookup"
     name: "Regex rule engine + identity.yml/legal.yml lookup (pure deterministic, 0 LLM)"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/classifier/regexRules.mjs"
       - "src/career/applier/classifier/identityLookup.mjs"
@@ -286,8 +286,16 @@ milestones:
         - draftsStore.writeDraft round-trips through DraftSchema.parse
         - Draft.cost_usd matches sum of openFiller LLM costs
 
-commits: []
+commits:
+  - hash: "PENDING"
+    date: "2026-05-12"
+    message: "[04-career-system/07-applier/03-field-classifier] m1: regex rules + identity/legal lookup (pure deterministic, smoke 39/39)"
+    files_changed: 5
+    specs_affected:
+      - "intent-field-classifier-001 (anchors: regexRules.mjs + identityLookup.mjs + legalLookup.mjs + classifier/index.mjs + smoke-field-classifier-rules.mjs)"
+    milestones_affected:
+      - "m1-regex-rules-identity-legal-lookup (→ completed)"
 current_sprint: "Sprint 15 — Mode 2 Field Classifier"
 blockers: []
-status_note: "🔄 planning (milestones locked 2026-05-12). Plan A (foundation-first) accepted: m1 deterministic classifier rules → m2 LLM Open filler + file resolver + qa-bank cache + budget gate → m3 snapshot integration + Draft writer + ROOM COMPLETE. 3 milestones (~700 LOC + ~480 smoke). 7 OQ locked from planning: Q1 input=snapshot output (08), Q2 missing maxLength/placeholder handled via name-regex primary + future inspectRef helper, Q3 NEW Open prompt (not draftPrompt reuse), Q4 fuzzy qa-bank cache short-circuits LLM at weight≥medium, Q5 confidence tiers high/medium/low/manual, Q6 LLM calls through 04-budget-gate, Q7 same DraftSchema as 01-mode1. Foundation Rooms 02+08 already shipped — 03 consumes snapshot output as input. After 03 ROOM COMPLETE, 04+05+06 unblocked. Next action: dev m1-regex-rules-identity-legal-lookup."
+status_note: "🟢 1/3 milestones done. m1 shipped — pure-deterministic classifier rules + identity/legal lookup (regexRules.mjs ~220 LOC + identityLookup.mjs ~95 LOC + legalLookup.mjs ~95 LOC + classifier/index.mjs ~165 LOC + smoke-field-classifier-rules.mjs ~440 LOC, 39/39 green). Plan-agent Phase 3.5 review: 3 CRITICAL + 10 HIGH + 11 MEDIUM + 10 LOW — applied 2C + 9H + 5M (C2 cover-letter textbox falls to OPEN not FILE [role gate], C3 dead subclass param removed + boolean polarity documented, H1 GitLab decoupled from GitHub regex, H3 phone variants broader, H4 years-experience reverse phrasings, H6 single-word name → split[-1] returns undefined [no silent corruption], H7 combobox+number coercion guard, H8 Workday visa-status, H9 Lever Source pattern, H10 structured `source` object + parseable `source_ref` string contract, M3 pronouns word boundary, M4 felony broader, M5 cache race → store promise pattern, M7 empty-string → manual, M8 open-class null → confidence='manual'); deferred 1 CRITICAL theoretical + 1 HIGH (cross-module _resetCache nuance + M11 Workday/Lever fixtures — m2/m3 work). 39 smokes green (up from 28 initial); 02 + 08 regression unchanged. m1 unblocks m2 (Open LLM filler will consume classifyField output)."
 last_updated: "2026-05-12"

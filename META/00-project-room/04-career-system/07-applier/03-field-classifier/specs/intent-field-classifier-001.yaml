@@ -17,6 +17,16 @@ provenance:
   confidence: 0.9
   source_ref: "career-architecture/06-applier.md#6.2-字段分类"
 relations: []
-anchors: []
+anchors:
+  - file: "src/career/applier/classifier/regexRules.mjs"
+    description: "m1: ~220 LOC. HARD/LEGAL/FILE/OPEN pattern arrays + classifyField(entry) dispatch. 4-priority order (Hard > Legal > File > Open > Unknown) with role-gating on FILE so cover-letter textbox falls through to OPEN. 14 HARD patterns (name/email/phone/linkedin/github/portfolio/city/country/school/degree/GPA/years-exp), 12 LEGAL patterns (sponsorship/work-auth/citizenship/EEO×5/felony/relocate/background-check/how-did-you-hear), 4 FILE patterns (resume/cover-letter/work-samples/transcript), 10 OPEN subclasses + unknown-open fallback. EEO defaults in legal.yml already 'Decline to answer'. Patterns broadened post-review for Workday (visa-status, country/region) + Lever (Source, lawfully) + iCIMS (Contact Number) variants."
+  - file: "src/career/applier/classifier/identityLookup.mjs"
+    description: "m1: ~95 LOC. Lazy-load + cache identity.yml; promise-cache pattern prevents concurrent-read race. lookupHardValue(lookupKey) with dot-path syntax + name.split[N] for first/last-name derivation from full name. Single-word name returns undefined for split[-1] to prevent silent first=last corruption (H6 fix). Trailing punctuation stripping handles 'Watson, Mary' style ordering. YAML parse errors include file path."
+  - file: "src/career/applier/classifier/legalLookup.mjs"
+    description: "m1: ~95 LOC. Lazy-load + cache legal.yml; same promise-cache pattern. lookupLegalValue(lookupKey, eeoDefault) returns {found, value, coercedFrom} — coercedFrom signals type origin (boolean/number/string) so downstream can detect mismatch (e.g., number coerced into Yes/No combobox). Boolean → 'Yes'/'No'. EEO defaults kick in when YAML key missing."
+  - file: "src/career/applier/classifier/index.mjs"
+    description: "m1: ~165 LOC. classifyAndLookup(entry) public API — produces partial DraftField from snapshot entry. Routes Hard → identityLookup, Legal → legalLookup, File/Open → m2 placeholders (suggested_value=null, confidence='manual'). H10 fix: structured `source` object {kind, key?, subclass?, status} stringified via toSourceRefString() to parseable `source_ref` (no English-annotation parsing for downstream). H7 fix: combobox + numeric-coerced legal value → confidence='manual' (type-mismatch guard). M8 fix: open class with null value → confidence='manual' (was 'medium'). Empty-string identity values → manual."
+  - file: "scripts/smoke-field-classifier-rules.mjs"
+    description: "m1 smoke: ~440 LOC, 39 asserts. Pattern shape sanity / HARD all 14 patterns / LEGAL all 12 patterns / FILE 4 patterns / OPEN 10 subclasses / priority dispatch / identity.yml lookup (simple + dot-path + split + missing) / legal.yml lookup (EEO defaults + boolean coercion + coercedFrom) / classifyAndLookup integration / Greenhouse 15-field fixture ≥95% accuracy / 11 review-fix-coverage tests (C2 cover-letter textbox→open / H1 GitLab decoupled / H3 phone variants / H4 years phrasings / H6 single-word name / H7 combobox-number guard / H8 visa-status / H9 Lever Source / H10 structured source / M3 pronouns word-boundary / M8 open-class manual)."
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-12"
