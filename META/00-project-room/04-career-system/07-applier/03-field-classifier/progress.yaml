@@ -1,5 +1,323 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-regex-rules-identity-legal-lookup"
+    name: "Regex rule engine + identity.yml/legal.yml lookup (pure deterministic, 0 LLM)"
+    status: completed
+    estimated_files:
+      - "src/career/applier/classifier/regexRules.mjs"
+      - "src/career/applier/classifier/identityLookup.mjs"
+      - "src/career/applier/classifier/legalLookup.mjs"
+      - "src/career/applier/classifier/index.mjs"
+      - "scripts/smoke-field-classifier-rules.mjs"
+    estimated_lines: 280
+    depends_on: []
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Pure-function regex classifier — takes snapshot output entry from
+      08-snapshot-refs-layer ({ refId, role, name, occurrenceIndex, ... }),
+      classifies into hard/legal/open/file, looks up the canned answer
+      from identity.yml or qa-bank/legal.yml. NO LLM in m1.
+
+      Locked design:
+        - Priority order: Hard > Legal > File > Open > Unknown (per Room spec)
+        - 4 classes match draftsStore.mjs FIELD_CLASSES = ['hard','legal','open','file']
+        - Confidence tiers match draftsStore.mjs CONFIDENCE_TIERS = ['high','medium','low']
+          + 'manual' for caller-must-fill (m2 wires this)
+        - identity.yml + qa-bank/legal.yml are ALREADY shipped data files
+          (01-foundation/02-career-data-layout shipped both)
+
+      Files:
+        - src/career/applier/classifier/regexRules.mjs (~120 LOC):
+          · HARD_PATTERNS — array of { regex, lookupKey, subclass } covering:
+              - name: /^(first|given) ?name$/i → identity.first_name
+              - name: /^(last|family|sur) ?name$/i → identity.last_name
+              - name: /^full ?name$/i → identity.full_name
+              - email: /email/i → identity.email
+              - phone: /phone|mobile|cell/i → identity.phone
+              - linkedin: /linkedin/i → identity.linkedin_url
+              - github: /github/i → identity.github_url
+              - portfolio: /portfolio|website|personal ?site/i → identity.portfolio_url
+              - school: /(school|university|college)$/i → identity.education[0].school
+              - degree: /degree/i → identity.education[0].degree
+              - GPA: /gpa/i → identity.education[0].gpa
+              - years exp: /years.*(experience|exp)/i → identity.years_experience
+              - city: /city|location/i → identity.city
+              - country: /country/i → identity.country
+          · LEGAL_PATTERNS — array of { regex, lookupKey, subclass, eeoDefault }:
+              - sponsor/visa: /sponsor(ship)?|visa|require.*sponsor/i → legal.work_authorization
+              - citizen: /citizen/i → legal.citizenship_status
+              - gender: /gender/i → legal.gender (EEO default "Decline to answer")
+              - race: /race|ethnicity/i → legal.race (EEO default)
+              - veteran: /veteran/i → legal.veteran_status (EEO default)
+              - disability: /disability/i → legal.disability (EEO default)
+              - felony: /felony|conviction/i → legal.felony
+              - relocate: /relocate/i → legal.willing_to_relocate
+              - referral: /how did you hear|referred by/i → legal.how_did_you_hear
+          · OPEN_PATTERNS — array of { regex, subclass }:
+              - why-company: /why.*(this )?company|why.*us|why.*here/i
+              - why-role: /why.*(role|position|join|interested in this)/i
+              - tell-me-about: /tell.*about (you|yourself|your)/i
+              - weakness: /weakness/i
+              - strength: /strength/i
+              - salary-expectation: /salary|compensation|pay/i
+              - start-date: /start date|when.*(available|start)/i
+              - notice-period: /notice period|notice/i
+              - reason-for-leaving: /reason.*leaving|why.*leaving/i
+              - unknown-open: any textbox name not matching above (fallback)
+          · FILE_PATTERNS — { regex, subclass } (matched only when role='button'
+            with name containing 'Upload' / 'Choose File' or role='link' / etc):
+              - resume/cv: /resume|cv/i
+              - cover-letter: /cover ?letter/i
+              - work-samples: /work ?sample|portfolio file/i
+              - transcript: /transcript/i
+              - general-file: fallback
+          · classifyField(entry) — priority dispatch:
+              return { class, subclass?, lookupKey?, eeoDefault?, confidenceHint }
+            Confidence hint: 'high' if regex hit + subclass known; 'low' if
+            fell through to unknown-open / general-file; null if completely
+            unmatched (callers can route to 'manual').
+
+        - src/career/applier/classifier/identityLookup.mjs (~70 LOC):
+          · loadIdentity() — lazy-loads + caches data/career/identity.yml
+            using existing js-yaml dep (verified shipped via 02-profile/01).
+          · lookupHardValue(lookupKey) — supports dot-paths:
+              "identity.email" → identity.email
+              "identity.education[0].school" → identity.education[0].school
+          · Returns { value, found } — found=false on missing key (caller
+            decides medium-confidence + suggested_value=null vs synthesize).
+          · Handles 'identity.full_name' as concat first_name+' '+last_name
+            if no explicit full_name field.
+
+        - src/career/applier/classifier/legalLookup.mjs (~40 LOC):
+          · loadLegal() — lazy-loads + caches data/career/qa-bank/legal.yml
+          · lookupLegalValue(lookupKey, eeoDefault) — supports same dot-path
+            access; returns eeoDefault when lookup is null/missing for EEO
+            categories (Q5 confidence tier: high if user-authored, medium if
+            EEO default kicked in).
+
+        - src/career/applier/classifier/index.mjs (~50 LOC):
+          · Re-exports classifyField from regexRules
+          · classifyAndLookup(snapshotEntry) — the m1 public API:
+              entry = { refId, role, name, ... } from snapshot
+              → { refId, label, class, subclass?, suggested_value, confidence, source_ref }
+              partial DraftField (missing Open class LLM answers — those come in m2)
+            For Open: returns { class: 'open', suggested_value: null, confidence: 'medium' }
+            For File: returns { class: 'file', suggested_value: null, confidence: 'manual' }
+              (file path needs jobId+resumeId from context — m2 fileFiller resolves)
+
+        - scripts/smoke-field-classifier-rules.mjs (~180 LOC, ~30 asserts):
+          · Each pattern matched against 2-3 real ATS field name variants
+          · Priority order verified (e.g. "Email Address" → hard not open)
+          · identity.yml lookup: dot-paths + missing keys + full_name concat
+          · legal.yml lookup: EEO defaults kick in for null lookups
+          · classifyAndLookup integration: Greenhouse-shaped 15-field fixture
+            → returns array of 15 partial DraftFields, accuracy ≥ 60% on
+            class assignment (Hard+Legal+File only; Open suggested_value=null
+            is correct m1 state)
+          · Edge cases: empty name, all-numeric name, unicode name, very
+            long name (just to verify no crash)
+
+      验收:
+        - 30/30 smoke green
+        - identity.yml lookup test against real ./data/career/identity.yml
+          schema (will use a smoke fixture identity yml if user's is missing)
+        - Pure-function module — no external API call, no fs writes
+          (data files are read-only)
+
+  - id: "m2-open-class-llm-filler-file-resolver"
+    name: "Open-class LLM filler (Sonnet) + file path resolver + qa-bank cache + budget gate"
+    status: completed
+    estimated_files:
+      - "src/career/applier/classifier/openFiller.mjs"
+      - "src/career/applier/classifier/fileFiller.mjs"
+      - "src/career/applier/classifier/index.mjs"
+      - "scripts/smoke-field-classifier-fillers.mjs"
+    estimated_lines: 260
+    depends_on: ["m1-regex-rules-identity-legal-lookup"]
+    complexity_flags: ["external_api", "error_handling_heavy"]
+    open_questions: []
+    description: |
+      Wires the LLM-driven path for Open class + the file-path mapping for
+      File class. Reuses 04-budget-gate's cost-aware caller pattern from
+      06-evaluator. qa-bank fuzzy match short-circuits LLM when prior
+      (role, name) pair has a cached answer with weight ≥ medium (per
+      locked Q4).
+
+      Locked design (Q3-Q7 from planning):
+        - Q3: NEW Open-class prompt (not draftPrompt reuse — Mode 2 has
+          snapshot+JD context, prompt shape differs)
+        - Q4: fuzzy match qa-bank by (role, name); cached hit ≥ medium
+          weight → use without LLM call
+        - Q5: confidence tier scheme high/medium/low/manual
+        - Q6: each LLM call passes through 04-budget-gate (402 if blocked)
+        - Q7: outputs same DraftField shape as Mode 1 (composable with 01)
+
+      Files:
+        - src/career/applier/classifier/openFiller.mjs (~150 LOC):
+          · loadQaBankCache() — reads data/career/qa-bank/history.jsonl
+            (already shipped by 01-mode1/m4 flywheel writer)
+          · findCachedAnswer(role, name, weight_threshold='medium') —
+            fuzzy match by normalized (role, name) key; returns the
+            highest-weight match or null
+          · buildOpenPrompt(subclass, snapshotEntry, ctx) — builds Sonnet
+            prompt with:
+              - System: role-specific guidance + narrative.md voice +
+                qa-bank history.jsonl few-shot (matching cache_control
+                pattern from Stage A/B)
+              - User: snapshot field name + JD if available + previous
+                similar answers
+          · callSonnet(prompt, opts) — wraps existing Anthropic client
+            with budget gate (reuses 04-budget-gate's checkBudget); on
+            402 returns { suggested_value: null, confidence: 'manual',
+            blocked_reason: 'budget' }
+          · fillOpenField(snapshotEntry, classification, ctx) —
+            orchestrator:
+              1. cache hit ≥ medium weight → use cached, confidence='high'
+              2. cache miss / low weight → LLM call → confidence='medium'
+              3. LLM error (timeout/rate-limit/parse) → confidence='manual',
+                 suggested_value=null
+
+        - src/career/applier/classifier/fileFiller.mjs (~50 LOC):
+          · fillFileField(snapshotEntry, classification, ctx) — maps:
+              - subclass='resume' → output/{jobId}-{resumeId}.pdf
+                (resumeId from ctx; existence check via fs.access)
+              - subclass='cover-letter' → either ctx.coverLetterPath (if
+                generated upstream by Stage B) OR returns confidence=
+                'manual' with suggested_value=null + hint "generate via
+                Tailor Engine first"
+              - subclass='work-samples' / 'transcript' / 'general-file' →
+                confidence='manual' (V1 doesn't auto-resolve these)
+          · Confidence: 'high' for resume (file exists), 'medium' if file
+            path computed but unverified, 'manual' for everything else.
+
+        - src/career/applier/classifier/index.mjs (~+60 LOC modifications):
+          · classifyAndFill(snapshotEntry, ctx) — the m2 public API
+            (supersedes m1's classifyAndLookup):
+              ctx = { jobId, resumeId, jdSummary?, narrativeVoice? }
+              Routes Hard → identityLookup (m1)
+              Routes Legal → legalLookup (m1)
+              Routes File → fileFiller (m2)
+              Routes Open → openFiller (m2; may call Sonnet)
+              Returns complete DraftField with non-null suggested_value
+              (or null + confidence='manual' on unresolvable cases).
+
+        - scripts/smoke-field-classifier-fillers.mjs (~150 LOC):
+          · qa-bank cache hit short-circuits LLM (mocked Sonnet, asserts
+            0 calls when cache has high-weight match)
+          · qa-bank cache miss → LLM called once (mocked, asserts 1 call)
+          · Confidence tiers: cache-high-weight → 'high'; LLM-success →
+            'medium'; LLM-parse-fail → 'manual' with null value
+          · File filler: resume path resolution + file-exists check
+          · Budget gate: simulated 402 → confidence='manual' + reason
+          · classifyAndFill 15-field Greenhouse fixture → 90%+ accuracy
+            (cache + LLM combined)
+
+      验收:
+        - smoke 7-8 asserts all green
+        - Sonnet mock verifies budget-gate wrapper (no real API in smoke)
+        - identity + legal + qa-bank + file all consumed correctly
+        - Accuracy ≥ 85% on Greenhouse fixture (gap to 90% = LLM quality
+          which can't be smoke-tested deterministically)
+
+  - id: "m3-snapshot-integration-draft-writer-room-complete"
+    name: "Snapshot → classifyAndFill pipeline + Draft writer + integration smoke + ROOM COMPLETE"
+    status: completed
+    estimated_files:
+      - "src/career/applier/classifier/runner.mjs"
+      - "scripts/smoke-field-classifier-e2e.mjs"
+    estimated_lines: 160
+    depends_on: ["m2-open-class-llm-filler-file-resolver"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Close the loop: integrate with 08-snapshot-refs-layer (consume
+      snapshot output), drive classifier across all snapshot entries,
+      write a complete drafts/{jobId}.json. ROOM COMPLETE rollups.
+
+      Locked design:
+        - runner consumes both `text` (LLM context) and `table` from
+          snapshot; iterates via table.refIds() (m1 of 08 exposed iterator)
+        - Output matches existing DraftSchema (01's draftsStore.mjs) —
+          identical shape so Mode 1 / Mode 2 / dashboard consume same file
+        - Final Draft.cost_usd aggregates all openFiller LLM costs
+
+      Files:
+        - src/career/applier/classifier/runner.mjs (~90 LOC):
+          · async function classifyAndDraft({ page, jobId, resumeId,
+            jdSummary?, narrativeVoice? }):
+              1. Call snapshot(page) → { text, table, skippedFrames }
+              2. If skippedFrames > 0 → warn (don't error; partial OK)
+              3. For each refId in table.refIds():
+                   entry = table.publicEntry(refId)  // SANITIZED via 08's H4 fix
+                   draftField = await classifyAndFill(entry, ctx)
+                   accumulate cost_usd
+              4. Build Draft object matching DraftSchema:
+                 { jobId, fields: [...], generated_at, model: APPLIER_MODEL,
+                   cost_usd }
+              5. draftsStore.writeDraft(jobId, draft)
+              6. Return { draft, snapshot: { skippedFrames, ... } }
+
+        - scripts/smoke-field-classifier-e2e.mjs (~150 LOC, ~5 asserts):
+          · Greenhouse-shaped HTML fixture (~15 fields, mix of all 4 classes)
+          · classifyAndDraft({ page, jobId, resumeId }) end-to-end
+          · Verify Draft.json written to data/career/drafts/{jobId}.json
+          · Verify schema valid (DraftSchema.parse passes)
+          · Verify ≥ 90% field classification accuracy (per 验收 spec)
+          · Verify cost_usd is a non-negative number (budget reporting works)
+
+      ROOM COMPLETE rollups:
+        - room.yaml: lifecycle planning → active
+        - _tree.yaml: 03-field-classifier planning → active
+        - 07-applier parent: 38% → 50% (4/8 children ✅)
+        - 04-career-system: 89% → 90% (26/34 features)
+
+      下游 unblocked:
+        - 04-multi-step-state-machine (uses classifier output per step)
+        - 05-non-standard-controls (extends classifier when seeing weird
+          control types — adds confidence-low/manual handling)
+        - 06-site-adapters (overrides classifier rules per ATS domain)
+        - self-iteration/02-data-flywheel (qa-bank cache writes consumed
+          here — closes the cache reuse loop)
+
+      验收 (Room close):
+        - All m1+m2+m3 smokes green
+        - Real Greenhouse fixture: 15 fields → 13+ classified correctly
+          (90% threshold met)
+        - draftsStore.writeDraft round-trips through DraftSchema.parse
+        - Draft.cost_usd matches sum of openFiller LLM costs
+
+commits:
+  - hash: "31880e4"
+    date: "2026-05-12"
+    message: "[04-career-system/07-applier/03-field-classifier] m1: regex rules + identity/legal lookup (pure deterministic, smoke 39/39)"
+    files_changed: 5
+    specs_affected:
+      - "intent-field-classifier-001 (anchors: regexRules.mjs + identityLookup.mjs + legalLookup.mjs + classifier/index.mjs + smoke-field-classifier-rules.mjs)"
+    milestones_affected:
+      - "m1-regex-rules-identity-legal-lookup (→ completed)"
+  - hash: "e05a6ca"
+    date: "2026-05-10"
+    message: "[04-career-system/07-applier/03-field-classifier] m2: open-class LLM filler + file resolver + qa-bank cache + budget gate (smoke 36/36)"
+    files_changed: 4
+    specs_affected:
+      - "intent-field-classifier-001 (anchors extended: openFiller.mjs + fileFiller.mjs + classifier/index.mjs classifyAndFill + smoke-field-classifier-fillers.mjs)"
+    milestones_affected:
+      - "m2-open-class-llm-filler-file-resolver (→ completed)"
+  - hash: "6544274"
+    date: "2026-05-13"
+    message: "[04-career-system/07-applier/03-field-classifier] m3: snapshot→Draft pipeline + ROOM COMPLETE (smoke 20/20, 95 total)"
+    files_changed: 6
+    specs_affected:
+      - "intent-field-classifier-001 (anchors extended: classifier/runner.mjs + smoke-field-classifier-e2e.mjs)"
+      - "Mode 1 + Mode 2 now share drafts/{jobId}.json contract (DraftSchema unchanged)"
+    milestones_affected:
+      - "m3-snapshot-integration-draft-writer-room-complete (→ completed)"
+    rollups:
+      - "room.yaml lifecycle: planning → active"
+      - "_tree.yaml 03-field-classifier: planning → active"
+      - "07-applier parent: 38% → 50% (4/8 children ✅)"
+      - "04-career-system: 89% → 90% (26/34 features)"
+current_sprint: "Sprint 15 — Mode 2 Field Classifier (ROOM COMPLETE)"
 blockers: []
-status_note: "Feature 暂搁置（backlog），未来再评估优先级。"
-last_updated: "2026-04-22"
+status_note: "🎉 ROOM COMPLETE 2026-05-13 (3/3 milestones). m3 shipped — snapshot→classifyAndFill→DraftSchema→drafts/{jobId}.json pipeline (runner.mjs ~245 LOC: classifyAndDraft orchestrator + toDraftField adapter mapping m2's richer output {5 classes, 4 confidence tiers, nullable value, extras} to existing strict DraftSchema {4 classes, 3 tiers, required string value} + per-field try/catch error stub + file>hard>legal>open priority truncation under 50-cap + jobId 12-hex fail-fast + negative cost guard) + smoke-field-classifier-e2e.mjs ~520 LOC, 20/20 green. Mode 1 + Mode 2 now share drafts contract — UI/dashboard consume one shape regardless of mode. Plan-agent Phase 3.5 review: 0 CRITICAL + 4 HIGH + 6 MEDIUM + 6 LOW — applied 4H + 4M (H1 negative cost crashes Zod post-LLM-spend, H2 entry.name empty fallback + don't leak err.message into source_ref, H3 untested try/catch + _classifyAndFill DI for testing, H4 cross-Room contract doc for error-stub class='open' to prevent multi-step LLM retry burn, M1 priority truncation file>hard>legal>open so resume upload isn't dropped under Workday-style snapshot order, M3 over-cap source_ref dropped not truncated, M6 llmCalls sentinel assertion, jobId regex fail-fast pre-classifier so bad jobId can't spend $ before writeDraft catches it). Smoke regression: m1 39/39 + m2 36/36 unchanged. **Total: 95/95 green across the Room.** 下游 unblocked: 04-multi-step-state-machine (consumes classifier per step), 05-non-standard-controls (extends for weird controls), 06-site-adapters (per-ATS rule overrides), self-iteration/02-data-flywheel (qa-bank cache writer closes the cache reuse loop)."
+last_updated: "2026-05-13"

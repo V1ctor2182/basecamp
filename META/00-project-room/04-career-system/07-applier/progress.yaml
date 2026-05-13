@@ -1,15 +1,15 @@
 milestones: []
-current_sprint: "Sprint 14 — Mode 2 Foundation Shipping"
+current_sprint: "Sprint 15 — Mode 2 Field Classifier shipped"
 blockers: []
-completion: 38  # 300/8 = 37.5 → ~38 across 8 children (3 ROOMs ✅)
+completion: 50  # 400/8 = 50 across 8 children (4 ROOMs ✅)
 children_completion:
   "01-mode1-simplify-hybrid": 100  # 🎉 ROOM COMPLETE
   "02-playwright-runtime": 100         # 🎉 ROOM COMPLETE 2026-05-11
-  "03-field-classifier": 0
+  "03-field-classifier": 100           # 🎉 ROOM COMPLETE 2026-05-13 (3/3 m; rules+lookup, openFiller+fileFiller, snapshot→Draft pipeline)
   "04-multi-step-state-machine": 0
   "05-non-standard-controls": 0
   "06-site-adapters": 0
   "08-snapshot-refs-layer": 100        # 🎉 ROOM COMPLETE 2026-05-12 (3/3 m; snapshot/refTable/actions + iframe + element screenshot)
   "self-iteration": 0                  # sub-epic (3 子 Rooms)
-status_note: "🟢 07-applier 38% (3/8 children ✅). 08-snapshot-refs-layer ROOM COMPLETE 2026-05-12: ~975 LOC src (snapshot.mjs CDP a11y + iframe inline-recurse + ref table + 5 symbolic action verbs + element screenshot + unified error codes + classifyPlaywrightError mapper) + ~895 LOC smoke (31 asserts across 3 files all green). The agent-browser snapshot+refs prompt format is now fully ported to Playwright on top of 02's daemon-warmth singleton. LLM-facing tool surface locked at ~10 symbolic verbs (snapshot/click/fill/select/press/upload/captureElement) — raw Playwright API NOT exposed per C1 constraint. Hybrid Plan A locked at planning time still holds: post-ROOM-COMPLETE, 09-snapshot-eval-harness can flag specific Playwright Locator failures and we migrate per-action to CDP. 下游 unblocked: 03-field-classifier (consumes snapshot output), 04-multi-step-state-machine (uses snapshot per step), 05-non-standard-controls (extends action surface), 06-site-adapters (uses snapshot as substrate), self-iteration/01-code-calibration (eval harness consumes snapshot), self-iteration/02-data-flywheel (qa-bank keys off role+name)."
-last_updated: "2026-05-12"
+status_note: "🟢 07-applier 50% (4/8 children ✅). 03-field-classifier ROOM COMPLETE 2026-05-13: ~885 LOC src (regexRules + identityLookup + legalLookup + openFiller w/ qa-bank fuzzy cache + budget gate + Sonnet via injected client + stripAnswerWrappers + fileFiller w/ path-traversal guard + classifyAndDraft orchestrator + DraftField adapter) + ~1500 LOC smoke (95 asserts across 3 files all green: rules 39 + fillers 36 + e2e 20). Plan-agent dual review across all 3 milestones: 6 CRITICAL + 16 HIGH + 24 MEDIUM + 25 LOW — applied 6C + 16H + 13M, deferred LOW per cost-benefit. Draft contract from m1 (01-mode1) unchanged — Mode 1 + Mode 2 now share drafts/{jobId}.json. classifyAndDraft adapter handles: 'unknown' class filtered, 'manual' confidence→'low', null value→'', extras stripped, file>hard>legal>open priority truncation under 50-cap, per-field try/catch error stub w/ source_ref='error:classify-failed', jobId 12-hex fail-fast (no LLM spend pre-validation), negative cost guard. 下游 unblocked: 04-multi-step-state-machine (consumes classifier draft per step), 05-non-standard-controls (extends classifier when seeing weird control types), 06-site-adapters (overrides classifier rules per ATS domain), self-iteration/02-data-flywheel (qa-bank cache writes closed loop)."
+last_updated: "2026-05-13"

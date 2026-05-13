@@ -388,7 +388,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/07-applier/03-field-classifier"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: backend
       parent: "00-project-room/04-career-system/07-applier"
       children: []
