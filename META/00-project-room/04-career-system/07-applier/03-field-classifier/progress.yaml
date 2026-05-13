@@ -295,7 +295,7 @@ commits:
       - "intent-field-classifier-001 (anchors: regexRules.mjs + identityLookup.mjs + legalLookup.mjs + classifier/index.mjs + smoke-field-classifier-rules.mjs)"
     milestones_affected:
       - "m1-regex-rules-identity-legal-lookup (→ completed)"
-  - hash: "<pending-pin>"
+  - hash: "e05a6ca"
     date: "2026-05-10"
     message: "[04-career-system/07-applier/03-field-classifier] m2: open-class LLM filler + file resolver + qa-bank cache + budget gate (smoke 36/36)"
     files_changed: 4
