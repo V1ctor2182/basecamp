@@ -287,7 +287,7 @@ milestones:
         - Draft.cost_usd matches sum of openFiller LLM costs
 
 commits:
-  - hash: "PENDING"
+  - hash: "31880e4"
     date: "2026-05-12"
     message: "[04-career-system/07-applier/03-field-classifier] m1: regex rules + identity/legal lookup (pure deterministic, smoke 39/39)"
     files_changed: 5
