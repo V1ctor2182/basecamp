@@ -303,7 +303,7 @@ commits:
       - "intent-field-classifier-001 (anchors extended: openFiller.mjs + fileFiller.mjs + classifier/index.mjs classifyAndFill + smoke-field-classifier-fillers.mjs)"
     milestones_affected:
       - "m2-open-class-llm-filler-file-resolver (→ completed)"
-  - hash: "<pending-pin>"
+  - hash: "6544274"
     date: "2026-05-13"
     message: "[04-career-system/07-applier/03-field-classifier] m3: snapshot→Draft pipeline + ROOM COMPLETE (smoke 20/20, 95 total)"
     files_changed: 6
