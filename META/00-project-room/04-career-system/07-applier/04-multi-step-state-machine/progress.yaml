@@ -316,7 +316,7 @@ commits:
       - "intent-multi-step-state-machine-001 (anchors: siteAdapter.mjs + stepProbe.mjs + smoke-multistep-site-adapter.mjs)"
     milestones_affected:
       - "m2-site-adapter-step-probe (→ completed)"
-  - hash: "<pending-pin>"
+  - hash: "92ac514"
     date: "2026-05-13"
     message: "[04-career-system/07-applier/04-multi-step-state-machine] m3: state machine + field_memory + dependent-field re-classify (smoke 37/37)"
     files_changed: 3
