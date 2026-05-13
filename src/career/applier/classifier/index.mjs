@@ -12,10 +12,20 @@
 import { classifyField } from './regexRules.mjs';
 import { lookupHardValue } from './identityLookup.mjs';
 import { lookupLegalValue } from './legalLookup.mjs';
+import { fillFileField } from './fileFiller.mjs';
+import { fillOpenField } from './openFiller.mjs';
 
 export { classifyField, HARD_PATTERNS, LEGAL_PATTERNS, FILE_PATTERNS, OPEN_PATTERNS } from './regexRules.mjs';
 export { loadIdentity, lookupHardValue } from './identityLookup.mjs';
 export { loadLegal, lookupLegalValue } from './legalLookup.mjs';
+export { fillFileField } from './fileFiller.mjs';
+export {
+  fillOpenField,
+  loadQaBankHistory,
+  findCachedAnswer,
+  buildOpenPrompt,
+  weightFromScore,
+} from './openFiller.mjs';
 
 /**
  * H10 fix from review: source_ref is now a STRUCTURED object, stringified
@@ -162,3 +172,60 @@ export async function classifyAndLookup(entry) {
 }
 
 export { toSourceRefString };
+
+/**
+ * m2 public API — supersedes classifyAndLookup for callers that have the
+ * ctx (jobId/resumeId/client/checkBudget/etc) to drive file + LLM fillers.
+ *
+ * Hard / Legal / Unknown: result is identical to classifyAndLookup (m1).
+ * File: routed to fileFiller (resolves path; needs ctx.jobId + ctx.resumeId).
+ * Open: routed to openFiller (qa-bank cache → budget gate → Sonnet).
+ *
+ * @param {object} entry — snapshot entry from 08
+ * @param {object} ctx — fillers + context (see openFiller / fileFiller docs)
+ * @returns {Promise<DraftField + { cost_usd?, used? }>}
+ */
+export async function classifyAndFill(entry, ctx = {}) {
+  // Phase 1: deterministic classification + identity/legal lookup
+  const partial = await classifyAndLookup(entry);
+
+  // Hard / Legal / Unknown are complete from m1.
+  // M9 fix from review: preserve cost_usd / used = 'none' on the
+  // non-LLM paths so downstream consumers (ledger, eval-harness) can
+  // assume the fields always exist.
+  if (partial.class === 'hard' || partial.class === 'legal' || partial.class === 'unknown') {
+    return { ...partial, cost_usd: 0, used: 'none' };
+  }
+
+  // H4 fix from review: no need to re-run classifyField — partial.subclass
+  // already carries the result. The fillers only read `.subclass`.
+  const cls = { subclass: partial.subclass };
+
+  if (partial.class === 'file') {
+    const filled = await fillFileField(entry, cls, ctx);
+    return {
+      ...partial,
+      suggested_value: filled.suggested_value,
+      confidence: filled.confidence,
+      source: filled.source,
+      source_ref: toSourceRefString(filled.source),
+      cost_usd: 0,
+      used: 'none',
+    };
+  }
+
+  if (partial.class === 'open') {
+    const filled = await fillOpenField(entry, cls, ctx);
+    return {
+      ...partial,
+      suggested_value: filled.suggested_value,
+      confidence: filled.confidence,
+      source: filled.source,
+      source_ref: toSourceRefString(filled.source),
+      cost_usd: filled.cost_usd,
+      used: filled.used,
+    };
+  }
+
+  return { ...partial, cost_usd: 0, used: 'none' };
+}

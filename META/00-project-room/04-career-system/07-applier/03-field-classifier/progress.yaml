@@ -126,7 +126,7 @@ milestones:
 
   - id: "m2-open-class-llm-filler-file-resolver"
     name: "Open-class LLM filler (Sonnet) + file path resolver + qa-bank cache + budget gate"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/classifier/openFiller.mjs"
       - "src/career/applier/classifier/fileFiller.mjs"
@@ -295,7 +295,15 @@ commits:
       - "intent-field-classifier-001 (anchors: regexRules.mjs + identityLookup.mjs + legalLookup.mjs + classifier/index.mjs + smoke-field-classifier-rules.mjs)"
     milestones_affected:
       - "m1-regex-rules-identity-legal-lookup (→ completed)"
+  - hash: "<pending-pin>"
+    date: "2026-05-10"
+    message: "[04-career-system/07-applier/03-field-classifier] m2: open-class LLM filler + file resolver + qa-bank cache + budget gate (smoke 36/36)"
+    files_changed: 4
+    specs_affected:
+      - "intent-field-classifier-001 (anchors extended: openFiller.mjs + fileFiller.mjs + classifier/index.mjs classifyAndFill + smoke-field-classifier-fillers.mjs)"
+    milestones_affected:
+      - "m2-open-class-llm-filler-file-resolver (→ completed)"
 current_sprint: "Sprint 15 — Mode 2 Field Classifier"
 blockers: []
-status_note: "🟢 1/3 milestones done. m1 shipped — pure-deterministic classifier rules + identity/legal lookup (regexRules.mjs ~220 LOC + identityLookup.mjs ~95 LOC + legalLookup.mjs ~95 LOC + classifier/index.mjs ~165 LOC + smoke-field-classifier-rules.mjs ~440 LOC, 39/39 green). Plan-agent Phase 3.5 review: 3 CRITICAL + 10 HIGH + 11 MEDIUM + 10 LOW — applied 2C + 9H + 5M (C2 cover-letter textbox falls to OPEN not FILE [role gate], C3 dead subclass param removed + boolean polarity documented, H1 GitLab decoupled from GitHub regex, H3 phone variants broader, H4 years-experience reverse phrasings, H6 single-word name → split[-1] returns undefined [no silent corruption], H7 combobox+number coercion guard, H8 Workday visa-status, H9 Lever Source pattern, H10 structured `source` object + parseable `source_ref` string contract, M3 pronouns word boundary, M4 felony broader, M5 cache race → store promise pattern, M7 empty-string → manual, M8 open-class null → confidence='manual'); deferred 1 CRITICAL theoretical + 1 HIGH (cross-module _resetCache nuance + M11 Workday/Lever fixtures — m2/m3 work). 39 smokes green (up from 28 initial); 02 + 08 regression unchanged. m1 unblocks m2 (Open LLM filler will consume classifyField output)."
-last_updated: "2026-05-12"
+status_note: "🟢 2/3 milestones done. m2 shipped — Open-class LLM filler (openFiller.mjs ~310 LOC: qa-bank fuzzy cache → budget gate → Sonnet with stripAnswerWrappers, all deps injected) + file path resolver (fileFiller.mjs ~210 LOC: jobId 12-hex + resumeId whitelist + path-escape guard for traversal protection) + classifyAndFill orchestrator (index.mjs ~+50 LOC: routes hard/legal/unknown via m1, file→fileFiller, open→openFiller; preserves cost_usd/used on all paths) + smoke-field-classifier-fillers.mjs ~720 LOC, 36/36 green. Plan-agent Phase 3.5 review: 3 CRITICAL + 6 HIGH + 9 MEDIUM + 9 LOW — applied all 3C + all 6H + 4M (C1 path traversal regex+isPathSafe, C2 cache rejection clears on retry, C3 history load wrapped in try/catch fallback to [], H1 stripAnswerWrappers peels markdown/quote/preamble wrappers, H4 partial.subclass instead of redundant classifyField re-run, H5 fire-and-forget recordCost via Promise.resolve().then so slow ledger can't stall, H6 costUsd captured in outer scope before post-call throw, M3 narrativeVoice/jdSummary trim guards, M6 whitespace-only field_label skipped + null target name guard, M9 cost_usd:0 / used:'none' on non-LLM paths so downstream ledger sees uniform shape). 36 smokes green (24 base + 12 review-fix coverage including path-traversal regression, markdown stripping, fire-and-forget timing, cost preservation under recordCost throw). m1 regression: 39/39 unchanged. m2 unblocks m3 (snapshot integration + Draft writer + ROOM COMPLETE)."
+last_updated: "2026-05-10"
