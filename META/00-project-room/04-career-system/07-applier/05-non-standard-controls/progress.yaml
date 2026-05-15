@@ -146,7 +146,13 @@ milestones:
 
   - id: "m2-date-address-strategies"
     name: "Date picker strategies (6 types) + address autocomplete strategies (3 types)"
-    status: pending
+    status: completed
+    commit_hash: "0ebd7ea"
+    actual_files:
+      - "src/career/applier/nonstandard/strategies/datePickers.mjs"
+      - "src/career/applier/nonstandard/strategies/addressControls.mjs"
+      - "scripts/smoke-nonstandard-date-address.mjs"
+    actual_lines: 1278
     estimated_files:
       - "src/career/applier/nonstandard/strategies/datePickers.mjs"
       - "src/career/applier/nonstandard/strategies/addressControls.mjs"
@@ -452,7 +458,16 @@ commits:
       - "constraint-non-standard-controls-001 — #1 (MANUAL fallback on failure) and #2 (block_approve on LOW + null suggested_value to prevent memory laundering) verified in smoke"
     milestones_affected:
       - "m1-router-standard-fillfield (→ completed)"
+  - hash: "0ebd7ea"
+    date: "2026-05-15"
+    message: "[04-career-system/07-applier/05-non-standard-controls] m2: date pickers (6 types) + address autocomplete (3 types) (smoke 44/44)"
+    files_changed: 3
+    specs_affected:
+      - "intent-non-standard-controls-001 (anchors: strategies/datePickers.mjs + strategies/addressControls.mjs + smoke-nonstandard-date-address.mjs)"
+      - "constraint-non-standard-controls-001 — partial-fill paths (dropdown timeout) routed to LOW → block_approve verified in E2E smoke"
+    milestones_affected:
+      - "m2-date-address-strategies (→ completed)"
 current_sprint: "Sprint 17 — Non-Standard Controls"
 blockers: []
-status_note: "🟢 m1 COMPLETE 2026-05-15. controlRouter.mjs ~370 LOC (24-value ControlType enum + Confidence enum + STRATEGY_REGISTRY + DETECTION_RULES + ariaRoleToControlType + sniffElement + detectControlType with WeakMap cache) + nonstandardFillField.mjs ~290 LOC (replaces machine.mjs PROVISIONAL defaultFillField; 5 standard strategies; MANUAL/LOW path mutations correct re: fieldMemory.recordToMemory short-circuit) + smoke 40/40. Plan-agent + adversarial review applied: C1 (LOW→memory laundering nulled), H1 (filled:false+non-MANUAL→MANUAL), H3 (radio mismatch→MANUAL), H4 (checkbox ambiguous→MANUAL, spinbutton regex tightened), C1-router (WeakMap replaces entry mutation), M2 (unknown confidence→MANUAL), H5 (resolve error propagation). Regression: 153/153 existing smoke green. Next: m2 date pickers + address autocomplete."
+status_note: "🟢 m2 COMPLETE 2026-05-15. datePickers.mjs ~320 LOC (toISO parser for ISO/US/long-form/Date; 5 strategies HTML5_DATE HIGH + REACT/MUI/FLATPICKR/SPLIT_MDY MEDIUM; dateDetectionRule with token-aware class match) + addressControls.mjs ~135 LOC (GOOGLE_PLACES/ALGOLIA_PLACES MEDIUM on full fill / LOW on dropdown timeout; addressDetectionRule). Plan-agent + adversarial review applied (4 CRITICAL + 4 HIGH + 2 MEDIUM): B5/C2 MUI rule no longer false-positives on MuiAutocomplete/MuiSelect (dropped aria-haspopup=dialog arm), B9/H1 token-aware class match prevents substring collisions, B8/H3 flatpickr now invokes el._flatpickr.setDate when instance exists (raw value-set was silent failure on altInput), B3/H5 google_places dismisses stale containers before fill (prevented wrong-city clicks from previous field), C1 split_mdy_select selectors :not() guards (no month/year compound collision), B1 react/mui datepicker focus() + locator.press(Escape) (prevented keyboard.type leaks), H2 react-datepicker class scoped, H4 partial fill LOW not MEDIUM, M4 mui count===0 → MANUAL, B6 SPLIT_MDY_SELECT requires container. Regression: m1 42 + m2 44 + multistep+apply-sessions 153 = 239/239 green. Next: m3 selection variants (radio_div / chip / custom_combobox / search_select)."
 last_updated: "2026-05-15"
