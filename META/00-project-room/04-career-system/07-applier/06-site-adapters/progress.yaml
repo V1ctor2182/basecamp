@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-schema-loader-detector-simple-yamls"
     name: "SiteAdapter Zod schema + YAML loader + URL detector + 5 simple bundled YAMLs (_common/default/greenhouse/ashby/lever)"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/siteAdapters/schema.mjs"
       - "src/career/applier/siteAdapters/loader.mjs"
@@ -268,5 +268,5 @@ milestones:
 commits: []
 current_sprint: "Sprint 18 — Site Adapters"
 blockers: []
-status_note: "Plan A 锁定 2026-05-15 via plan-milestones skill. 3 milestones, ~1630 LOC + ~730 smoke + 8 bundled YAMLs. OQ1=YAML split (5 in m1, 3 in m3), OQ2=augment classifier (not override), OQ3=thin re-export of siteAdapter.mjs, OQ4=URL-only detection (dom_signatures schema-accepted but not used in m1). Ready to start m1."
+status_note: "🟢 m1 COMPLETE 2026-05-15. Foundation shipped: schema.mjs (~210 LOC) Zod SiteAdapterSchema + CommonDefaultsSchema + compileAdapter (deep-freeze of flow/controls/known_fields per REVIEW H5; 256-char regex source cap per REVIEW C2) + mergeCommonDefaults (null/undefined flow guard per REVIEW H3); loader.mjs (~180 LOC) loadAdapters with file-list signature cache (per REVIEW C3 — survives file deletion) + resolved-path cache key (per REVIEW H1) + Zod error annotation; detector.mjs (~70 LOC) URL hostname matching with raw-string fallback + listMatchingAdapters diagnostic. 5 bundled YAMLs: _common (next/submit name hints) + default (catchall, priority 0) + greenhouse + ashby + lever (lever pattern hostname-anchored per REVIEW C1). Plan-agent + adversarial review: 3 CRITICAL + 4 HIGH + 2 LOW applied — every fix has a REVIEW-named regression test. Smoke 29/29 green (22 baseline + 7 review regressions). known_field confidence default lowered to 'medium' per REVIEW L1. Regression: 04-multi-step 153/153 + 05 nonstandard 157/157 still green. Next: m2 activateAdapter — push controls into 05 DETECTION_RULES + known_fields into 03 classifier."
 last_updated: "2026-05-15"

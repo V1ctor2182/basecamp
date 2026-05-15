@@ -1,0 +1,41 @@
+# Greenhouse — single-step form, deterministic submit button (#submit_app).
+# Job listing URLs: boards.greenhouse.io/<company>/jobs/<id> and the new
+# job-boards.greenhouse.io variant.
+
+name: Greenhouse
+id: greenhouse
+priority: 100
+detection:
+  url_patterns:
+    - "boards\\.greenhouse\\.io"
+    - "job-boards\\.greenhouse\\.io"
+flow:
+  type: single-step
+  submit_button:
+    selectors:
+      - "#submit_app"
+      - "button[type=submit][value*='Submit']"
+    name_hints:
+      - Submit Application
+known_fields:
+  - label_pattern: "^first name"
+    class: hard
+    maps_to: identity.first_name
+  - label_pattern: "^last name"
+    class: hard
+    maps_to: identity.last_name
+  - label_pattern: "^email"
+    class: hard
+    maps_to: identity.email
+  - label_pattern: "^phone"
+    class: hard
+    maps_to: identity.phone
+  - label_pattern: "(linkedin\\s*profile|linkedin\\s*url)"
+    class: hard
+    maps_to: identity.links.linkedin
+  - label_pattern: "(resume|cv).*upload"
+    class: file
+    maps_to: resume
+quirks:
+  - "Greenhouse uses a single long form (no multi-step) — submit_button is reliable"
+  - "File inputs are <input type=file> direct (no custom uploader widget)"
