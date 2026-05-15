@@ -282,6 +282,19 @@ commits:
       - "intent-site-adapters-001 (anchors: siteAdapters/activate.mjs + classifier/regexRules.mjs registerExtraRules seam + smoke-site-adapters-activate.mjs)"
     milestones_affected:
       - "m2-activate-detection-rules-known-fields (→ completed)"
+  - hash: "da7eed7"
+    date: "2026-05-16"
+    message: "[04-career-system/07-applier/06-site-adapters] m3: migrate inline registry → YAML facade + 3 multi-step YAMLs + endpoint activation + ROOM COMPLETE (smoke 29/29, Room total 81/81)"
+    files_changed: 15
+    specs_affected:
+      - "intent-site-adapters-001 (anchors: multistep/siteAdapter.mjs facade rewrite + multistep/endpoint.mjs activation lifecycle + 3 multi-step YAMLs + smoke-site-adapters-migration-room-complete.mjs)"
+    milestones_affected:
+      - "m3-migrate-multi-step-yamls-endpoint-room-complete (→ completed, ROOM COMPLETE)"
+    rollups:
+      - "room.yaml lifecycle: planning → active"
+      - "_tree.yaml 06-site-adapters: planning → active"
+      - "07-applier parent: 75% → 88% (7/8 children ✅)"
+      - "04-career-system: 94% → 97% (29/34 features)"
 current_sprint: "Sprint 18 — Site Adapters"
 blockers: []
 status_note: "🎉 ROOM COMPLETE 2026-05-16 (3/3 milestones, 81/81 smoke green = 29 loader + 23 activate + 29 migration). m3 shipped: multistep/siteAdapter.mjs rewritten as thin facade (~250 LOC) over m1 loader with try/catch + minimal fallback registry per REVIEW C3 (top-level await failure no longer brings down endpoint.mjs/server.mjs); 3 multi-step YAMLs (workday/icims/successfactors) replacing the pre-m3 inline registry; endpoint.mjs.startMachine activates adapter via getCompiledAdapter(jobUrl) before runMachine + reverts in finally (try/finally atomic — survives runMachine throw); __SMOKE_skipAdapterActivation harness flag (REVIEW M2/H3: renamed from _skipAdapterActivation to avoid production exposure). workday.yml known_fields corrected to point at real legal.yml keys (work_authorization.authorized_us_yes_no / work_authorization.requires_sponsorship_now) per REVIEW C1; workday.yml controls.date_picker REMOVED per REVIEW C2 (MuiPickersDay is MUI not Workday); _common.yml Forward removed per REVIEW C4 (was leaking to workday/icims via merge); getCompiledAdapter URL heuristic tightened to `://` per REVIEW C5; activate.mjs class_contains startsWith now requires hyphen-prefix per REVIEW H3 adv. Plan-agent + adversarial review across 3 milestones: 11 CRITICAL + 5 HIGH + 4 MEDIUM applied — every fix has REVIEW-named regression. Regression: 04-multi-step 153/153 + 05 nonstandard 157/157 + 03 field-classifier 95/95 + 02-playwright-runtime/apply-sessions 43/43 + 06 (this Room) 81/81 = 529/529 green. Room totals: schema.mjs ~250 LOC + loader.mjs ~190 + detector.mjs ~80 + activate.mjs ~225 + multistep/siteAdapter.mjs ~250 (facade rewrite) + regexRules.mjs +95 LOC seam + endpoint.mjs +35 LOC + 8 bundled YAMLs (5 single-step from m1 + 3 multi-step from m3) = ~1125 LOC production + ~1400 smoke. ROOM COMPLETE rollups: room.yaml planning→active, _tree.yaml planning→active, 07-applier 75%→88% (7/8 children ✅), 04-career-system 94%→97% (29/34 features). 下游 unblocked: self-iteration/02-data-flywheel (累积同 domain 失败 propose 新 adapter YAML); 08-human-gate-tracker/03+/04 (consumes adapter id + per-ATS quirks for interview prep + followup cadence)."
