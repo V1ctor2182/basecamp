@@ -23,6 +23,42 @@
 - [intent-non-standard-controls-001](specs/intent-non-standard-controls-001.yaml) — 21 种非标控件策略 + 置信度分级 + 红框高亮 Manual fallback
 - [constraint-non-standard-controls-001](specs/constraint-non-standard-controls-001.yaml) — 失败必须 fallback 到 Manual；Low confidence 字段必须阻塞 review
 
+## 当前进度 — 🟢 planning (milestones locked 2026-05-15)
+
+**Plan A 锁定**. 4 milestones (~1830 LOC + ~950 smoke):
+
+| m | 内容 | LOC | 解锁 |
+|---|------|-----|------|
+| **m1** | Control router + 标准控件 + `nonstandardFillField` (替换 PROVISIONAL `defaultFillField`) | ~580 (280 + 300 smoke) | 完整可用的 `_fillField`，覆盖标准控件 |
+| **m2** | 日期控件 (6 种) + 地址自动补全 (3 种) | ~470 (220 + 250 smoke) | ATS 通用日历 + Google/Algolia 地址 |
+| **m3** | 选择控件变体: `radio_div` / chip / custom_combobox / search_select | ~380 (180 + 200 smoke) | Workday/Greenhouse 自定义 combobox |
+| **m4** | CAPTCHA + 富文本 + slider + Shadow DOM + iframe + Manual highlight + endpoint 接线 + ROOM COMPLETE | ~400 (200 + 200 smoke) | 06-site-adapters + 08-human-gate-tracker/02 |
+
+### Locked OQ
+
+| OQ | 决定 | 理由 |
+|----|------|------|
+| Q1 STALE_REF | Raw locator bypass | multi-action 序列拿一次 locator 直接操作，不再过 RefTable；跨字段失效是 machine 层问题 |
+| Q2 控件检测深度 | ARIA + class sniff | 一次 `page.evaluate` 拿 className/dataset，能区分 flatpickr / MUI / React DatePicker / Quill / TinyMCE |
+| Q3 scope | 完全替换 `defaultFillField` | machine.mjs 注释明确说 "real action-verb layer"，标准+非标都走新的 `nonstandardFillField` |
+
+### 与已 shipped 基础的关系
+
+```
+02-playwright-runtime (ROOM COMPLETE)
+  ↓ actions.mjs (click/fill/select/press/upload + RefTable invalidation)
+08-snapshot-refs-layer (ROOM COMPLETE)
+  ↓ snapshot() → { text, table, skippedFrames }
+03-field-classifier m1 (COMPLETE) — m2/m3 进行中
+  ↓ classifiedField { class, role, name, refId, suggested_value, confidence }
+04-multi-step-state-machine (ROOM COMPLETE) — defaultFillField 标记为 PROVISIONAL
+  ↓ machine.mjs's _fillField injection point: (page, refId, classifiedField, table)
+05-non-standard-controls (this Room)
+  ↓ nonstandardFillField — 完整替换 defaultFillField
+  ↓ 26 ControlType (5 standard + 21 non-standard)
+  ↓ 写入 classifiedField.manual_required / block_approve / confidence
+```
+
 ---
 
-_Generated 2026-04-22 by room-init._
+_Generated 2026-04-22 by room-init. Plan refined 2026-05-15 by plan-milestones._

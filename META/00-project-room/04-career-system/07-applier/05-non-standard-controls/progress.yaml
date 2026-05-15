@@ -1,5 +1,443 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-router-standard-fillfield"
+    name: "Control router + standard controls + nonstandardFillField (replaces defaultFillField)"
+    status: pending
+    estimated_files:
+      - "src/career/applier/nonstandard/controlRouter.mjs"
+      - "src/career/applier/nonstandard/nonstandardFillField.mjs"
+      - "scripts/smoke-nonstandard-standard-controls.mjs"
+    estimated_lines: 580
+    depends_on: []
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Core dispatcher framework + standard control handlers + production
+      _fillField replacement. After m1, machine.mjs's PROVISIONAL
+      defaultFillField is fully replaced — production wiring runs against
+      the real action-verb layer.
+
+      Locked design (OQ1 + OQ2 + OQ3):
+        - OQ1 STALE_REF: raw locator bypass. Multi-action sequences (none
+          in m1, will matter for m2+) resolve refId → locator ONCE via
+          table.resolve(refId, page), then operate on the raw locator
+          directly. We do NOT re-snapshot mid-sequence. This is acceptable
+          because each strategy completes its sequence atomically per
+          field; cross-field STALE_REF is the machine layer's concern
+          (handled by snapPre.table invalidation between fields, but
+          m4 of 04-multi-step-state-machine already accepts that).
+        - OQ2 control type detection: ARIA + class sniff. detectControlType
+          uses snapshot's role + name as primary signal, then a single
+          page.evaluate(el => ({className, dataset, type})) call per
+          unknown-shape ref to disambiguate (e.g. flatpickr-input class
+          → flatpickr vs react-datepicker class → react). Cached on the
+          RefTable entry to avoid re-querying within the same step.
+        - OQ3 scope: complete defaultFillField replacement. m1's
+          nonstandardFillField handles ALL control types — standard
+          textbox/select/checkbox/radio/file PLUS the routing skeleton
+          for 21 non-standard types (with strategies-not-implemented
+          falling through to MANUAL until m2-m4 fill them in).
+
+      Files:
+        - src/career/applier/nonstandard/controlRouter.mjs (~150 LOC):
+          · ControlType enum — 21 + 5 standard = 26 total:
+              STANDARD: textbox | textarea | select_native | checkbox |
+                        radio_native | file
+              DATE: html5_date | react_datepicker | mui_datepicker |
+                    flatpickr | split_mdy_select | unknown_calendar
+              ADDRESS: google_places | algolia_places | custom_autocomplete
+              SELECTION_VARIANT: radio_div | multi_select_chip |
+                                 custom_combobox | search_select
+              SPECIAL: rich_text | slider_range | captcha |
+                       shadow_dom | iframe_form
+          · Confidence enum: HIGH | MEDIUM | LOW | MANUAL
+          · detectControlType(page, refId, table, classifiedField) →
+              Promise<ControlType>
+              Decision tree (cheap to expensive):
+                1. classifiedField.class === 'file' → file
+                2. snapEntry.role matches direct map (textbox/textarea/
+                   combobox/checkbox/radio) → standard variant
+                3. detectCaptcha(snapEntry) → captcha (skip class sniff)
+                4. ARIA spinbutton + name matches /month|day|year/i →
+                   split_mdy_select
+                5. Single page.evaluate to fetch
+                   {className, dataset, tagName, type, attrs} →
+                   class sniff: flatpickr-input → flatpickr,
+                   react-datepicker__input → react_datepicker,
+                   MuiPicker → mui_datepicker, pac-input → google_places,
+                   ap-input → algolia_places, ql-editor / .tox-tinymce /
+                   DraftEditor → rich_text, .shadow-host with shadowRoot
+                   → shadow_dom, frame → iframe_form
+                6. Fallback: textbox if role=textbox-like, else
+                   unknown_calendar / custom_autocomplete / MANUAL marker
+          · Result cached on RefTable entry as _controlTypeHint (avoid
+            re-querying within the same step).
+          · STRATEGY_REGISTRY: { [ControlType]: { fill: (page, locator,
+            classifiedField, value, ctx) → Promise<FillResult> } }
+              Initial m1 entries: standard 6 types. Other 20 entries
+              register null → caller treats as MANUAL until m2/m3/m4
+              populate them.
+          · FillResult shape:
+              { filled: boolean, confidence: Confidence,
+                manual: boolean, suggestedValue: string|null,
+                error?: string }
+
+        - src/career/applier/nonstandard/nonstandardFillField.mjs (~130 LOC):
+          · Exports nonstandardFillField(page, refId, classifiedField,
+            table) matching machine.mjs's _fillField(page, refId,
+            classifiedField, table) → Promise<void> signature.
+          · Resolves locator via table.resolve(refId, page) ONCE.
+          · Calls detectControlType + STRATEGY_REGISTRY lookup.
+          · If strategy registered: invoke strategy.fill(); on success,
+            mutate classifiedField (confidence, fill_error cleared).
+          · If strategy returns MANUAL or no strategy registered:
+              - classifiedField.manual_required = true
+              - classifiedField.confidence = 'manual'
+              - classifiedField.fill_error = null (Manual is not an error)
+              - Does NOT throw — machine continues to next field.
+          · If strategy returns LOW confidence:
+              - classifiedField.block_approve = true (constraint #2:
+                UI must not bulk-approve Low fields)
+          · If strategy throws unexpectedly:
+              - classifiedField.fill_error = err.message.slice(0, 200)
+              - Does NOT throw — machine surfaces fill_error via existing
+                H7 pattern in machine.mjs.
+          · Standard control strategies (inline or in controlRouter):
+              textbox/textarea: actions.fill(page, table, refId, value) → HIGH
+              select_native:    actions.select(page, table, refId, value) → HIGH
+              checkbox:         truthy → actions.click; falsy → ensure unchecked → HIGH
+              radio_native:     actions.click(page, table, refId) → HIGH
+              file:             locator.setInputFiles(value) → HIGH
+
+        - scripts/smoke-nonstandard-standard-controls.mjs (~300 LOC, ~14 asserts):
+          · detectControlType:
+              - role=textbox → textbox ✓
+              - role=combobox → select_native (or custom_combobox if class
+                sniff says so) ✓
+              - role=checkbox → checkbox ✓
+              - role=radio → radio_native ✓
+              - class=file → file (no class sniff needed) ✓
+              - Unknown role → MANUAL fallback ✓
+          · nonstandardFillField on each standard type:
+              - textbox: actions.fill called with value ✓
+              - select_native: actions.select called ✓
+              - checkbox truthy: actions.click called ✓
+              - radio_native: actions.click called ✓
+              - file: locator.setInputFiles called ✓
+          · MANUAL path: unregistered ControlType returns
+              { manual_required: true, confidence: 'manual' };
+              no throw ✓
+          · LOW confidence path: strategy returns LOW →
+              classifiedField.block_approve = true ✓
+          · Strategy throw: fill_error set on classifiedField; no throw ✓
+          · table.resolve called exactly once per fill (OQ1: no re-resolve) ✓
+
+      验收:
+        - 14+ smoke green, pure-Node (<2s)
+        - nonstandardFillField signature byte-identical to defaultFillField
+        - After m1, endpoint.mjs startMachine MAY swap defaultFillField
+          for nonstandardFillField (but actual swap is m4 ROOM COMPLETE
+          to keep diff scoped)
+
+  - id: "m2-date-address-strategies"
+    name: "Date picker strategies (6 types) + address autocomplete strategies (3 types)"
+    status: pending
+    estimated_files:
+      - "src/career/applier/nonstandard/strategies/datePickers.mjs"
+      - "src/career/applier/nonstandard/strategies/addressControls.mjs"
+      - "scripts/smoke-nonstandard-date-address.mjs"
+    estimated_lines: 470
+    depends_on: ["m1-router-standard-fillfield"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Register strategies for the 6 date picker variants and 3 address
+      autocomplete variants. Each strategy module exports a map matching
+      STRATEGY_REGISTRY's shape; m2 mutates STRATEGY_REGISTRY at import time.
+
+      Locked design (OQ1: raw locator bypass):
+        - Each strategy takes the pre-resolved locator from
+          nonstandardFillField and operates on it directly. For multi-action
+          sequences (click to open + type + Escape), all actions go through
+          the same Playwright locator without re-resolving via RefTable.
+        - This means strategies must NOT call actions.fill/click etc. (those
+          re-resolve through RefTable). Instead they use locator.click(),
+          locator.fill(), page.keyboard.type() directly.
+        - Trade-off: bypassing actions.mjs means we lose the unified
+          SnapshotError translation (ACTION_TIMEOUT / ELEMENT_GONE etc.).
+          Strategies catch raw Playwright errors and translate to
+          { filled: false, confidence: 'manual', error: msg }.
+
+      Date picker strategies (~220 LOC):
+        src/career/applier/nonstandard/strategies/datePickers.mjs:
+          · html5_date — HIGH:
+              await locator.fill(toISO(value))
+              input[type=date] accepts YYYY-MM-DD natively.
+              value parsing via toISO helper: tries Date.parse, falls back
+              to MM/DD/YYYY split. Returns confidence=HIGH on success.
+          · react_datepicker — MEDIUM:
+              await locator.click()                    // open picker
+              await locator.fill('')                   // clear
+              await page.keyboard.type(formatMDY(value))
+              await page.keyboard.press('Escape')
+              Confidence=MEDIUM (DatePicker may reject malformed types).
+          · mui_datepicker — MEDIUM:
+              MUI exposes 3 spinbuttons (month/day/year) inside the locator.
+              const segments = await locator.locator('[role=spinbutton]').all()
+              for each segment, locator.fill(value) → keyboard Tab.
+              Falls back to react_datepicker pattern if segments not found.
+          · flatpickr — MEDIUM:
+              flatpickr hides the original input; need to dispatch event:
+              await locator.evaluate((el, val) => {
+                el.value = val; el.dispatchEvent(new Event('change', {bubbles:true}));
+              }, formatISO(value))
+              Confidence=MEDIUM (some Flatpickr configs use altInput).
+          · split_mdy_select — MEDIUM:
+              Container locator contains 3 child <select>. Resolve each by
+              name/id matching /month|m\b/i, /day|d\b/i, /year|y\b/i.
+              await child.selectOption(String(value.MM/DD/YYYY part)).
+              Confidence=MEDIUM (option formats vary: '01' vs 'January').
+          · unknown_calendar — MANUAL:
+              No strategy registered. Falls to nonstandardFillField MANUAL path.
+
+      Address autocomplete strategies (~80 LOC):
+        src/career/applier/nonstandard/strategies/addressControls.mjs:
+          · google_places — MEDIUM:
+              await locator.fill(value)
+              await page.waitForSelector('.pac-container .pac-item', { state: 'visible', timeout: 2000 })
+              await page.locator('.pac-container .pac-item').first().click()
+              Catch timeout → return { confidence: 'medium', filled: true }
+              (raw text remains, no dropdown click — acceptable partial fill).
+          · algolia_places — MEDIUM:
+              Same pattern, selectors: .ap-suggestions / .ap-suggestion.
+          · custom_autocomplete — MANUAL: no strategy registered.
+
+      Detection hints registered into m1's detectControlType (additive):
+        - element.className contains 'flatpickr-input' → flatpickr
+        - element.className contains 'react-datepicker' → react_datepicker
+        - element.className contains 'MuiPickersDay' OR contains 'MuiInputBase-input'
+          AND aria-labelledby points to MuiPickers* → mui_datepicker
+        - element.className contains 'pac-input' OR
+          script tag with src*=maps.googleapis present on page → google_places
+        - element.className contains 'ap-input' OR
+          script tag with src*=algolia present on page → algolia_places
+
+      Smoke (~250 LOC, ~12 asserts):
+        - html5_date HIGH: locator.fill('2024-06-15') ✓
+        - react_datepicker MEDIUM: click + fill + keyboard.type + Escape ✓
+        - mui_datepicker MEDIUM: 3 spinbutton segments filled ✓
+        - flatpickr MEDIUM: page.evaluate sets value + dispatches change ✓
+        - split_mdy_select MEDIUM: 3 selectOption calls ✓
+        - unknown_calendar: MANUAL path (no strategy) ✓
+        - google_places MEDIUM: fill + waitForSelector + click first .pac-item ✓
+        - google_places timeout: raw fill remains, MEDIUM confidence ✓
+        - algolia_places MEDIUM: fill + .ap-suggestion click ✓
+        - custom_autocomplete: MANUAL ✓
+        - Date value parse: 'June 15, 2024' + '2024-06-15' both reach fill ✓
+        - Strategy throw mid-sequence: fill_error set, no throw ✓
+
+      验收:
+        - 12+ smoke green, pure-Node
+        - 6 date types + 3 address types registered in STRATEGY_REGISTRY
+        - detectControlType class sniff covers all 9 types
+
+  - id: "m3-selection-variants"
+    name: "Selection control variants (radio_div, chip, custom_combobox, search_select)"
+    status: pending
+    estimated_files:
+      - "src/career/applier/nonstandard/strategies/selectionControls.mjs"
+      - "scripts/smoke-nonstandard-selection-variants.mjs"
+    estimated_lines: 380
+    depends_on: ["m1-router-standard-fillfield"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Strategies for 4 non-standard selection control variants. Standard
+      radio/checkbox/select_native are already handled in m1 — this is the
+      ATS-specific variants where the DOM diverges from native HTML.
+
+      Strategies (~180 LOC):
+        src/career/applier/nonstandard/strategies/selectionControls.mjs:
+          · radio_div — HIGH:
+              snapEntry.role='radio' but the element is a div (not <input>).
+              await locator.click() — Playwright's auto-wait + click works
+              on role=radio div correctly.
+              Confidence=HIGH (state mutation is single click).
+          · multi_select_chip — MEDIUM:
+              Values come in as array OR pipe-separated string.
+              For each value:
+                await locator.click()                          // expand if collapsed
+                await locator.fill(value) OR
+                  page.keyboard.type(value)                    // type-ahead
+                await page.locator(`[role=option]:has-text("${value}")`).first().click()
+              Confidence=MEDIUM (option text may not exactly match input).
+          · custom_combobox — MEDIUM:
+              Differs from select_native: not a <select>, but role=combobox
+              with role=listbox children.
+              await locator.click()                            // expand
+              const option = page.getByRole('option', { name: value })
+              await option.click({ timeout: 2000 })
+              Catch timeout → fallback: keyboard arrow + Enter.
+              Confidence=MEDIUM.
+          · search_select — MEDIUM:
+              Combobox where user types to filter, then clicks.
+              await locator.fill(value)                        // type-ahead
+              await page.waitForSelector('[role=option]', { state: 'visible', timeout: 2000 })
+              await page.locator('[role=option]').first().click()
+              Confidence=MEDIUM.
+
+      Detection hints (additive to m1's detectControlType):
+        - role=radio AND tagName !== 'INPUT' → radio_div
+        - role=combobox AND aria-multiselectable='true' → multi_select_chip
+        - role=combobox AND class includes 'chip|tag|pill' → multi_select_chip
+        - role=combobox AND aria-haspopup='listbox' AND NOT tagName='SELECT'
+          → custom_combobox
+        - role=combobox AND aria-autocomplete='list' → search_select
+
+      Smoke (~200 LOC, ~10 asserts):
+        - radio_div HIGH: locator.click ✓
+        - radio_div detection: role=radio + tagName=DIV → radio_div ✓
+        - multi_select_chip MEDIUM: click + fill + option click ×N ✓
+        - multi_select_chip pipe-separated values parsed correctly ✓
+        - custom_combobox MEDIUM: click + getByRole(option) + click ✓
+        - custom_combobox fallback: option timeout → arrow + Enter ✓
+        - search_select MEDIUM: fill + waitForSelector + click ✓
+        - Strategy throw: fill_error set, no throw ✓
+        - confidence='medium' propagates to classifiedField ✓
+        - Empty multi-select value → MANUAL (no action) ✓
+
+      验收:
+        - 10+ smoke green
+        - 4 variants registered + detection hints integrated
+
+  - id: "m4-special-manual-room-complete"
+    name: "Special controls (CAPTCHA, rich text, slider, shadow, iframe) + Manual highlight + endpoint wiring + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "src/career/applier/nonstandard/strategies/specialControls.mjs"
+      - "src/career/applier/nonstandard/manualHighlight.mjs"
+      - "src/career/applier/multistep/endpoint.mjs"
+      - "scripts/smoke-nonstandard-special-room-complete.mjs"
+    estimated_lines: 400
+    depends_on: ["m2-date-address-strategies", "m3-selection-variants"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Final 5 control strategies + Manual fallback UX (browser-side
+      highlight) + production wiring in endpoint.mjs + ROOM COMPLETE
+      rollups.
+
+      Locked constraints (from room spec):
+        - Constraint #3: CAPTCHA detected → MUST pause immediately, never
+          attempt any fill action. ToS violation otherwise.
+        - Constraint #4: Rich text (TinyMCE/Quill/Draft.js) → ALWAYS
+          MANUAL by default. DOM varies per version, force-fill loses
+          format.
+        - Constraint #1: any strategy failure → MUST fall to MANUAL,
+          never persist wrong data.
+        - Constraint #2: LOW confidence → MUST block bulk-approve in UI.
+
+      Files:
+        - src/career/applier/nonstandard/strategies/specialControls.mjs (~120 LOC):
+          · captcha — MANUAL (constraint #3):
+              No fill attempt. Strategy returns
+              { filled: false, manual: true, confidence: 'manual',
+                suggestedValue: null, error: 'CAPTCHA detected — user must solve in browser' }
+              detectCaptcha helper (exported): checks data-sitekey attr,
+              g-recaptcha / h-captcha / cf-turnstile / recaptcha class
+              substring matches.
+          · rich_text — MANUAL (constraint #4):
+              No fill attempt. Returns MANUAL with suggestedValue preserved
+              so UI can show Copy-to-Clipboard.
+          · slider_range — MEDIUM:
+              await locator.fill(String(numericValue))
+              Playwright's fill works on input[type=range] natively.
+              Confidence=MEDIUM (value coercion to numeric required).
+          · shadow_dom — MEDIUM:
+              await locator.locator(':host >> css=input,textarea,select').first().fill(value)
+              Falls back to MANUAL if locator chain throws.
+          · iframe_form — MEDIUM:
+              const frame = await locator.contentFrame()
+              if (!frame) return MANUAL
+              await frame.locator(snapEntry.frameInnerSelector).fill(value)
+              snapEntry.frameInnerSelector comes from snapshot's frame walk
+              (08-snapshot-refs-layer already captures frame refs).
+
+        - src/career/applier/nonstandard/manualHighlight.mjs (~80 LOC):
+          · highlightManual(page, refId, table, suggestedValue) →
+              Promise<void>
+              page.evaluate((sel, val) => {
+                const el = document.querySelector(sel)
+                if (!el) return
+                el.style.outline = '2px solid #e53e3e'
+                el.style.outlineOffset = '2px'
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                el.setAttribute('data-applier-manual', 'true')
+                if (val) el.setAttribute('data-applier-suggested', val)
+              }, { sel: table.cssSelector(refId), val: suggestedValue })
+          · Called from nonstandardFillField when result.manual === true.
+          · clearManualHighlight(page, refId, table) → resets outline +
+            removes data-attrs (for resume flow when user re-approves).
+          · No-ops silently if refId can't be resolved to a CSS selector
+            (defensive — pickier than throwing in production).
+
+        - src/career/applier/multistep/endpoint.mjs (~+25 LOC):
+          · startMachine imports nonstandardFillField from m1 and passes
+            it as _fillField in the deps object to _runMachine. This
+            replaces defaultFillField in production wiring.
+          · _fillField override still works for smoke tests (caller can
+            still inject a mock via opts).
+          · Diff is small because m1 already shipped the signature-compatible
+            replacement; m4 just flips the default.
+
+        - scripts/smoke-nonstandard-special-room-complete.mjs (~200 LOC,
+          ~12 asserts):
+          · CAPTCHA: detectCaptcha('data-sitekey') → true; strategy returns
+            MANUAL; nonstandardFillField sets manual_required=true; no
+            actions called ✓
+          · CAPTCHA detection patterns: g-recaptcha / h-captcha /
+            cf-turnstile / data-sitekey all detected ✓
+          · rich_text TinyMCE / Quill / Draft.js detection → all MANUAL ✓
+          · rich_text suggestedValue preserved (UI shows Copy) ✓
+          · slider_range MEDIUM: locator.fill(numericString) ✓
+          · shadow_dom MEDIUM: piercing locator fill ✓
+          · iframe_form MEDIUM: contentFrame + inner locator fill ✓
+          · iframe_form no frame: MANUAL ✓
+          · highlightManual: page.evaluate called with correct selector
+            + outline applied + data-applier-manual='true' ✓
+          · clearManualHighlight: outline removed ✓
+          · endpoint.mjs startMachine: nonstandardFillField injected as
+            _fillField (mock _runMachine receives correct deps) ✓
+          · E2E mock: machine runStep with real nonstandardFillField,
+            mixed field types (textbox + CAPTCHA + rich_text + date) —
+            CAPTCHA and rich_text stay manual_required=true, textbox+date
+            fill correctly ✓
+
+      ROOM COMPLETE rollups:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml 05-non-standard-controls: planning → active
+        - 07-applier parent: 62% → 75% (6/8 children ✅)
+        - 04-career-system: 92% → 94% (28/34 features)
+
+      下游 unblocked:
+        - 06-site-adapters (consumes STRATEGY_REGISTRY for per-ATS
+          override of strategy choices)
+        - 08-human-gate-tracker/02 (reads manual_required + block_approve
+          + data-applier-* attrs to render approval UI)
+        - self-iteration/01-code-calibration (can now test against real
+          control fill outcomes vs Mode 1 keyword scoring)
+
+      验收 (Room close):
+        - All m1+m2+m3+m4 smokes green (~50+ asserts total)
+        - 21 control types + 5 standard types = 26 ControlType enum values
+          all registered
+        - nonstandardFillField wired in endpoint.mjs startMachine
+        - Constraint #3 verified: CAPTCHA path has zero fill attempts
+        - Constraint #4 verified: rich_text path has zero fill attempts
+        - Constraint #1 verified: strategy throws → MANUAL fallback
+        - Constraint #2 verified: LOW confidence → block_approve=true
+
+commits: []
+current_sprint: "Sprint 17 — Non-Standard Controls"
 blockers: []
-status_note: "Feature 暂搁置（backlog），未来再评估优先级。"
-last_updated: "2026-04-22"
+status_note: "Plan A 锁定 2026-05-15 via plan-milestones skill. 4 milestones, ~1830 LOC + ~950 smoke. OQ1=raw locator bypass, OQ2=ARIA+class sniff, OQ3=full defaultFillField replacement. Ready to start m1."
+last_updated: "2026-05-15"
