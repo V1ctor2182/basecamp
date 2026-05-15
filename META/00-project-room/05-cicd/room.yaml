@@ -1,0 +1,15 @@
+room:
+  id: "00-project-room/05-cicd"
+  name: "CI/CD"
+  parent: "00-project-room"
+  type: epic
+  lifecycle: active
+  created_at: "2026-05-15"
+  updated_at: "2026-05-15"
+  owner: fullstack
+  contributors: []
+  prompt_test:
+    passable: false
+    last_tested: null
+    token_count: null
+  depends_on: []

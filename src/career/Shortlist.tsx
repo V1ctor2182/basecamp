@@ -41,14 +41,6 @@ type ShortlistResp = {
   results: ShortlistRow[]
 }
 
-type StageBPendingRow = {
-  id: string
-  company: string
-  role: string
-  total_score: number | null
-  status: string
-}
-
 type FilterChip = 'all' | 'score-4.5+' | 'score-4.0-4.4' | 'pending-stage-b' | 'has-tailor'
 
 const CHIP_LABELS: Record<FilterChip, string> = {

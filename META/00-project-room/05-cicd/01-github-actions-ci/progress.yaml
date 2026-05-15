@@ -1,0 +1,29 @@
+milestones:
+  - id: "m1-ci-workflow"
+    name: "GitHub Actions workflow — typecheck + lint + build on PR and main"
+    status: completed
+    estimated_files:
+      - ".github/workflows/ci.yml"
+    estimated_lines: 60
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    description: |
+      .github/workflows/ci.yml triggered on push to main and PRs:
+        - Setup Node.js LTS
+        - npm ci
+        - npx tsc -b (type-check)
+        - npm run lint
+        - npx vite build
+
+commits:
+  - hash: "e5d23d2"
+    date: "2026-05-15"
+    message: "[05-cicd/01-github-actions-ci] m1: GitHub Actions CI workflow"
+    files_changed: 1
+    milestones_affected:
+      - "m1-ci-workflow (→ completed)"
+current_sprint: "Sprint 17 — CI/CD Setup"
+blockers: []
+status_note: "m1 completed 2026-05-15. CI workflow: tsc-b → lint → vite build on PR + main."
+last_updated: "2026-05-15"

@@ -1,0 +1,26 @@
+milestones:
+  - id: "m1-vercel-project-setup"
+    name: "Vercel project wiring — preview + production deployments"
+    status: completed
+    estimated_files:
+      - "vercel.json"
+    estimated_lines: 20
+    depends_on: ["m1-ci-workflow"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      vercel.json: buildCommand + outputDirectory + SPA rewrite fallback.
+      No env vars needed — frontend has zero import.meta.env usage.
+      Backend stays local-only; /api proxy only active in dev.
+
+commits:
+  - hash: "f4b8ee6"
+    date: "2026-05-15"
+    message: "[05-cicd/02-deploy-vercel] feat: vercel.json — build config + SPA routing"
+    files_changed: 1
+    milestones_affected:
+      - "m1-vercel-project-setup (→ completed)"
+current_sprint: "Sprint 17 — CI/CD Setup"
+blockers: []
+status_note: "m1 completed 2026-05-15. vercel.json: npm run build → dist/ + SPA rewrite. No env vars. ROOM COMPLETE."
+last_updated: "2026-05-15"

@@ -202,6 +202,7 @@ function ReportDetail({ jobId }: { jobId: string }) {
   // Fetch report content + side-fetch row metadata for header / TailorPanel
   useEffect(() => {
     const ctrl = new AbortController()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setReport(null)
     setMeta(null)
     setLoadError(null)
@@ -417,7 +418,7 @@ function ReportDetail({ jobId }: { jobId: string }) {
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              h2: ({ node, children, ...props }) => {
+              h2: ({ children, ...props }) => {
                 const text = childrenToString(children)
                 const m = text.match(/^Block ([A-G])\b/)
                 if (m) {
