@@ -87,7 +87,7 @@ export default function Legal() {
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [serverError, setServerError] = useState<string | null>(null)
 
-  const { missing, malformed } = useMemo(() => validate(legal), [legal])
+  const { malformed } = useMemo(() => validate(legal), [legal])
   const malformedCount = Object.keys(malformed).length
   const canSave = malformedCount === 0
 

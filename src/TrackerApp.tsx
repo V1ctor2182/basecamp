@@ -158,7 +158,7 @@ function toDateKey(d: Date) {
 
 function getDateRange(range: DateRange, customDate?: Date) {
   const now = new Date()
-  let since: Date
+  let since: Date = now
   let until: Date = now
   switch (range) {
     case 'week':
@@ -482,7 +482,6 @@ export default function TrackerApp() {
   const [customDate, setCustomDate] = useState<Date | null>(null)
   const [showCalendar, setShowCalendar] = useState(false)
   const [showChart, setShowChart] = useState(true)
-  const [tokenCostMode, setTokenCostMode] = useState<'tokens' | 'cost'>('tokens')
   const [viewTab, setViewTab] = useState<ViewTab>('commits')
   const [loading, setLoading] = useState(false)
   const [initialized, setInitialized] = useState(false)
@@ -492,7 +491,7 @@ export default function TrackerApp() {
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   // Full month data for chart + calendar dots
-  const [monthActivity, setMonthActivity] = useState<RepoActivity[]>([])
+  const [monthActivity] = useState<RepoActivity[]>([])
   const [claudeStats, setClaudeStats] = useState<ClaudeStats | null>(null)
   const [claudePings, setClaudePings] = useState<ClaudePing[]>([])
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
@@ -967,7 +966,7 @@ export default function TrackerApp() {
     }
     return Object.entries(claudeStats.modelUsage)
       .filter(([m]) => m !== '<synthetic>')
-      .reduce((s, [m, u]) => s + calcModelCost(m, u), 0)
+      .reduce((s, [, u]) => s + (u.costUSD ?? 0), 0)
   }, [claudeStats])
 
   const claudeModelChart = useMemo(() => {
@@ -1056,74 +1055,6 @@ export default function TrackerApp() {
       })),
     }
   }, [claudeStats, modelChartMode])
-
-  const claudeCostChart = useMemo(() => {
-    if (!claudeStats?.dailyCost) return null
-    const last30 = claudeStats.dailyCost.slice(-30)
-    if (last30.length === 0) return null
-    const root = document.documentElement
-    const cs = getComputedStyle(root)
-    const resolve = (v: string) => { const m = v.match(/var\((.+)\)/); return m ? cs.getPropertyValue(m[1]).trim() || '#888' : v }
-
-    const modelSet = new Set<string>()
-    for (const d of last30) for (const m of Object.keys(d.costByModel)) modelSet.add(m)
-    const models = [...modelSet]
-
-    const modelColors: Record<string, string> = {
-      'claude-opus-4-6': '#D97757',
-      'claude-opus-4-5-20251101': '#C65D33',
-      'claude-sonnet-4-6': '#E8A87C',
-      'claude-sonnet-4-5-20250929': '#B8856C',
-      'claude-haiku-4-5-20251001': '#F0C4A8',
-    }
-    const shortName = (m: string) => {
-      if (m.includes('opus-4-6')) return 'Opus 4.6'
-      if (m.includes('opus-4-5')) return 'Opus 4.5'
-      if (m.includes('sonnet-4-6')) return 'Sonnet 4.6'
-      if (m.includes('sonnet-4-5')) return 'Sonnet 4.5'
-      if (m.includes('haiku')) return 'Haiku 4.5'
-      return m
-    }
-
-    return {
-      grid: { left: 56, right: 12, top: 30, bottom: 28 },
-      tooltip: {
-        trigger: 'axis' as const,
-        backgroundColor: resolve('var(--bg-card)'),
-        borderColor: resolve('var(--border)'),
-        textStyle: { color: resolve('var(--text-primary)'), fontSize: 12 },
-        valueFormatter: (v: number) => `$${v.toFixed(2)}`,
-      },
-      legend: {
-        top: 0, right: 0,
-        textStyle: { color: resolve('var(--text-muted)'), fontSize: 11 },
-        itemWidth: 10, itemHeight: 10,
-      },
-      xAxis: {
-        type: 'category' as const,
-        data: last30.map(d => { const dt = parseCalendarDate(d.date); return dt.toLocaleDateString([], { month: 'short', day: 'numeric' }) }),
-        axisLabel: { color: resolve('var(--text-muted)'), fontSize: 10, interval: (_i: number) => _i % Math.ceil(last30.length / 8) === 0 },
-        axisLine: { lineStyle: { color: resolve('var(--border-light)') } },
-        axisTick: { show: false },
-      },
-      yAxis: {
-        type: 'value' as const,
-        axisLabel: { color: resolve('var(--text-muted)'), fontSize: 10, formatter: (v: number) => `$${v.toFixed(0)}` },
-        splitLine: { lineStyle: { color: resolve('var(--border-light)'), type: 'dashed' as const } },
-      },
-      series: models.map((m, i) => ({
-        name: shortName(m),
-        type: 'bar' as const,
-        stack: 'cost',
-        barWidth: '60%',
-        itemStyle: {
-          color: modelColors[m] || resolve(`var(--chart-${(i % 6) + 1})`),
-          borderRadius: i === models.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0],
-        },
-        data: last30.map(d => Math.round((d.costByModel[m] || 0) * 100) / 100),
-      })),
-    }
-  }, [claudeStats])
 
   const claudeHourChart = useMemo(() => {
     if (!claudeStats) return null
@@ -1662,7 +1593,7 @@ export default function TrackerApp() {
           >
             <BarChart3 size={15} />
           </button>
-          <button className="t-icon-btn" onClick={loadActivity} disabled={loading} title="Refresh">
+          <button className="t-icon-btn" onClick={() => loadActivity()} disabled={loading} title="Refresh">
             <RefreshCw size={15} className={loading ? 't-spinning' : ''} />
           </button>
         </div>

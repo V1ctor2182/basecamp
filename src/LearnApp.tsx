@@ -99,7 +99,7 @@ function MermaidDiagram({ code }: { code: string }) {
         el.style.cursor = 'pointer'
         el.style.transition = 'filter 150ms ease'
 
-        el.addEventListener('mouseenter', (e) => {
+        el.addEventListener('mouseenter', () => {
           const label = el.querySelector('.nodeLabel')?.textContent || ''
           if (label) {
             const rect = el.getBoundingClientRect()
