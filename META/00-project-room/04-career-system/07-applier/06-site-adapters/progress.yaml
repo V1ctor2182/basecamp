@@ -274,6 +274,14 @@ commits:
       - "intent-site-adapters-001 (anchors: siteAdapters/schema.mjs + loader.mjs + detector.mjs + smoke-site-adapters-loader.mjs + 5 bundled YAMLs)"
     milestones_affected:
       - "m1-schema-loader-detector-simple-yamls (→ completed)"
+  - hash: "8271bda"
+    date: "2026-05-16"
+    message: "[04-career-system/07-applier/06-site-adapters] m2: activateAdapter — push controls into 05 DETECTION_RULES + known_fields into 03-classifier (smoke 23/23)"
+    files_changed: 4
+    specs_affected:
+      - "intent-site-adapters-001 (anchors: siteAdapters/activate.mjs + classifier/regexRules.mjs registerExtraRules seam + smoke-site-adapters-activate.mjs)"
+    milestones_affected:
+      - "m2-activate-detection-rules-known-fields (→ completed)"
 current_sprint: "Sprint 18 — Site Adapters"
 blockers: []
 status_note: "🟢 m2 COMPLETE 2026-05-16. Activation seam shipped: activate.mjs (~190 LOC) activateAdapter pushes controls.{date_picker,...} into 05's DETECTION_RULES via UNSHIFT (REVIEW C3 critical fix — append would put adapter rules AFTER baseline m1-m3 rules, never overriding anything) + adapter.known_fields prepended to 03-classifier via registerExtraRules seam in regexRules.mjs (+90 LOC). Returns DeactivationToken with non-writable .revert (REVIEW C2) using _activeTokens.has() as authoritative liveness (REVIEW C1). _makeControlRule pre-normalizes detect criteria + null-guards entry/info (REVIEW C1 adv) + uses token-aware class match instead of substring (REVIEW H1 adv: 'pick' no longer matches 'not-a-picker'). Partial activation throw rolls back step 1 (REVIEW H2 adv). Plan-agent + adversarial review: 5 CRITICAL + 2 HIGH + 1 MEDIUM applied — every fix has a REVIEW-named regression test. Smoke 23/23 green (16 baseline + 7 review regressions). registerExtraRules validates labelRegex/class/confidenceHint enums. Regression: 04-multi-step 153/153 + 05 nonstandard 157/157 + 03 field-classifier 95/95 still green (classifyField's adapter-rule prepend is no-op when EXTRA_RULES empty). Next: m3 migrate 04-m2 siteAdapter.mjs → thin re-export from new loader + 3 multi-step YAMLs (workday/icims/successfactors) + endpoint wiring + ROOM COMPLETE."
