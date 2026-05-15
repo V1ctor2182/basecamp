@@ -17,7 +17,7 @@ milestones:
         - npx vite build
 
 commits:
-  - hash: "TBD"
+  - hash: "e5d23d2"
     date: "2026-05-15"
     message: "[05-cicd/01-github-actions-ci] m1: GitHub Actions CI workflow"
     files_changed: 1
