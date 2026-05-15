@@ -179,6 +179,86 @@ export const OPEN_PATTERNS = Object.freeze([
 // role is textbox, we still classify as 'open' (subclass='unknown-open')
 // so m2's openFiller has a chance to provide a generic LLM answer.
 
+// ── EXTRA RULES: per-adapter known_fields injection ────────────────────
+//
+// 07-applier/06-site-adapters m2 adds a seam for site adapters to
+// prepend per-ATS classification rules (e.g. greenhouse-specific labels)
+// onto the regex sweep without touching the HARD/LEGAL/FILE/OPEN arrays
+// above.
+//
+// Per OQ2 (locked at planning): augment, not override. Extra rules try
+// FIRST; a no-match falls through to the standard HARD → LEGAL → FILE →
+// OPEN pipeline. This keeps the safety property: a typo'd adapter
+// known_field can't break the generic detector — worst case it just
+// doesn't fire.
+//
+// Each extra rule shape:
+//   { labelRegex: RegExp, class: 'hard'|'legal'|'open'|'file',
+//     lookupKey: string|null, subclass?: string,
+//     confidenceHint: 'high'|'medium'|'low' }
+//
+// Registered as a batch keyed by an opaque token so the caller (m2's
+// activateAdapter) can revert exactly its own injection. Tokens are
+// strings so callers can stash them on a DeactivationToken object
+// without juggling references.
+
+/** @type {Map<string, ReadonlyArray<{labelRegex: RegExp, class: string, lookupKey: string|null, subclass?: string, confidenceHint: string}>>} */
+const _EXTRA_RULES = new Map();
+let _extraTokenCounter = 1;
+
+/**
+ * Register a batch of per-adapter rules. Returns an opaque token used
+ * by clearExtraRules. Rules are PRE-PENDED to the classifier sweep —
+ * they try before the standard HARD/LEGAL/FILE/OPEN patterns.
+ *
+ * @param {ReadonlyArray<{labelRegex: RegExp, class: string, lookupKey: string|null, subclass?: string, confidenceHint: string}>} rules
+ * @returns {string} token for clearExtraRules
+ */
+export function registerExtraRules(rules) {
+  if (!Array.isArray(rules)) {
+    throw new TypeError('registerExtraRules: rules must be an array');
+  }
+  for (const r of rules) {
+    if (!r || !(r.labelRegex instanceof RegExp)) {
+      throw new TypeError('registerExtraRules: each rule needs a labelRegex RegExp');
+    }
+    if (!['hard', 'legal', 'open', 'file'].includes(r.class)) {
+      throw new TypeError(`registerExtraRules: invalid class ${r.class}`);
+    }
+    // REVIEW M2 fix: validate confidenceHint too. Bad enum value would
+    // flow through to draftsStore / UI as an unknown tier.
+    if (!['high', 'medium', 'low'].includes(r.confidenceHint)) {
+      throw new TypeError(`registerExtraRules: invalid confidenceHint ${r.confidenceHint}`);
+    }
+  }
+  const token = `_extra_${_extraTokenCounter++}`;
+  _EXTRA_RULES.set(token, Object.freeze([...rules]));
+  return token;
+}
+
+/**
+ * Revert a prior registerExtraRules call. Throws if the token is unknown
+ * (catches double-revert / typo). Idempotent only across distinct tokens.
+ *
+ * @param {string} token returned from registerExtraRules
+ */
+export function clearExtraRules(token) {
+  if (!_EXTRA_RULES.has(token)) {
+    throw new Error(`clearExtraRules: unknown token ${JSON.stringify(token)}`);
+  }
+  _EXTRA_RULES.delete(token);
+}
+
+/** Test-only: wipe all extra rules. */
+export function _clearAllExtraRules() {
+  _EXTRA_RULES.clear();
+}
+
+/** Diagnostic: count of registered extra-rule batches. */
+export function _extraRulesSize() {
+  return _EXTRA_RULES.size;
+}
+
 /**
  * Classify a snapshot entry into one of the 4 classes.
  *
@@ -195,6 +275,27 @@ export function classifyField(entry) {
   const { role, name } = entry;
   if (!name || typeof name !== 'string') {
     return { class: 'unknown', confidenceHint: null };
+  }
+
+  // EXTRA RULES (per-adapter known_fields) — try first per OQ2 augment-prepend.
+  // Insertion order across registerExtraRules batches.
+  for (const batch of _EXTRA_RULES.values()) {
+    for (const p of batch) {
+      if (p.labelRegex.test(name)) {
+        // FILE class is gated by role in the standard sweep — preserve
+        // the same gate here so an adapter known_field claiming a
+        // textbox field is file-class doesn't fire setInputFiles on a
+        // text input. Falls through to next rule on miss.
+        if (p.class === 'file' && role !== 'button' && role !== 'link') continue;
+        return {
+          class: p.class,
+          subclass: p.subclass || `adapter:${p.lookupKey || 'unknown'}`,
+          lookupKey: p.lookupKey,
+          confidenceHint: p.confidenceHint,
+          source: 'adapter-known-field',
+        };
+      }
+    }
   }
 
   // HARD has highest priority — these are deterministic and high-confidence

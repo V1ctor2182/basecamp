@@ -96,7 +96,7 @@ milestones:
 
   - id: "m2-activate-detection-rules-known-fields"
     name: "Adapter activation: push controls into 05 DETECTION_RULES + push known_fields into 03-classifier regex layer"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/applier/siteAdapters/activate.mjs"
       - "src/career/applier/classifier/regexRules.mjs"
@@ -276,5 +276,5 @@ commits:
       - "m1-schema-loader-detector-simple-yamls (→ completed)"
 current_sprint: "Sprint 18 — Site Adapters"
 blockers: []
-status_note: "🟢 m1 COMPLETE 2026-05-15. Foundation shipped: schema.mjs (~210 LOC) Zod SiteAdapterSchema + CommonDefaultsSchema + compileAdapter (deep-freeze of flow/controls/known_fields per REVIEW H5; 256-char regex source cap per REVIEW C2) + mergeCommonDefaults (null/undefined flow guard per REVIEW H3); loader.mjs (~180 LOC) loadAdapters with file-list signature cache (per REVIEW C3 — survives file deletion) + resolved-path cache key (per REVIEW H1) + Zod error annotation; detector.mjs (~70 LOC) URL hostname matching with raw-string fallback + listMatchingAdapters diagnostic. 5 bundled YAMLs: _common (next/submit name hints) + default (catchall, priority 0) + greenhouse + ashby + lever (lever pattern hostname-anchored per REVIEW C1). Plan-agent + adversarial review: 3 CRITICAL + 4 HIGH + 2 LOW applied — every fix has a REVIEW-named regression test. Smoke 29/29 green (22 baseline + 7 review regressions). known_field confidence default lowered to 'medium' per REVIEW L1. Regression: 04-multi-step 153/153 + 05 nonstandard 157/157 still green. Next: m2 activateAdapter — push controls into 05 DETECTION_RULES + known_fields into 03 classifier."
+status_note: "🟢 m2 COMPLETE 2026-05-16. Activation seam shipped: activate.mjs (~190 LOC) activateAdapter pushes controls.{date_picker,...} into 05's DETECTION_RULES via UNSHIFT (REVIEW C3 critical fix — append would put adapter rules AFTER baseline m1-m3 rules, never overriding anything) + adapter.known_fields prepended to 03-classifier via registerExtraRules seam in regexRules.mjs (+90 LOC). Returns DeactivationToken with non-writable .revert (REVIEW C2) using _activeTokens.has() as authoritative liveness (REVIEW C1). _makeControlRule pre-normalizes detect criteria + null-guards entry/info (REVIEW C1 adv) + uses token-aware class match instead of substring (REVIEW H1 adv: 'pick' no longer matches 'not-a-picker'). Partial activation throw rolls back step 1 (REVIEW H2 adv). Plan-agent + adversarial review: 5 CRITICAL + 2 HIGH + 1 MEDIUM applied — every fix has a REVIEW-named regression test. Smoke 23/23 green (16 baseline + 7 review regressions). registerExtraRules validates labelRegex/class/confidenceHint enums. Regression: 04-multi-step 153/153 + 05 nonstandard 157/157 + 03 field-classifier 95/95 still green (classifyField's adapter-rule prepend is no-op when EXTRA_RULES empty). Next: m3 migrate 04-m2 siteAdapter.mjs → thin re-export from new loader + 3 multi-step YAMLs (workday/icims/successfactors) + endpoint wiring + ROOM COMPLETE."
 last_updated: "2026-05-15"
