@@ -1,7 +1,13 @@
 milestones:
   - id: "m1-router-standard-fillfield"
     name: "Control router + standard controls + nonstandardFillField (replaces defaultFillField)"
-    status: pending
+    status: completed
+    commit_hash: "f8d956b"
+    actual_files:
+      - "src/career/applier/nonstandard/controlRouter.mjs"
+      - "src/career/applier/nonstandard/nonstandardFillField.mjs"
+      - "scripts/smoke-nonstandard-standard-controls.mjs"
+    actual_lines: 1471
     estimated_files:
       - "src/career/applier/nonstandard/controlRouter.mjs"
       - "src/career/applier/nonstandard/nonstandardFillField.mjs"
@@ -436,8 +442,17 @@ milestones:
         - Constraint #1 verified: strategy throws → MANUAL fallback
         - Constraint #2 verified: LOW confidence → block_approve=true
 
-commits: []
+commits:
+  - hash: "f8d956b"
+    date: "2026-05-15"
+    message: "[04-career-system/07-applier/05-non-standard-controls] m1: control router + standard control strategies + nonstandardFillField (smoke 40/40)"
+    files_changed: 3
+    specs_affected:
+      - "intent-non-standard-controls-001 (anchors: controlRouter.mjs + nonstandardFillField.mjs + smoke-nonstandard-standard-controls.mjs)"
+      - "constraint-non-standard-controls-001 — #1 (MANUAL fallback on failure) and #2 (block_approve on LOW + null suggested_value to prevent memory laundering) verified in smoke"
+    milestones_affected:
+      - "m1-router-standard-fillfield (→ completed)"
 current_sprint: "Sprint 17 — Non-Standard Controls"
 blockers: []
-status_note: "Plan A 锁定 2026-05-15 via plan-milestones skill. 4 milestones, ~1830 LOC + ~950 smoke. OQ1=raw locator bypass, OQ2=ARIA+class sniff, OQ3=full defaultFillField replacement. Ready to start m1."
+status_note: "🟢 m1 COMPLETE 2026-05-15. controlRouter.mjs ~370 LOC (24-value ControlType enum + Confidence enum + STRATEGY_REGISTRY + DETECTION_RULES + ariaRoleToControlType + sniffElement + detectControlType with WeakMap cache) + nonstandardFillField.mjs ~290 LOC (replaces machine.mjs PROVISIONAL defaultFillField; 5 standard strategies; MANUAL/LOW path mutations correct re: fieldMemory.recordToMemory short-circuit) + smoke 40/40. Plan-agent + adversarial review applied: C1 (LOW→memory laundering nulled), H1 (filled:false+non-MANUAL→MANUAL), H3 (radio mismatch→MANUAL), H4 (checkbox ambiguous→MANUAL, spinbutton regex tightened), C1-router (WeakMap replaces entry mutation), M2 (unknown confidence→MANUAL), H5 (resolve error propagation). Regression: 153/153 existing smoke green. Next: m2 date pickers + address autocomplete."
 last_updated: "2026-05-15"
