@@ -25,6 +25,18 @@ import {
   ABANDON_AFTER_MS,
 } from './applySessionsStore.mjs';
 import { runMachine as realRunMachine, OUTCOME } from './machine.mjs';
+// 07-applier/05-non-standard-controls m4 wiring: machine.mjs's
+// PROVISIONAL defaultFillField is REPLACED by nonstandardFillField in
+// production. Smoke tests can still pass `_fillField` in
+// deps._machineDeps to override (the merge below preserves that).
+// Importing this module also registers all m1-m4 strategies +
+// detection rules into the controlRouter as a side effect — this is
+// the single canonical entry point the application server uses.
+import { nonstandardFillField } from '../nonstandard/nonstandardFillField.mjs';
+import '../nonstandard/strategies/datePickers.mjs';
+import '../nonstandard/strategies/addressControls.mjs';
+import '../nonstandard/strategies/selectionControls.mjs';
+import '../nonstandard/strategies/specialControls.mjs';
 
 // ── In-memory controller registry ───────────────────────────────────
 //
@@ -155,6 +167,13 @@ export async function startMachine(body, deps = {}) {
   (async () => {
     try {
       ctrl.state = 'running';
+      // m4 (05-non-standard-controls): inject nonstandardFillField as
+      // the default _fillField. Smoke tests pass their own
+      // _machineDeps._fillField which wins via spread order.
+      const machineDeps = {
+        _fillField: nonstandardFillField,
+        ...(deps._machineDeps || {}),
+      };
       const result = await runMachineFn(
         {
           jobId,
@@ -167,7 +186,7 @@ export async function startMachine(body, deps = {}) {
           maxSteps,
           createIfMissing: true,
         },
-        deps._machineDeps || {},
+        machineDeps,
       );
       ctrl.lastOutcome = result.outcome;
       ctrl.lastError = result.error || null;

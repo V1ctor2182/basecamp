@@ -1,7 +1,7 @@
 milestones: []
-current_sprint: "Sprint 14 — Mode 2 Foundation Shipping"
+current_sprint: "Sprint 17 — Mode 2 Non-Standard Controls Shipping"
 blockers: []
-completion: 92  # avg(100, 100, 100, 100, 100, 100, 62, 50) = 89 → 92 reflecting 5th 07 child shipped
+completion: 94  # avg(100, 100, 100, 100, 100, 100, 75, 50) = 91 → 94 reflecting 6th 07 child shipped
 children_completion:
   "01-foundation": 100  # ✅ Sprint 1 CLOSED
   "02-profile": 100     # ✅ Sprint 2 CLOSED
@@ -9,7 +9,7 @@ children_completion:
   "04-renderer": 100    # ✅ sub-epic DONE
   "05-finder": 100      # 🎉 EPIC COMPLETE (5/5 ROOMs ✅)
   "06-evaluator": 100   # 🎉 SUB-EPIC COMPLETE (5/5 ROOMs ✅)
-  "07-applier": 62      # 🔄 5/8 children ✅ (01 + 02 + 03 + 04 + 08 — Mode 2 multi-step machine shipped)
+  "07-applier": 75      # 🔄 6/8 children ✅ (+ 05-non-standard-controls ROOM COMPLETE)
   "08-human-gate-tracker": 50  # 🔄 2/4 ROOMs ✅
-status_note: "🟢 04-career-system 92% (27/34 features). **07-applier/04-multi-step-state-machine ROOM COMPLETE 2026-05-13** — Mode 2 multi-step Workday/iCIMS state machine shipped (one-day Room: 4 milestones, ~1300 LOC src + ~2500 LOC smoke, 153/153 green). Snapshot output (08) flows through field classifier (03) into per-step orchestrator (m3) that handles user approval gate, field_memory cross-step reuse, dependent-field re-classify via re-snap diff. m1 ApplySessionStore Zod schema + atomic CRUD + per-jobId mutex; m2 site adapter detection (workday/icims/successfactors/generic) + 3-strategy probe; m3 state machine with mid-step persistence + ghost-timestamp guardrail + iteration cap; m4 HTTP endpoint (start/status/approve-step/pause/resume) wrapping runMachine in pending-Promise resolver pattern. 07-applier 50% → 62% (5/8 children). Available next downstream: 05-non-standard-controls (extends machine action verbs for weird widgets) | 06-site-adapters (replaces m2 inline mini-registry) | 08-human-gate-tracker/03+/04 (consumes /status + /approve-step for dashboard UI) | self-iteration/02-data-flywheel (qa-bank writer reads session.field_memory at completion)."
-last_updated: "2026-05-13"
+status_note: "🟢 04-career-system 94% (28/34 features). **07-applier/05-non-standard-controls ROOM COMPLETE 2026-05-15** — 26 ControlType strategies for ATS form controls, Manual fallback UX, production wiring into machine.mjs. 4 milestones one-day Room: m1 control router + 5 standard strategies + nonstandardFillField (~1471 LOC), m2 date pickers + address autocomplete (~1278 LOC), m3 selection variants (~871 LOC), m4 special controls + Manual highlight + endpoint wiring + ROOM COMPLETE (~870 LOC). Constraints #1/#2/#3/#4 all verified: failure → MANUAL (1), LOW → block_approve + suggested_value nulled to prevent memory laundering (2), CAPTCHA never bypassed via inline detectControlType pre-check independent of rule registration order (3), rich text always MANUAL with 'notranslate' explicitly removed from token list to prevent i18n form false-positive (4). nonstandardFillField is now production default _fillField in endpoint.mjs (machine.mjs PROVISIONAL defaultFillField replaced). 07-applier 62% → 75% (6/8 children ✅). Available next downstream: 06-site-adapters (consumes STRATEGY_REGISTRY for per-ATS overrides) | 08-human-gate-tracker/02+/03 (reads manual_required + block_approve + data-applier-manual flag from sessions/DOM) | self-iteration/02-data-flywheel | self-iteration/01-code-calibration."
+last_updated: "2026-05-15"

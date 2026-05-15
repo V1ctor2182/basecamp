@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/07-applier/05-non-standard-controls`  
 **Type**: feature  
-**Lifecycle**: planning (Mode 2 LOCKED 2026-05-11)  
+**Lifecycle**: active (🎉 ROOM COMPLETE 2026-05-15 · 4/4 milestones · 157/157 smoke green)  
 **Owner**: backend  
 **Parent**: `00-project-room/04-career-system/07-applier`  
 
@@ -23,6 +23,50 @@
 - [intent-non-standard-controls-001](specs/intent-non-standard-controls-001.yaml) — 21 种非标控件策略 + 置信度分级 + 红框高亮 Manual fallback
 - [constraint-non-standard-controls-001](specs/constraint-non-standard-controls-001.yaml) — 失败必须 fallback 到 Manual；Low confidence 字段必须阻塞 review
 
+## 当前进度 — 🎉 ROOM COMPLETE 2026-05-15
+
+**Plan A delivered**. 4/4 milestones (157/157 smoke green = 42+44+34+37):
+
+| m | 内容 | commit | smoke |
+|---|------|--------|-------|
+| **m1** | Control router + 标准控件 + `nonstandardFillField` (替换 PROVISIONAL `defaultFillField`) | `f8d956b` | 42/42 |
+| **m2** | 日期控件 (6 种) + 地址自动补全 (3 种) | `0ebd7ea` | 44/44 |
+| **m3** | 选择控件变体: `radio_div` / chip / custom_combobox / search_select | `7e66cfa` | 34/34 |
+| **m4** | CAPTCHA + 富文本 + slider + Shadow DOM + iframe + Manual highlight + endpoint 接线 + ROOM COMPLETE | (this commit) | 37/37 |
+
+**Constraint coverage** (all verified in regression smoke):
+- ✅ #1 — strategy 失败 → MANUAL, 不强行填错数据
+- ✅ #2 — Low confidence → `block_approve=true` + `suggested_value` 清空抑制 memory laundering
+- ✅ #3 — CAPTCHA 检测立即 MANUAL, 永不尝试绕过 (inline pre-check in detectControlType)
+- ✅ #4 — 富文本 (TinyMCE/Quill/Draft.js) 默认 MANUAL
+
+**Review applied across 4 milestones**: 13 CRITICAL + 13 HIGH + 9 MEDIUM all fixed with named regression tests (REVIEW C1/C2/H1/H2 ...).
+
+### Locked OQ
+
+| OQ | 决定 | 理由 |
+|----|------|------|
+| Q1 STALE_REF | Raw locator bypass | multi-action 序列拿一次 locator 直接操作，不再过 RefTable；跨字段失效是 machine 层问题 |
+| Q2 控件检测深度 | ARIA + class sniff | 一次 `page.evaluate` 拿 className/dataset，能区分 flatpickr / MUI / React DatePicker / Quill / TinyMCE |
+| Q3 scope | 完全替换 `defaultFillField` | machine.mjs 注释明确说 "real action-verb layer"，标准+非标都走新的 `nonstandardFillField` |
+
+### 与已 shipped 基础的关系
+
+```
+02-playwright-runtime (ROOM COMPLETE)
+  ↓ actions.mjs (click/fill/select/press/upload + RefTable invalidation)
+08-snapshot-refs-layer (ROOM COMPLETE)
+  ↓ snapshot() → { text, table, skippedFrames }
+03-field-classifier m1 (COMPLETE) — m2/m3 进行中
+  ↓ classifiedField { class, role, name, refId, suggested_value, confidence }
+04-multi-step-state-machine (ROOM COMPLETE) — defaultFillField 标记为 PROVISIONAL
+  ↓ machine.mjs's _fillField injection point: (page, refId, classifiedField, table)
+05-non-standard-controls (this Room)
+  ↓ nonstandardFillField — 完整替换 defaultFillField
+  ↓ 26 ControlType (5 standard + 21 non-standard)
+  ↓ 写入 classifiedField.manual_required / block_approve / confidence
+```
+
 ---
 
-_Generated 2026-04-22 by room-init._
+_Generated 2026-04-22 by room-init. Plan refined 2026-05-15 by plan-milestones._
