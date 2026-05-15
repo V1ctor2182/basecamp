@@ -1,23 +1,26 @@
 milestones:
   - id: "m1-vercel-project-setup"
     name: "Vercel project wiring — preview + production deployments"
-    status: planning
+    status: completed
     estimated_files:
       - "vercel.json"
     estimated_lines: 20
     depends_on: ["m1-ci-workflow"]
     complexity_flags: []
-    open_questions:
-      - "Which env vars need to be set in Vercel dashboard?"
+    open_questions: []
     description: |
-      Wire up Vercel for the Vite frontend:
-        - vercel.json with build + output config
-        - Preview deployments on PRs
-        - Production on merge to main
-        - Env var checklist: ANTHROPIC_API_KEY, VITE_API_BASE_URL
+      vercel.json: buildCommand + outputDirectory + SPA rewrite fallback.
+      No env vars needed — frontend has zero import.meta.env usage.
+      Backend stays local-only; /api proxy only active in dev.
 
-commits: []
+commits:
+  - hash: "TBD"
+    date: "2026-05-15"
+    message: "[05-cicd/02-deploy-vercel] feat: vercel.json — build config + SPA routing"
+    files_changed: 1
+    milestones_affected:
+      - "m1-vercel-project-setup (→ completed)"
 current_sprint: "Sprint 17 — CI/CD Setup"
 blockers: []
-status_note: "Planning — blocked on OQ1 (backend deploy strategy)."
+status_note: "m1 completed 2026-05-15. vercel.json: npm run build → dist/ + SPA rewrite. No env vars. ROOM COMPLETE."
 last_updated: "2026-05-15"

@@ -3,7 +3,7 @@ room:
   name: "Deploy — Vercel"
   parent: "00-project-room/05-cicd"
   type: feature
-  lifecycle: planning
+  lifecycle: active
   created_at: "2026-05-15"
   updated_at: "2026-05-15"
   owner: fullstack

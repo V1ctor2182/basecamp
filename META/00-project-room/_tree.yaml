@@ -145,7 +145,7 @@ tree:
       children: []
     - id: "00-project-room/05-cicd"
       type: epic
-      lifecycle: in_progress
+      lifecycle: active
       owner: fullstack
       parent: "00-project-room"
       children:
@@ -159,7 +159,7 @@ tree:
       children: []
     - id: "00-project-room/05-cicd/02-deploy-vercel"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: fullstack
       parent: "00-project-room/05-cicd"
       children: []
