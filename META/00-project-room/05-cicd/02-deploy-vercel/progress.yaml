@@ -14,7 +14,7 @@ milestones:
       Backend stays local-only; /api proxy only active in dev.
 
 commits:
-  - hash: "TBD"
+  - hash: "f4b8ee6"
     date: "2026-05-15"
     message: "[05-cicd/02-deploy-vercel] feat: vercel.json — build config + SPA routing"
     files_changed: 1
