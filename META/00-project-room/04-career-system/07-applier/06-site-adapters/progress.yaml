@@ -265,7 +265,15 @@ milestones:
         - 8 ATS YAMLs + _common + default validate against schema
           (5 from m1 + 3 from m3)
 
-commits: []
+commits:
+  - hash: "cb5bc3e"
+    date: "2026-05-15"
+    message: "[04-career-system/07-applier/06-site-adapters] m1: SiteAdapter schema + loader + URL detector + 5 simple ATS YAMLs (smoke 29/29)"
+    files_changed: 10
+    specs_affected:
+      - "intent-site-adapters-001 (anchors: siteAdapters/schema.mjs + loader.mjs + detector.mjs + smoke-site-adapters-loader.mjs + 5 bundled YAMLs)"
+    milestones_affected:
+      - "m1-schema-loader-detector-simple-yamls (→ completed)"
 current_sprint: "Sprint 18 — Site Adapters"
 blockers: []
 status_note: "🟢 m1 COMPLETE 2026-05-15. Foundation shipped: schema.mjs (~210 LOC) Zod SiteAdapterSchema + CommonDefaultsSchema + compileAdapter (deep-freeze of flow/controls/known_fields per REVIEW H5; 256-char regex source cap per REVIEW C2) + mergeCommonDefaults (null/undefined flow guard per REVIEW H3); loader.mjs (~180 LOC) loadAdapters with file-list signature cache (per REVIEW C3 — survives file deletion) + resolved-path cache key (per REVIEW H1) + Zod error annotation; detector.mjs (~70 LOC) URL hostname matching with raw-string fallback + listMatchingAdapters diagnostic. 5 bundled YAMLs: _common (next/submit name hints) + default (catchall, priority 0) + greenhouse + ashby + lever (lever pattern hostname-anchored per REVIEW C1). Plan-agent + adversarial review: 3 CRITICAL + 4 HIGH + 2 LOW applied — every fix has a REVIEW-named regression test. Smoke 29/29 green (22 baseline + 7 review regressions). known_field confidence default lowered to 'medium' per REVIEW L1. Regression: 04-multi-step 153/153 + 05 nonstandard 157/157 still green. Next: m2 activateAdapter — push controls into 05 DETECTION_RULES + known_fields into 03 classifier."
