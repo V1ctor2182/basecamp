@@ -12,6 +12,7 @@ tree:
         - "00-project-room/02-knowledge-base"
         - "00-project-room/03-work-tracker"
         - "00-project-room/04-career-system"
+        - "00-project-room/05-cicd"
     - id: "00-project-room/01-foundation"
       type: epic
       lifecycle: active
@@ -141,6 +142,26 @@ tree:
       lifecycle: active
       owner: fullstack
       parent: "00-project-room/03-work-tracker"
+      children: []
+    - id: "00-project-room/05-cicd"
+      type: epic
+      lifecycle: in_progress
+      owner: fullstack
+      parent: "00-project-room"
+      children:
+        - "00-project-room/05-cicd/01-github-actions-ci"
+        - "00-project-room/05-cicd/02-deploy-vercel"
+    - id: "00-project-room/05-cicd/01-github-actions-ci"
+      type: feature
+      lifecycle: active
+      owner: fullstack
+      parent: "00-project-room/05-cicd"
+      children: []
+    - id: "00-project-room/05-cicd/02-deploy-vercel"
+      type: feature
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/05-cicd"
       children: []
     - id: "00-project-room/04-career-system"
       type: epic

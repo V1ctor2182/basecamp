@@ -1,0 +1,23 @@
+milestones:
+  - id: "m1-vercel-project-setup"
+    name: "Vercel project wiring — preview + production deployments"
+    status: planning
+    estimated_files:
+      - "vercel.json"
+    estimated_lines: 20
+    depends_on: ["m1-ci-workflow"]
+    complexity_flags: []
+    open_questions:
+      - "Which env vars need to be set in Vercel dashboard?"
+    description: |
+      Wire up Vercel for the Vite frontend:
+        - vercel.json with build + output config
+        - Preview deployments on PRs
+        - Production on merge to main
+        - Env var checklist: ANTHROPIC_API_KEY, VITE_API_BASE_URL
+
+commits: []
+current_sprint: "Sprint 17 — CI/CD Setup"
+blockers: []
+status_note: "Planning — blocked on OQ1 (backend deploy strategy)."
+last_updated: "2026-05-15"
