@@ -65,6 +65,17 @@ import {
 } from './src/career/applier/draftsStore.mjs';
 import { generateDraft, STATUS as DRAFT_STATUS } from './src/career/applier/draftRunner.mjs';
 import { loadApplierBundle } from './src/career/applier/applierBundle.mjs';
+import {
+  StartBodySchema as MultiStepStartBodySchema,
+  ApproveStepBodySchema as MultiStepApproveBodySchema,
+  ResumeBodySchema as MultiStepResumeBodySchema,
+  startMachine as multiStepStart,
+  approveStep as multiStepApproveStep,
+  pauseMachine as multiStepPause,
+  resumeMachine as multiStepResume,
+  getStatus as multiStepGetStatus,
+} from './src/career/applier/multistep/endpoint.mjs';
+import { JOB_ID_RE as APPLY_SESSIONS_JOB_ID_RE } from './src/career/applier/multistep/applySessionsStore.mjs';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const app = express();
@@ -4602,6 +4613,119 @@ app.get('/api/career/apply/draft/:jobId', async (req, res) => {
     return res.status(404).json({ error: 'no draft persisted for this jobId' });
   }
   res.json(draft);
+});
+
+// ── Mode 2 Multi-Step State Machine endpoints ──────────────────────────
+//
+// 07-applier/04-multi-step-state-machine m4.
+//
+// Routes wrap the in-process orchestrator (endpoint.mjs) which manages
+// the per-jobId pending-approval Promise. Browser lifecycle is owned by
+// 02-playwright-runtime (getPage); m4 endpoint just dispatches.
+
+// L1 fix from review: reuse JOB_ID_RE constant exported by m1 store
+// rather than redefining locally (drift risk if format changes).
+const MULTI_STEP_JOB_ID_RE = APPLY_SESSIONS_JOB_ID_RE;
+
+app.post('/api/career/applier/multi-step/start', async (req, res) => {
+  try {
+    let body;
+    try {
+      body = MultiStepStartBodySchema.parse(req.body ?? {});
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid body', details: e.issues });
+    }
+    const result = await multiStepStart(body);
+    if (result.error) {
+      return res.status(result.status || 500).json({ error: result.error });
+    }
+    res.status(202).json({ sessionId: result.sessionId, started_at: result.started_at });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+app.get('/api/career/applier/multi-step/:jobId/status', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    if (!MULTI_STEP_JOB_ID_RE.test(jobId)) {
+      return res.status(400).json({ error: 'jobId must match 12-hex' });
+    }
+    const result = await multiStepGetStatus(jobId);
+    if (result.error) {
+      return res.status(result.status || 500).json({ error: result.error });
+    }
+    res.json({ sessionId: result.sessionId, session: result.session, machine: result.machine });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+app.post('/api/career/applier/multi-step/:jobId/approve-step', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    if (!MULTI_STEP_JOB_ID_RE.test(jobId)) {
+      return res.status(400).json({ error: 'jobId must match 12-hex' });
+    }
+    let body;
+    try {
+      body = MultiStepApproveBodySchema.parse(req.body ?? {});
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid body', details: e.issues });
+    }
+    const result = multiStepApproveStep(jobId, body);
+    if (result.error) {
+      return res.status(result.status || 500).json({ error: result.error });
+    }
+    res.status(202).json({ sessionId: result.sessionId });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+app.post('/api/career/applier/multi-step/:jobId/pause', (req, res) => {
+  try {
+    const { jobId } = req.params;
+    if (!MULTI_STEP_JOB_ID_RE.test(jobId)) {
+      return res.status(400).json({ error: 'jobId must match 12-hex' });
+    }
+    const result = multiStepPause(jobId);
+    if (result.error) {
+      return res.status(result.status || 500).json({ error: result.error });
+    }
+    res.status(202).json({ sessionId: result.sessionId });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+app.post('/api/career/applier/multi-step/:jobId/resume', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    if (!MULTI_STEP_JOB_ID_RE.test(jobId)) {
+      return res.status(400).json({ error: 'jobId must match 12-hex' });
+    }
+    // L2 fix from review: explicit mismatch check so silent URL-wins
+    // doesn't mask a client bug. URL remains canonical.
+    if (req.body && typeof req.body === 'object' && req.body.jobId && req.body.jobId !== jobId) {
+      return res.status(400).json({
+        error: `jobId mismatch: URL=${jobId} body=${req.body.jobId}`,
+      });
+    }
+    let body;
+    try {
+      body = MultiStepResumeBodySchema.parse({ ...(req.body || {}), jobId });
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid body', details: e.issues });
+    }
+    const result = await multiStepResume(body);
+    if (result.error) {
+      return res.status(result.status || 500).json({ error: result.error });
+    }
+    res.status(202).json({ sessionId: result.sessionId, started_at: result.started_at });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
 });
 
 const port = process.env.PORT || 8000;

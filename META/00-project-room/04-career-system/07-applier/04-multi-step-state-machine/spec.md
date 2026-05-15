@@ -2,9 +2,26 @@
 
 **Room ID**: `00-project-room/04-career-system/07-applier/04-multi-step-state-machine`  
 **Type**: feature  
-**Lifecycle**: planning (Mode 2 LOCKED 2026-05-11)  
+**Lifecycle**: planning (Mode 2 LOCKED 2026-05-11; milestones planned 2026-05-13)  
 **Owner**: backend  
 **Parent**: `00-project-room/04-career-system/07-applier`  
+
+## Current progress (4 milestones, ~1030 LOC src + ~1330 smoke)
+
+- **m1** — ApplySessionStore: `data/career/apply-sessions/{jobId}.json` Zod schema + atomic CRUD (mirrors draftsStore pattern). ~180 LOC.
+- **m2** — Site adapter detection (Workday/iCIMS/SuccessFactors/generic) + total-step probing (3 strategies) + Next button helpers. Inline mini-registry; 06-site-adapters supersedes later. ~220 LOC.
+- **m3** — State machine core + field_memory cross-step reuse + dependent-field re-classify via polling re-snapshot. ~350 LOC.
+- **m4** — HTTP endpoint (start / status / approve-step / resume / pause) + Resume flow + ROOM COMPLETE rollups. ~280 LOC.
+
+Locked design decisions (7 OQs locked at planning 2026-05-13):
+1. Per-step drafts stored inside session JSON (drafts/ stays 1:1 with jobId for Mode 1 compat).
+2. Dependent-field detection via post-FILL re-snapshot diff (not in-page MutationObserver).
+3. User approval = injected callback; m4 endpoint wraps it with pending-Promise + /approve-step resolver.
+4. Site adapter inline mini-registry in m2 (06-site-adapters supersedes with shape compatibility).
+5. 24h abandon sweep is lazy on read (no background timer).
+6. m4 minimal endpoint; UI integration deferred to 08-human-gate-tracker.
+7. field_memory key = classifier `lookupKey` primary, normalized accessible name fallback.
+
 
 ## Intent
 

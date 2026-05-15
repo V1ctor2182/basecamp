@@ -1,5 +1,345 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-apply-session-store"
+    name: "ApplySessionStore — data/career/apply-sessions/{jobId}.json schema + atomic CRUD"
+    status: completed
+    estimated_files:
+      - "src/career/applier/multistep/applySessionsStore.mjs"
+      - "scripts/smoke-apply-sessions-store.mjs"
+    estimated_lines: 180
+    depends_on: []
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      ApplySessionStore — Zod schema + atomic file I/O for the per-job
+      multi-step session state. Mirrors draftsStore.mjs (01-mode1/m1)
+      pattern: 1:1 with jobId, atomic write via POSIX rename, lazy archive
+      on read (no background sweep timer).
+
+      Locked design (OQ1+OQ5):
+        - Per-step drafts live INSIDE the session JSON, NOT as separate
+          drafts/{jobId}-step{N}.json files. drafts/{jobId}.json stays
+          1:1 with jobId for Mode 1 compatibility.
+        - 24h abandon sweep is LAZY: readSession() inspects
+          last_activity_at; if > 24h, sets status='abandoned' and
+          returns the session (caller decides whether to resume).
+        - 30-minute retain: session stays 'active' status even past
+          30min idle, but writeSession() bumps last_activity_at on
+          every update so consumers can detect long idle.
+
+      Files:
+        - src/career/applier/multistep/applySessionsStore.mjs (~180 LOC):
+          · ApplySessionSchema (Zod strict):
+              jobId: string (12-hex, matches drafts JOB_ID_RE)
+              site_adapter: 'workday' | 'icims' | 'successfactors' | 'generic'
+              job_url: string.url()
+              current_step: number.int().min(0)
+              total_steps: number.int().min(1).optional()  // null if probing exploratory
+              per_step_draft: Map<string, partial Draft>  // step idx → draft fragment
+              per_step_status: Map<string, 'pending'|'filled'|'skipped'|'approved'>
+              field_memory: Map<string, string>  // lookupKey or normalized name → value
+              started_at: ISO datetime
+              last_activity_at: ISO datetime
+              status: 'active' | 'paused' | 'abandoned' | 'completed'
+          · CRUD: readSession / writeSession / deleteSession / listSessionJobIds
+          · Atomic write: tmp file + POSIX rename (same as draftsStore)
+          · readSession does lazy abandon detection (> 24h)
+          · APPLY_SESSIONS_DIR exported constant
+
+        - scripts/smoke-apply-sessions-store.mjs (~250 LOC, ~12 asserts):
+          · CRUD round-trip (write → read → validate via Zod)
+          · Atomic write: concurrent writes don't corrupt; tmp file cleaned on failure
+          · readSession lazy abandon: > 24h → status='abandoned'
+          · last_activity_at bumped on every writeSession
+          · invalid jobId rejected (matches drafts regex contract)
+          · Map<step, draft> serialized as plain object (JSON safe)
+          · Fixture isolation: backup/restore data/career/apply-sessions/
+
+      验收:
+        - 12+ smoke green, pure-Node (<1s)
+        - Mirror draftsStore atomic-rename pattern exactly so future
+          consolidation (single sessionStore for Mode 1 + Mode 2) is
+          trivial
+
+  - id: "m2-site-adapter-step-probe"
+    name: "Site adapter detection + total-step probing + Next button helpers"
+    status: completed
+    estimated_files:
+      - "src/career/applier/multistep/siteAdapter.mjs"
+      - "src/career/applier/multistep/stepProbe.mjs"
+      - "scripts/smoke-multistep-site-adapter.mjs"
+    estimated_lines: 220
+    depends_on: ["m1-apply-session-store"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Site adapter recognition (Workday/iCIMS/SuccessFactors/generic) +
+      total-step probe (3 fallback strategies) + Next button selector
+      resolution. All snapshot-based (08-snapshot-refs-layer is the only
+      DOM dependency).
+
+      Locked design (OQ4):
+        - Inline mini-registry in THIS Room — does NOT depend on
+          06-site-adapters being merged. 06 will supersede later by
+          plugging adapters in with the same shape. Shape contract:
+            { id, urlPattern: RegExp, nextButtonHints: string[],
+              progressbarHints: string[] }
+
+      Files:
+        - src/career/applier/multistep/siteAdapter.mjs (~80 LOC):
+          · detectAdapter(jobUrl) → 'workday' | 'icims' |
+            'successfactors' | 'generic'
+          · ADAPTERS registry (4 entries, ~20 LOC of regex per ATS)
+          · resolveNextButtonHint(adapter) → string[] of accessible-name
+            substrings to try (e.g. ['Next', 'Continue', 'Save and Continue'])
+          · resolveProgressBarHint(adapter) → string[]
+          · Empty/unknown URL → 'generic' fallback
+
+        - src/career/applier/multistep/stepProbe.mjs (~120 LOC):
+          · probeTotalSteps(page, adapter) → { total: number|null, source: 'progressbar'|'sidebar'|'exploratory' }
+              Strategy 1: snapshot for role=progressbar with valuetext
+                matching /step \d+ of (\d+)/i — return captured M
+              Strategy 2: sidebar listitem enumeration inside
+                aria-label="application steps" — count items
+              Strategy 3: return null + source='exploratory' (m3 advances
+                until no Next button is reachable)
+          · findNextButton(page, adapter) → Locator | null
+              Tries each adapter.nextButtonHints; returns first matching
+              role=button with accessible name. Bounded by 5s timeout.
+          · isOnSubmitStep(page, adapter) — heuristic: Next button text
+            matches /submit|apply/i
+
+        - scripts/smoke-multistep-site-adapter.mjs (~280 LOC, ~10 asserts):
+          · 4 URL patterns route to correct adapter
+          · Mock snapshot output for each strategy:
+              - progressbar with "Step 3 of 7" → total=7, source=progressbar
+              - sidebar with 5 listitems → total=5, source=sidebar
+              - no progress UI → total=null, source=exploratory
+          · findNextButton: each adapter's hint list resolves correctly
+          · isOnSubmitStep: "Submit Application" returns true
+
+      验收:
+        - 10+ smoke green
+        - 06-site-adapters can later replace siteAdapter.mjs's
+          ADAPTERS registry without breaking m3/m4 callers
+
+  - id: "m3-state-machine-core-field-memory"
+    name: "State machine + field_memory + dependent-field re-classify (polling re-snapshot)"
+    status: completed
+    estimated_files:
+      - "src/career/applier/multistep/machine.mjs"
+      - "src/career/applier/multistep/fieldMemory.mjs"
+      - "scripts/smoke-multistep-machine.mjs"
+    estimated_lines: 350
+    depends_on: ["m2-site-adapter-step-probe"]
+    complexity_flags: ["design_decisions", "error_handling_heavy"]
+    open_questions: []
+    description: |
+      The state machine itself. Per-step orchestrator + field_memory
+      cross-step reuse + dependent-field detection via polling re-snapshot
+      (not in-page MutationObserver — same UX, simpler implementation).
+
+      Locked design (OQ2+OQ3+OQ7):
+        - Dependent-field detection: polling re-snapshot diff.
+          After FILL completes, snapshot(page) again; compare refIds
+          to pre-fill snapshot; any new refIds → re-classify + 二次
+          approve via the same approve callback. (Constraint #5: MUST
+          re-classify + approve, not silently fill.)
+        - User approval: injected callback
+            approve({ stepIdx, draft }) → Promise<{ approved: bool, edits?: Draft }>
+          Smoke uses a stub that auto-approves; m4 endpoint wraps it
+          with a pending Promise + /approve-step resolver.
+        - field_memory key: classifier output's lookupKey (when class=hard
+          or class=legal) PRIMARY; normalized accessible name
+          (lowercased, trimmed, punctuation-stripped) FALLBACK for
+          open/file class fields where lookupKey is null.
+
+      Files:
+        - src/career/applier/multistep/fieldMemory.mjs (~70 LOC):
+          · memoryKeyFor(classifiedField) → string
+              Prefer field.source.key (m2 classifier emits this for
+              hard/legal). Fall back to normalize(field.label).
+          · lookupMemory(memory, classifiedField) → string|null
+          · recordToMemory(memory, classifiedField, value) → mutated
+          · serializeMemory(memory) → plain object for Map storage
+
+        - src/career/applier/multistep/machine.mjs (~280 LOC):
+          · State enum: INIT, DETECT_FLOW, SCAN_FIELDS, CLASSIFY_DRAFT,
+            USER_APPROVE, FILL, NEXT_BUTTON_CLICK, WAIT_DOM_READY,
+            DEPENDENT_FIELD_CHECK, COMPLETE, ERROR
+          · runStep(ctx) — orchestrates one step:
+              1. snapshot(page) → table_pre
+              2. classifyAndDraft({page, jobId, ...ctx}) using a snapshot
+                 inj override (we already have the snap)
+              3. For each draft field: if field_memory hit, mark
+                 confidence='high' + suggested_value=memorized. Else
+                 leave as classifyAndFill produced.
+              4. Call approve(stepIdx, draft) → wait
+              5. If approved: FILL each field via 02-playwright-runtime's
+                 actions (fill/select/check/upload). Use the same
+                 RefTable from the snapshot.
+              6. snapshot(page) AGAIN → table_post; diff: any refIds in
+                 table_post not in table_pre → new dependent fields.
+                 If any → re-classify (3) + re-approve (4) + re-fill (5)
+                 for these new refs ONLY. Loop until no new fields.
+              7. recordToMemory for each successfully filled field.
+              8. findNextButton(page, adapter) → click. If null →
+                 transition to COMPLETE.
+              9. wait for DOM stable (networkidle OR 1s settle).
+              10. Update session: per_step_status[step]='approved',
+                  per_step_draft[step]=draft, current_step++
+          · runMachine({page, jobId, jobUrl, resumeId, approve, ...ctx})
+            — drives the loop from INIT to COMPLETE | ERROR. Max
+            iteration cap (20 steps default) to prevent runaway.
+          · Error handling: DOM-stable timeout, Next-click failure,
+            mid-flow detach, classifier error per field → individual
+            field marked manual; whole machine continues unless
+            unrecoverable.
+
+        - scripts/smoke-multistep-machine.mjs (~450 LOC, ~12 asserts):
+          · Mock page + mocked snapshot returning 2-step fixture
+          · field_memory: Step 1 fills 'first_name'; Step 2 has
+            'first_name_confirm' with classifier subclass='first_name'
+            → memory hit, confidence='high', no second LLM call
+          · Dependent-field: snap_pre has 5 refs; FILL triggers
+            re-snap with 7 refs (2 new — "If yes, explain") →
+            re-classify + approve fires twice
+          · User declines: approve returns {approved:false} →
+            machine pauses (status='paused'), session persists
+          · Max-step cap: pathological loop bails after N=20
+          · Next-button missing on last step → transitions to COMPLETE
+          · session.per_step_status correctly progresses pending→approved
+
+      验收:
+        - 12+ smoke green
+        - State transitions deterministic; same input → same trace
+        - Constraint specs (1, 2, 4, 5) covered in smoke
+
+  - id: "m4-endpoint-resume-room-complete"
+    name: "HTTP endpoint + Resume flow + e2e smoke + ROOM COMPLETE"
+    status: completed
+    estimated_files:
+      - "src/career/applier/multistep/endpoint.mjs"
+      - "server.mjs"
+      - "scripts/smoke-multistep-endpoint.mjs"
+    estimated_lines: 280
+    depends_on: ["m3-state-machine-core-field-memory"]
+    complexity_flags: ["design_decisions", "error_handling_heavy"]
+    open_questions: []
+    description: |
+      HTTP API + Resume flow + ROOM COMPLETE rollups. Minimal endpoint
+      shape — UI integration (live polling, approval UI) is owned
+      downstream by 08-human-gate-tracker.
+
+      Locked design (OQ6):
+        - In-process pipeline + minimal HTTP surface in THIS Room.
+        - Dashboard UI integration deferred to 08-human-gate-tracker.
+        - Endpoint converts machine's approve callback into pending-
+          Promise + /approve-step resolver pattern.
+
+      Files:
+        - src/career/applier/multistep/endpoint.mjs (~180 LOC):
+          · startMachine({ jobId, jobUrl, resumeId, ... }) → kicks off
+            runMachine in background; returns immediately with sessionId
+          · A module-level Map<jobId, { pending, resolve, reject }>
+            holds the in-flight approval Promise
+          · approveStep(jobId, { approved, edits }) — resolves the
+            pending Promise; throws 404 if no machine running for jobId
+          · pauseMachine(jobId) — sets session.status='paused', resolves
+            pending with approved:false so loop exits cleanly
+          · resumeMachine({ jobId }) — reads session; rejects if
+            status='abandoned' (>24h); otherwise re-attaches to a NEW
+            page (via 02-playwright-runtime getPage), advances from
+            session.current_step (skips per_step_status='approved' steps)
+
+        - server.mjs (~+90 LOC of routes + dispatch):
+          · POST /api/career/applier/multi-step/start
+              body: { jobId, jobUrl, resumeId, jdSummary? }
+              → { sessionId, started_at }
+          · GET  /api/career/applier/multi-step/:jobId/status
+              → session state (current_step, per_step_status,
+                 last_activity_at) + pending_draft if step waiting
+                 for approval
+          · POST /api/career/applier/multi-step/:jobId/approve-step
+              body: { approved, edits? }
+              → 202 Accepted, advances machine
+          · POST /api/career/applier/multi-step/:jobId/resume
+              → reattaches; 410 Gone if abandoned
+          · POST /api/career/applier/multi-step/:jobId/pause
+              → 202 Accepted, session saved
+          · All routes validate via Zod; jobId 12-hex regex; bad input
+            → 400 with details
+
+        - scripts/smoke-multistep-endpoint.mjs (~350 LOC, ~10 asserts):
+          · POST start → 200 + sessionId
+          · GET status during pending approval → returns draft
+          · POST approve-step → 202; machine advances; GET status reflects
+          · POST resume on a saved session → re-attaches; current_step
+            preserved
+          · Resume on > 24h session → 410 Gone
+          · POST pause → status='paused' in session JSON
+          · Bad jobId / missing fields → 400
+
+      ROOM COMPLETE rollups:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml 04-multi-step-state-machine: planning → active
+        - 07-applier parent: 50% → 62% (5/8 children ✅)
+        - 04-career-system: 90% → 92% (27/34 features)
+
+      下游 unblocked:
+        - 05-non-standard-controls (machine consumes weird-control fills)
+        - 06-site-adapters (replaces inline mini-registry from m2)
+        - 08-human-gate-tracker/03 + /04 (dashboard UI for live approval)
+        - self-iteration/02-data-flywheel (per-step approved values
+          flow into qa-bank history)
+
+      验收 (Room close):
+        - All m1+m2+m3+m4 smokes green
+        - End-to-end: mocked Page sequence drives start → approve ×3 →
+          complete, session.per_step_status final = all 'approved'
+        - Resume e2e: kill machine mid-flow, restart, advance to
+          completion
+
+commits:
+  - hash: "778a7aa"
+    date: "2026-05-13"
+    message: "[04-career-system/07-applier/04-multi-step-state-machine] m1: ApplySessionStore — Zod schema + atomic CRUD + per-jobId mutex (smoke 43/43)"
+    files_changed: 2
+    specs_affected:
+      - "intent-multi-step-state-machine-001 (anchors: applySessionsStore.mjs + smoke-apply-sessions-store.mjs)"
+    milestones_affected:
+      - "m1-apply-session-store (→ completed)"
+  - hash: "9cc1cfa"
+    date: "2026-05-13"
+    message: "[04-career-system/07-applier/04-multi-step-state-machine] m2: site adapter + total-step probe + Next button helpers (smoke 43/43)"
+    files_changed: 3
+    specs_affected:
+      - "intent-multi-step-state-machine-001 (anchors: siteAdapter.mjs + stepProbe.mjs + smoke-multistep-site-adapter.mjs)"
+    milestones_affected:
+      - "m2-site-adapter-step-probe (→ completed)"
+  - hash: "92ac514"
+    date: "2026-05-13"
+    message: "[04-career-system/07-applier/04-multi-step-state-machine] m3: state machine + field_memory + dependent-field re-classify (smoke 37/37)"
+    files_changed: 3
+    specs_affected:
+      - "intent-multi-step-state-machine-001 (anchors: machine.mjs + fieldMemory.mjs + smoke-multistep-machine.mjs)"
+      - "constraint-multi-step-state-machine-001 — per-step approval + field_memory + 30-min retention + DOM-stable wait + dependent-field re-classify all covered"
+    milestones_affected:
+      - "m3-state-machine-core-field-memory (→ completed)"
+  - hash: "2ab6938"
+    date: "2026-05-13"
+    message: "[04-career-system/07-applier/04-multi-step-state-machine] m4: HTTP endpoint + resume + ROOM COMPLETE (smoke 30/30, Room total 153/153)"
+    files_changed: 4
+    specs_affected:
+      - "intent-multi-step-state-machine-001 (anchors: endpoint.mjs + smoke-multistep-endpoint.mjs + 5 server.mjs routes)"
+      - "constraint-multi-step-state-machine-001 — all 5 constraints covered across the Room"
+    milestones_affected:
+      - "m4-endpoint-resume-room-complete (→ completed)"
+    rollups:
+      - "room.yaml lifecycle: planning → active"
+      - "_tree.yaml 04-multi-step-state-machine: planning → active"
+      - "07-applier parent: 50% → 62% (5/8 children ✅)"
+      - "04-career-system: 90% → 92% (27/34 features)"
+current_sprint: "Sprint 16 — Mode 2 Multi-Step State Machine"
 blockers: []
-status_note: "Feature 暂搁置（backlog），未来再评估优先级。"
-last_updated: "2026-04-22"
+status_note: "🎉 ROOM COMPLETE 2026-05-13 (4/4 milestones). One-day Room. m4 shipped — endpoint.mjs ~310 LOC (in-memory _machines registry per jobId + pending-Promise approve resolver + startMachine/approveStep/pauseMachine/resumeMachine/getStatus + Zod body schemas StartBodySchema/ApproveStepBodySchema/ResumeBodySchema) + server.mjs +120 LOC (5 routes: POST start, GET :jobId/status, POST :jobId/approve-step, POST :jobId/pause, POST :jobId/resume; JOB_ID_RE shared with m1; URL/body jobId mismatch check on resume) + smoke-multistep-endpoint.mjs ~780 LOC, 30/30 green. All page-touching deps injected via _runMachine + _getPage so smoke runs pure-Node. Plan-agent Phase 3.5 review: 0 CRITICAL + 2 HIGH + 5 MEDIUM + 8 LOW — applied 2H + 2M + 4L (H1 synchronous slot reservation prevents concurrent-start race [orphan ctrl + double machine spawn], H2 lastDraftInfo snapshot preserved across approveStep/pauseMachine/settle paths for dashboard 'errored at step N' UX, M1 resume-of-completed returns 409 not 200 [terminal state shouldn't pretend to spawn], M4 done-state ctrl swept from registry on next start within 30s grace, L1 import JOB_ID_RE from m1 store [drift prevention], L2 URL vs body jobId explicit mismatch check, L5 pauseRequested flag for pause-before-first-approve [next approve auto-declines], L6 cleaned stale 'reject' comment). Deferred M2 (detectAdapterForUrl substring duplicate — m2 supersedes via lazy import in production wiring), M3 (resume drops classifier ctx — documented; would need session schema change), M5 (redactSession no-op — dashboard local-only, masking TBD when 08 ships UI), L3/L4/L7/L8 hygiene. Smoke covers: 3 Zod schemas + strict rejection + null-edit, startMachine happy + 503 + 409 duplicate, approveStep 404 + 409 + 400 + edits propagation, pauseMachine + 404 + 400, getStatus 404 + 200 + 400, resumeMachine paused + 404 + 410 abandoned + 409 already-running + 409 completed-terminal, 2 e2e choreographies (start→approve×3→completed, start→approve→pause→resume→complete), H1 concurrent-start race (exactly one wins), L5 pause-before-first-approve auto-declines, M4 restart after error within grace, H2 lastDraftInfo after settle. Room regression: m1 43 + m2 43 + m3 37 + m4 30 = **153/153 green** all milestones. ROOM COMPLETE rollups applied: room.yaml lifecycle planning→active, _tree.yaml multi-step planning→active, 07-applier parent 50%→62% (5/8 children ✅), 04-career-system 90%→92% (27/34 features). 下游 unblocked: 05-non-standard-controls (extends machine action verbs for weird widgets), 06-site-adapters (replaces m2 inline mini-registry — same shape contract), 08-human-gate-tracker/03+/04 (consumes /multi-step/:jobId/status + POST /approve-step for dashboard live approval UI), self-iteration/02-data-flywheel (reads session.field_memory + per_step_draft at completion to seed qa-bank history.jsonl)."
+last_updated: "2026-05-13"
