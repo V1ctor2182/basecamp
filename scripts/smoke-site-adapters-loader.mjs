@@ -378,11 +378,15 @@ await test('listMatchingAdapters: returns all matches priority-DESC + default at
 
 // ── 4. Real bundled YAMLs validate ────────────────────────────────────
 
-await test('Real data/career/site-adapters/ — all 5 bundled YAMLs validate + load', async () => {
+await test('Real data/career/site-adapters/ — all 8 bundled YAMLs validate + load (m1: 5, m3: +3)', async () => {
   _clearCache();
   const reg = await loadAdapters(DEFAULT_ADAPTERS_DIR);
   const ids = reg.adapters.map((a) => a.id).sort();
-  assert.deepEqual(ids, ['ashby', 'greenhouse', 'lever'], '3 non-default adapters');
+  assert.deepEqual(
+    ids,
+    ['ashby', 'greenhouse', 'icims', 'lever', 'successfactors', 'workday'],
+    '6 non-default adapters: m1 (ashby/greenhouse/lever) + m3 (icims/successfactors/workday)',
+  );
   assert.equal(reg.default.id, 'default');
   assert.ok(reg.common, '_common.yml loaded');
 });

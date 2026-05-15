@@ -1,0 +1,56 @@
+# Workday — multi-step form (Shadow DOM + progressbar). Job listings:
+# *.myworkdayjobs.com / workdayjobs.com / *.wd[0-9]+.myworkdayjobs.com
+#
+# Mirrors the inline ADAPTERS entry from 04-multi-step-state-machine m2
+# so existing stepProbe.mjs callers see identical hints after the m3
+# migration. Adds 06-site-adapters specific hints (controls.date_picker,
+# known_fields) that activate.mjs wires into 05 + 03 at apply time.
+
+name: Workday
+id: workday
+priority: 110
+detection:
+  url_patterns:
+    - "myworkdayjobs\\.com"
+    - "workdayjobs\\.com"
+    - "\\.wd[0-9]+\\.myworkdayjobs\\.com"
+flow:
+  type: multi-step
+  next_button:
+    name_hints:
+      - Next
+      - Save and Continue
+      - Continue
+  progress_bar:
+    name_hints:
+      - progress
+      - application progress
+  step_list:
+    name_hints:
+      - application steps
+      - progress steps
+  submit_button:
+    name_hints:
+      - Submit
+      - Submit Application
+# REVIEW C2 fix: controls.date_picker REMOVED until verified against
+# real Workday DOM. The previous `MuiPickersDay` class is from MUI v4/v5
+# — Workday does NOT use MUI. Real Workday selectors live under
+# `wd-DatePicker` / `data-automation-id=date-*` but those need
+# verification from a Playwright trace before shipping.
+controls: {}
+known_fields:
+  # REVIEW C1 fix: maps_to paths corrected against data/career/qa-bank/
+  # legal.yml. The previous `legal.work_auth` / `legal.sponsorship`
+  # paths don't exist — legalLookup would have returned null on every
+  # Workday legal field, making this YAML block a silent no-op.
+  - label_pattern: "^are you legally authorized"
+    class: legal
+    maps_to: work_authorization.authorized_us_yes_no
+  - label_pattern: "require sponsorship"
+    class: legal
+    maps_to: work_authorization.requires_sponsorship_now
+quirks:
+  - "Workday's progressbar valuetext is 'Step N of M' — already handled by stepProbe"
+  - "Shadow DOM elements: applier auto-pierces via Playwright locator chains"
+  - "Workday rate-limits navigation; wait for networkidle between steps"

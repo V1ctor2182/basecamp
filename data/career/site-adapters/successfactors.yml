@@ -1,0 +1,32 @@
+# SuccessFactors — multi-step form (SAP).
+# Job listings: *.successfactors.com
+#
+# Mirrors the inline ADAPTERS entry from 04-m2.
+
+name: SuccessFactors
+id: successfactors
+priority: 110
+detection:
+  url_patterns:
+    - "successfactors\\.com"
+flow:
+  type: multi-step
+  next_button:
+    name_hints:
+      - Next
+      - Continue
+      - Forward
+  progress_bar:
+    name_hints:
+      - progress
+  step_list:
+    name_hints:
+      - tabs
+      - steps
+  submit_button:
+    name_hints:
+      - Submit
+      - Apply
+known_fields: []
+quirks:
+  - "SuccessFactors tabs render as buttons; stepProbe's role=tab fallthrough handles them"

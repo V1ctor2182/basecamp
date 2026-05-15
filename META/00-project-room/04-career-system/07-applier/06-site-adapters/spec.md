@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/07-applier/06-site-adapters`  
 **Type**: feature  
-**Lifecycle**: planning (Mode 2 LOCKED 2026-05-11)  
+**Lifecycle**: active (🎉 ROOM COMPLETE 2026-05-16 · 3/3 milestones · 81/81 smoke green)  
 **Owner**: backend  
 **Parent**: `00-project-room/04-career-system/07-applier`  
 
@@ -16,15 +16,23 @@ data/career/site-adapters/*.yml + 按 URL / DOM 检测 + 站点特化策略
 
 - [intent-site-adapters-001](specs/intent-site-adapters-001.yaml) — data/career/site-adapters/*.yml + 按 URL / DOM 检测 + 站点特化策略
 
-## 当前进度 — 🟢 planning (milestones locked 2026-05-15)
+## 当前进度 — 🎉 ROOM COMPLETE 2026-05-16
 
-**Plan A 锁定**. 3 milestones (~1630 LOC + ~730 smoke + 8 bundled YAMLs):
+**Plan A delivered**. 3/3 milestones (81/81 smoke green = 29 + 23 + 29):
 
-| m | 内容 | LOC | 解锁 |
-|---|------|-----|------|
-| **m1** | Zod schema + YAML loader + URL detector + 5 简单 ATS YAML (greenhouse/ashby/lever/default/_common) | ~580 (280 + 250 smoke + 50 YAML) | adapter loading + 检测 contract 定型 |
-| **m2** | activateAdapter — 把 controls 注入 05 DETECTION_RULES, 把 known_fields prepend 到 03 classifier regex | ~450 (250 + 200 smoke) | 完整可激活 + 可撤销 |
-| **m3** | 迁移 04-m2 siteAdapter.mjs → thin re-export; 3 多步 YAML (workday/icims/successfactors); endpoint 接线; ROOM COMPLETE | ~600 (280 + 250 smoke + 70 YAML) | 06-site-adapters 取代 inline registry + 下游 (08-human-gate / self-iteration) |
+| m | 内容 | commit | smoke |
+|---|------|--------|-------|
+| **m1** | Zod schema + YAML loader + URL detector + 5 简单 ATS YAML (greenhouse/ashby/lever/default/_common) | `cb5bc3e` | 29/29 |
+| **m2** | activateAdapter — 把 controls 注入 05 DETECTION_RULES, 把 known_fields prepend 到 03 classifier regex | `8271bda` | 23/23 |
+| **m3** | 迁移 04-m2 siteAdapter.mjs → thin facade; 3 多步 YAML (workday/icims/successfactors); endpoint 接线; ROOM COMPLETE | (this commit) | 29/29 |
+
+**8 bundled YAMLs** (data/career/site-adapters/):
+- m1: `_common.yml` / `default.yml` / `greenhouse.yml` / `ashby.yml` / `lever.yml`
+- m3: `workday.yml` / `icims.yml` / `successfactors.yml`
+
+**Review applied across 3 milestones**: 11 CRITICAL + 5 HIGH + 4 MEDIUM all with REVIEW-named regression tests.
+
+**Regression**: 04-multi-step 153/153 + 05 nonstandard 157/157 + 03 field-classifier 95/95 + 02-playwright-runtime/apply-sessions 43/43 + 06 (this Room) 81/81 = 529/529 green.
 
 ### Locked OQ
 

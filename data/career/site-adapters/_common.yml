@@ -10,12 +10,17 @@
 
 flow:
   next_button:
+    # REVIEW C4 fix: removed `Forward` from common defaults. Only
+    # SuccessFactors actually uses "Forward" as a Next-button label;
+    # leaving it here meant Workday / iCIMS / Greenhouse / etc. would
+    # also try to click any "Forward" button (e.g. browser-style
+    # pagination), causing mis-clicks. Adapters that need `Forward`
+    # declare it themselves (successfactors.yml).
     name_hints:
       - Next
       - Continue
       - Save and Continue
       - Save & Continue
-      - Forward
   submit_button:
     name_hints:
       - Submit

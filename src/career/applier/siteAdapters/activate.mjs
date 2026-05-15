@@ -211,14 +211,13 @@ function _makeControlRule(_category, hint) {
     if (wantRole && (!entry.role || entry.role !== wantRole)) return null;
     if (wantClass) {
       const cn = typeof info.className === 'string' ? info.className : '';
-      // REVIEW H1 fix (HIGH): token-aware match, not substring. Old
-      // `cn.includes('pick')` would match `not-a-picker-element`.
-      // Split on whitespace + exact-token compare matches CSS class
-      // semantics (class attribute is whitespace-separated tokens).
-      // Also accept startsWith for hyphen-prefixed class families
-      // (e.g. wantClass='MuiPicker' matches 'MuiPickersDay-root').
+      // REVIEW H1 fix (HIGH, m2): token-aware match, not substring.
+      // REVIEW H3 fix (HIGH, m3 adv): the bare `startsWith(wantClass)`
+      // was too greedy — `Mui` matched `MuiAccordion`. Keep only the
+      // hyphen-prefixed startsWith (CSS class family pattern: 'Mui-Foo'
+      // class belongs to the 'Mui' family) plus exact-token equality.
       const tokens = cn.toLowerCase().split(/\s+/).filter(Boolean);
-      const matched = tokens.some((t) => t === wantClass || t.startsWith(wantClass + '-') || t.startsWith(wantClass));
+      const matched = tokens.some((t) => t === wantClass || t.startsWith(wantClass + '-'));
       if (!matched) return null;
     }
     return hint.control_type;
