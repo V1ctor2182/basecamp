@@ -489,6 +489,20 @@ commits:
       - "constraint-non-standard-controls-001 — ambiguous search match + arrow-key Enter fallback both routed to LOW/MANUAL with block_approve verified"
     milestones_affected:
       - "m3-selection-variants (→ completed)"
+  - hash: "275c305"
+    date: "2026-05-15"
+    message: "[04-career-system/07-applier/05-non-standard-controls] m4: special controls + Manual highlight + endpoint wiring + ROOM COMPLETE (smoke 37/37, Room total 157/157)"
+    files_changed: 13
+    specs_affected:
+      - "intent-non-standard-controls-001 (anchors: strategies/specialControls.mjs + manualHighlight.mjs + endpoint.mjs nonstandardFillField wiring + smoke-nonstandard-special-room-complete.mjs)"
+      - "constraint-non-standard-controls-001 — all 4 constraints verified in regression smoke (CAPTCHA inline pre-check + rich_text default MANUAL + strategy throw → MANUAL + Low → block_approve)"
+    milestones_affected:
+      - "m4-special-manual-room-complete (→ completed, ROOM COMPLETE)"
+    rollups:
+      - "room.yaml lifecycle: planning → active"
+      - "_tree.yaml 05-non-standard-controls: planning → active"
+      - "07-applier parent: 62% → 75% (6/8 children ✅)"
+      - "04-career-system: 92% → 94% (29/34 features)"
 current_sprint: "Sprint 17 — Non-Standard Controls"
 blockers: []
 status_note: "🎉 ROOM COMPLETE 2026-05-15 (4/4 milestones, 157/157 smoke green = 42+44+34+37, one-day room). m4 shipped: specialControls.mjs ~220 LOC (CAPTCHA + rich_text + slider_range + shadow_dom + iframe_form strategies; detectCaptcha with data-sitekey + token-aware class match per Constraint #3; rich_text always MANUAL per Constraint #4; shadow_dom uses Playwright auto-pierce no :host prefix; iframe_form filters via classifiedField.label to avoid first-textbox trap), manualHighlight.mjs ~110 LOC (red outline via locator.evaluate + scrollIntoView + data-applier-manual attr; no PII written to DOM attrs per C3 stored-XSS prevention), endpoint.mjs +25 LOC injects nonstandardFillField as default _fillField in startMachine while preserving _machineDeps override for smokes. CAPTCHA detection promoted to inline pre-check in detectControlType (Constraint #3 guard independent of rule registration order). Plan-agent + adversarial review across 4 milestones: 13 CRITICAL + 13 HIGH + 9 MEDIUM applied — every one of constraints #1/#2/#3/#4 verified in regression smoke (REVIEW C1/C2/H1/H2 named tests). Room totals: controlRouter.mjs ~470 + nonstandardFillField.mjs ~340 (m1) + datePickers.mjs ~330 + addressControls.mjs ~140 (m2) + selectionControls.mjs ~310 (m3) + specialControls.mjs ~220 + manualHighlight.mjs ~110 + endpoint.mjs +25 (m4) = ~1945 LOC production + ~1750 smoke. ROOM COMPLETE rollups: room.yaml planning→active, _tree.yaml planning→active, 07-applier 62%→75% (6/8 children ✅), 04-career-system 92%→94% (29/34 features). 下游 unblocked: 06-site-adapters (consumes STRATEGY_REGISTRY for per-ATS overrides), 08-human-gate-tracker/02+/03 (reads manual_required + block_approve + data-applier-manual flag for approval UI), self-iteration/01-code-calibration (snapshot-eval-harness can replay against the strategy registry)."
