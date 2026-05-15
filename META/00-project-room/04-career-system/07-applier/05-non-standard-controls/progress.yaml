@@ -254,7 +254,12 @@ milestones:
 
   - id: "m3-selection-variants"
     name: "Selection control variants (radio_div, chip, custom_combobox, search_select)"
-    status: pending
+    status: completed
+    commit_hash: "7e66cfa"
+    actual_files:
+      - "src/career/applier/nonstandard/strategies/selectionControls.mjs"
+      - "scripts/smoke-nonstandard-selection-variants.mjs"
+    actual_lines: 871
     estimated_files:
       - "src/career/applier/nonstandard/strategies/selectionControls.mjs"
       - "scripts/smoke-nonstandard-selection-variants.mjs"
@@ -467,7 +472,16 @@ commits:
       - "constraint-non-standard-controls-001 — partial-fill paths (dropdown timeout) routed to LOW → block_approve verified in E2E smoke"
     milestones_affected:
       - "m2-date-address-strategies (→ completed)"
+  - hash: "7e66cfa"
+    date: "2026-05-15"
+    message: "[04-career-system/07-applier/05-non-standard-controls] m3: selection variants (radio_div/chip/combobox/search) (smoke 34/34)"
+    files_changed: 2
+    specs_affected:
+      - "intent-non-standard-controls-001 (anchors: strategies/selectionControls.mjs + smoke-nonstandard-selection-variants.mjs)"
+      - "constraint-non-standard-controls-001 — ambiguous search match + arrow-key Enter fallback both routed to LOW/MANUAL with block_approve verified"
+    milestones_affected:
+      - "m3-selection-variants (→ completed)"
 current_sprint: "Sprint 17 — Non-Standard Controls"
 blockers: []
-status_note: "🟢 m2 COMPLETE 2026-05-15. datePickers.mjs ~320 LOC (toISO parser for ISO/US/long-form/Date; 5 strategies HTML5_DATE HIGH + REACT/MUI/FLATPICKR/SPLIT_MDY MEDIUM; dateDetectionRule with token-aware class match) + addressControls.mjs ~135 LOC (GOOGLE_PLACES/ALGOLIA_PLACES MEDIUM on full fill / LOW on dropdown timeout; addressDetectionRule). Plan-agent + adversarial review applied (4 CRITICAL + 4 HIGH + 2 MEDIUM): B5/C2 MUI rule no longer false-positives on MuiAutocomplete/MuiSelect (dropped aria-haspopup=dialog arm), B9/H1 token-aware class match prevents substring collisions, B8/H3 flatpickr now invokes el._flatpickr.setDate when instance exists (raw value-set was silent failure on altInput), B3/H5 google_places dismisses stale containers before fill (prevented wrong-city clicks from previous field), C1 split_mdy_select selectors :not() guards (no month/year compound collision), B1 react/mui datepicker focus() + locator.press(Escape) (prevented keyboard.type leaks), H2 react-datepicker class scoped, H4 partial fill LOW not MEDIUM, M4 mui count===0 → MANUAL, B6 SPLIT_MDY_SELECT requires container. Regression: m1 42 + m2 44 + multistep+apply-sessions 153 = 239/239 green. Next: m3 selection variants (radio_div / chip / custom_combobox / search_select)."
+status_note: "🟢 m3 COMPLETE 2026-05-15. selectionControls.mjs ~290 LOC (4 strategies: RADIO_DIV HIGH + MULTI_SELECT_CHIP/CUSTOM_COMBOBOX/SEARCH_SELECT MEDIUM; parseMultiValue handles array|pipe|comma with case-insensitive dedupe; selectionDetectionRule with token-aware class match + non-native combobox fallthrough). Plan-agent + adversarial review applied (4 CRITICAL + 3 HIGH): exact:true on all getByRole({name}) (prevented Java→JavaScript / Senior→Senior Manager mis-matches), search_select ambiguity gate (multiple visible options → LOW not silent first-DOM-order click — prevented wrong-city autocomplete), multi_select_chip explicit fill('')+waitFor pattern (prevented half-filled chip races on react-select/headlessui), non-native combobox fallthrough to CUSTOM_COMBOBOX (prevented selectOption() throws on plain role=combobox DIV), chip/tag/pill class equality (chip-icon no longer false-positives MULTI_SELECT_CHIP), arrow-key fallback gated on visible listbox (prevented Enter→form-submit on Workday/Greenhouse), parseMultiValue dedupes. Regression: m1 42 + m2 44 + m3 34 + multistep+apply-sessions 153 = 273/273 green. Next: m4 special controls (CAPTCHA/rich text/slider/shadow/iframe) + Manual highlight + endpoint wiring + ROOM COMPLETE."
 last_updated: "2026-05-15"
