@@ -46,6 +46,7 @@ import {
   getStrategy,
   detectControlType,
 } from './controlRouter.mjs';
+import { highlightManual } from './manualHighlight.mjs';
 
 /**
  * The _fillField implementation injected into machine.mjs at startup.
@@ -73,7 +74,12 @@ export async function nonstandardFillField(page, refId, classifiedField, table) 
     // No strategy registered for this ControlType (e.g. m1 sees a date
     // picker before m2 ships) → MANUAL path. NEVER throw here; machine
     // continues with subsequent fields.
-    _markManual(classifiedField, `No strategy registered for ${type}`);
+    await _markAndHighlightManual(
+      page,
+      locator,
+      classifiedField,
+      `No strategy registered for ${type}`,
+    );
     return;
   }
 
@@ -89,12 +95,22 @@ export async function nonstandardFillField(page, refId, classifiedField, table) 
   if (!result || typeof result !== 'object') {
     // Defensive: malformed strategy contract → treat as MANUAL so the
     // user takes over rather than counting a phantom success.
-    _markManual(classifiedField, `Strategy ${type} returned malformed result`);
+    await _markAndHighlightManual(
+      page,
+      locator,
+      classifiedField,
+      `Strategy ${type} returned malformed result`,
+    );
     return;
   }
 
   if (result.manual || result.confidence === Confidence.MANUAL) {
-    _markManual(classifiedField, result.error || `Strategy ${type} returned MANUAL`);
+    await _markAndHighlightManual(
+      page,
+      locator,
+      classifiedField,
+      result.error || `Strategy ${type} returned MANUAL`,
+    );
     return;
   }
 
@@ -103,7 +119,9 @@ export async function nonstandardFillField(page, refId, classifiedField, table) 
   // mutated DOM. Per constraint #1, defaultMANUAL rather than counting
   // a phantom write.
   if (result.filled === false) {
-    _markManual(
+    await _markAndHighlightManual(
+      page,
+      locator,
       classifiedField,
       result.error || `Strategy ${type} returned filled:false without MANUAL`,
     );
@@ -116,7 +134,9 @@ export async function nonstandardFillField(page, refId, classifiedField, table) 
   // constraint #1 (never persist data we can't characterize).
   const conf = result.confidence;
   if (conf !== Confidence.HIGH && conf !== Confidence.MEDIUM && conf !== Confidence.LOW) {
-    _markManual(
+    await _markAndHighlightManual(
+      page,
+      locator,
       classifiedField,
       `Strategy ${type} returned unknown confidence=${JSON.stringify(conf)}`,
     );
@@ -164,6 +184,23 @@ function _markManual(classifiedField, reason) {
   }
   if (reason) {
     classifiedField.manual_reason = String(reason).slice(0, 200);
+  }
+}
+
+/**
+ * Mark the field manual AND inject the red-outline highlight in the
+ * browser via manualHighlight.mjs. Highlight is best-effort — its
+ * failure cannot block the machine.
+ */
+async function _markAndHighlightManual(page, locator, classifiedField, reason) {
+  _markManual(classifiedField, reason);
+  // Use the manual hint (preserved by _markManual) as the
+  // Copy-to-Clipboard payload for the dashboard.
+  const hint = classifiedField?.suggested_value_manual ?? null;
+  try {
+    await highlightManual(page, locator, hint);
+  } catch {
+    // Highlight is a UX nicety — never let it block the FILL loop.
   }
 }
 

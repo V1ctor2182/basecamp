@@ -295,6 +295,29 @@ const _CONTROL_TYPE_CACHE = new WeakMap();
  * @param {object} classifiedField — output of 03-field-classifier
  * @returns {Promise<string>} ControlType value
  */
+// Review fix (CRITICAL C1): CAPTCHA detection must win over ANY other
+// rule, even if registered later. Earlier-registered rules from m1-m3
+// (selectionDetectionRule's non-native combobox fallback in particular)
+// could otherwise claim a `<div role="combobox" data-sitekey="...">`
+// CAPTCHA host BEFORE specialDetectionRule runs, violating
+// Constraint #3. Inline regex check here so rule-registration order
+// cannot create the leak.
+const _CAPTCHA_CLASS_TOKENS = ['g-recaptcha', 'h-captcha', 'cf-turnstile', 'recaptcha', 'hcaptcha'];
+
+function _looksLikeCaptcha(info) {
+  if (!info) return false;
+  // sitekey via attribute path
+  const sitekeyAttr = info?.attrs?.['data-sitekey'];
+  if (typeof sitekeyAttr === 'string' && sitekeyAttr.trim().length > 0) return true;
+  // sitekey via dataset path
+  const sitekeyDS = info?.dataset?.sitekey;
+  if (typeof sitekeyDS === 'string' && sitekeyDS.trim().length > 0) return true;
+  // class-token match (token-aware, not substring)
+  if (typeof info.className !== 'string') return false;
+  const tokens = info.className.toLowerCase().split(/\s+/);
+  return _CAPTCHA_CLASS_TOKENS.some((needle) => tokens.includes(needle));
+}
+
 export async function detectControlType(page, refId, table, classifiedField) {
   // 1. file class shortcut — classifier already told us. Skip any DOM I/O.
   if (classifiedField && classifiedField.class === 'file') {
@@ -334,6 +357,16 @@ export async function detectControlType(page, refId, table, classifiedField) {
   const locator =
     typeof table.resolve === 'function' ? table.resolve(refId, page) : null;
   const elementInfo = locator ? await sniffElement(locator) : null;
+
+  // Review fix CRITICAL C1: CAPTCHA pre-check BEFORE rule loop —
+  // Constraint #3 mandates we NEVER attempt to interact with a
+  // CAPTCHA, even when an earlier-registered rule (e.g. m3's
+  // selection fallback) would have claimed it. Inline check makes
+  // this independent of rule registration order.
+  if (_looksLikeCaptcha(elementInfo)) {
+    if (rawEntry) _CONTROL_TYPE_CACHE.set(rawEntry, ControlType.CAPTCHA);
+    return ControlType.CAPTCHA;
+  }
 
   for (const rule of DETECTION_RULES) {
     try {

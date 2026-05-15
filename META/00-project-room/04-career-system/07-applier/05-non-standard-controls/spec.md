@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/07-applier/05-non-standard-controls`  
 **Type**: feature  
-**Lifecycle**: planning (Mode 2 LOCKED 2026-05-11)  
+**Lifecycle**: active (🎉 ROOM COMPLETE 2026-05-15 · 4/4 milestones · 157/157 smoke green)  
 **Owner**: backend  
 **Parent**: `00-project-room/04-career-system/07-applier`  
 
@@ -23,16 +23,24 @@
 - [intent-non-standard-controls-001](specs/intent-non-standard-controls-001.yaml) — 21 种非标控件策略 + 置信度分级 + 红框高亮 Manual fallback
 - [constraint-non-standard-controls-001](specs/constraint-non-standard-controls-001.yaml) — 失败必须 fallback 到 Manual；Low confidence 字段必须阻塞 review
 
-## 当前进度 — 🟢 planning (milestones locked 2026-05-15)
+## 当前进度 — 🎉 ROOM COMPLETE 2026-05-15
 
-**Plan A 锁定**. 4 milestones (~1830 LOC + ~950 smoke):
+**Plan A delivered**. 4/4 milestones (157/157 smoke green = 42+44+34+37):
 
-| m | 内容 | LOC | 解锁 |
-|---|------|-----|------|
-| **m1** | Control router + 标准控件 + `nonstandardFillField` (替换 PROVISIONAL `defaultFillField`) | ~580 (280 + 300 smoke) | 完整可用的 `_fillField`，覆盖标准控件 |
-| **m2** | 日期控件 (6 种) + 地址自动补全 (3 种) | ~470 (220 + 250 smoke) | ATS 通用日历 + Google/Algolia 地址 |
-| **m3** | 选择控件变体: `radio_div` / chip / custom_combobox / search_select | ~380 (180 + 200 smoke) | Workday/Greenhouse 自定义 combobox |
-| **m4** | CAPTCHA + 富文本 + slider + Shadow DOM + iframe + Manual highlight + endpoint 接线 + ROOM COMPLETE | ~400 (200 + 200 smoke) | 06-site-adapters + 08-human-gate-tracker/02 |
+| m | 内容 | commit | smoke |
+|---|------|--------|-------|
+| **m1** | Control router + 标准控件 + `nonstandardFillField` (替换 PROVISIONAL `defaultFillField`) | `f8d956b` | 42/42 |
+| **m2** | 日期控件 (6 种) + 地址自动补全 (3 种) | `0ebd7ea` | 44/44 |
+| **m3** | 选择控件变体: `radio_div` / chip / custom_combobox / search_select | `7e66cfa` | 34/34 |
+| **m4** | CAPTCHA + 富文本 + slider + Shadow DOM + iframe + Manual highlight + endpoint 接线 + ROOM COMPLETE | (this commit) | 37/37 |
+
+**Constraint coverage** (all verified in regression smoke):
+- ✅ #1 — strategy 失败 → MANUAL, 不强行填错数据
+- ✅ #2 — Low confidence → `block_approve=true` + `suggested_value` 清空抑制 memory laundering
+- ✅ #3 — CAPTCHA 检测立即 MANUAL, 永不尝试绕过 (inline pre-check in detectControlType)
+- ✅ #4 — 富文本 (TinyMCE/Quill/Draft.js) 默认 MANUAL
+
+**Review applied across 4 milestones**: 13 CRITICAL + 13 HIGH + 9 MEDIUM all fixed with named regression tests (REVIEW C1/C2/H1/H2 ...).
 
 ### Locked OQ
 

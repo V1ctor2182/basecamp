@@ -328,7 +328,15 @@ milestones:
 
   - id: "m4-special-manual-room-complete"
     name: "Special controls (CAPTCHA, rich text, slider, shadow, iframe) + Manual highlight + endpoint wiring + ROOM COMPLETE"
-    status: pending
+    status: completed
+    actual_files:
+      - "src/career/applier/nonstandard/strategies/specialControls.mjs"
+      - "src/career/applier/nonstandard/manualHighlight.mjs"
+      - "src/career/applier/nonstandard/nonstandardFillField.mjs"
+      - "src/career/applier/nonstandard/controlRouter.mjs"
+      - "src/career/applier/multistep/endpoint.mjs"
+      - "scripts/smoke-nonstandard-special-room-complete.mjs"
+    actual_lines: 870
     estimated_files:
       - "src/career/applier/nonstandard/strategies/specialControls.mjs"
       - "src/career/applier/nonstandard/manualHighlight.mjs"
@@ -483,5 +491,5 @@ commits:
       - "m3-selection-variants (→ completed)"
 current_sprint: "Sprint 17 — Non-Standard Controls"
 blockers: []
-status_note: "🟢 m3 COMPLETE 2026-05-15. selectionControls.mjs ~290 LOC (4 strategies: RADIO_DIV HIGH + MULTI_SELECT_CHIP/CUSTOM_COMBOBOX/SEARCH_SELECT MEDIUM; parseMultiValue handles array|pipe|comma with case-insensitive dedupe; selectionDetectionRule with token-aware class match + non-native combobox fallthrough). Plan-agent + adversarial review applied (4 CRITICAL + 3 HIGH): exact:true on all getByRole({name}) (prevented Java→JavaScript / Senior→Senior Manager mis-matches), search_select ambiguity gate (multiple visible options → LOW not silent first-DOM-order click — prevented wrong-city autocomplete), multi_select_chip explicit fill('')+waitFor pattern (prevented half-filled chip races on react-select/headlessui), non-native combobox fallthrough to CUSTOM_COMBOBOX (prevented selectOption() throws on plain role=combobox DIV), chip/tag/pill class equality (chip-icon no longer false-positives MULTI_SELECT_CHIP), arrow-key fallback gated on visible listbox (prevented Enter→form-submit on Workday/Greenhouse), parseMultiValue dedupes. Regression: m1 42 + m2 44 + m3 34 + multistep+apply-sessions 153 = 273/273 green. Next: m4 special controls (CAPTCHA/rich text/slider/shadow/iframe) + Manual highlight + endpoint wiring + ROOM COMPLETE."
+status_note: "🎉 ROOM COMPLETE 2026-05-15 (4/4 milestones, 157/157 smoke green = 42+44+34+37, one-day room). m4 shipped: specialControls.mjs ~220 LOC (CAPTCHA + rich_text + slider_range + shadow_dom + iframe_form strategies; detectCaptcha with data-sitekey + token-aware class match per Constraint #3; rich_text always MANUAL per Constraint #4; shadow_dom uses Playwright auto-pierce no :host prefix; iframe_form filters via classifiedField.label to avoid first-textbox trap), manualHighlight.mjs ~110 LOC (red outline via locator.evaluate + scrollIntoView + data-applier-manual attr; no PII written to DOM attrs per C3 stored-XSS prevention), endpoint.mjs +25 LOC injects nonstandardFillField as default _fillField in startMachine while preserving _machineDeps override for smokes. CAPTCHA detection promoted to inline pre-check in detectControlType (Constraint #3 guard independent of rule registration order). Plan-agent + adversarial review across 4 milestones: 13 CRITICAL + 13 HIGH + 9 MEDIUM applied — every one of constraints #1/#2/#3/#4 verified in regression smoke (REVIEW C1/C2/H1/H2 named tests). Room totals: controlRouter.mjs ~470 + nonstandardFillField.mjs ~340 (m1) + datePickers.mjs ~330 + addressControls.mjs ~140 (m2) + selectionControls.mjs ~310 (m3) + specialControls.mjs ~220 + manualHighlight.mjs ~110 + endpoint.mjs +25 (m4) = ~1945 LOC production + ~1750 smoke. ROOM COMPLETE rollups: room.yaml planning→active, _tree.yaml planning→active, 07-applier 62%→75% (6/8 children ✅), 04-career-system 92%→94% (29/34 features). 下游 unblocked: 06-site-adapters (consumes STRATEGY_REGISTRY for per-ATS overrides), 08-human-gate-tracker/02+/03 (reads manual_required + block_approve + data-applier-manual flag for approval UI), self-iteration/01-code-calibration (snapshot-eval-harness can replay against the strategy registry)."
 last_updated: "2026-05-15"

@@ -517,12 +517,20 @@ await test('nonstandardFillField FILE: locator.setInputFiles called', async () =
   assert.deepEqual(loc.calls, [{ method: 'setInputFiles', value: '/tmp/resume.pdf' }]);
 });
 
+// Helper: filter non-evaluate calls. m4 added highlightManual which
+// invokes locator.evaluate on the MANUAL path; we only care about
+// state-mutating actions (fill/click/check/uncheck/selectOption/
+// setInputFiles) in "no action" assertions.
+function nonEvaluateCalls(loc) {
+  return loc.calls.filter((c) => c.method !== 'evaluate');
+}
+
 await test('nonstandardFillField FILE: empty value → MANUAL (no setInputFiles)', async () => {
   const table = new MockTable({ e5: { role: 'button', name: 'Upload resume' } });
   const field = { suggested_value: '', class: 'file' };
   await nonstandardFillField(MOCK_PAGE, 'e5', field, table);
   const loc = table.resolvedLocators.get('e5');
-  assert.equal(loc.calls.length, 0, 'no setInputFiles called');
+  assert.equal(nonEvaluateCalls(loc).length, 0, 'no setInputFiles called');
   assert.equal(field.manual_required, true);
   assert.equal(field.confidence, Confidence.MANUAL);
 });
@@ -534,9 +542,9 @@ await test('nonstandardFillField: unregistered ControlType → MANUAL (no throw)
   const table = new MockTable({ e6: { role: 'spinbutton', name: 'Month' } });
   const field = { suggested_value: '06', class: 'hard' };
   await nonstandardFillField(MOCK_PAGE, 'e6', field, table);
-  // No locator action.
+  // No locator action (allowing evaluate calls from highlightManual).
   const loc = table.resolvedLocators.get('e6');
-  assert.equal(loc.calls.length, 0);
+  assert.equal(nonEvaluateCalls(loc).length, 0);
   // classifiedField mutated.
   assert.equal(field.manual_required, true);
   assert.equal(field.confidence, Confidence.MANUAL);
@@ -686,7 +694,7 @@ await test('H3 fillRadioNative: suggested_value mismatch → MANUAL (no click)',
   const field = { suggested_value: 'No', label: 'Yes', class: 'legal' };
   await nonstandardFillField(MOCK_PAGE, 'e4', field, table);
   const loc = table.resolvedLocators.get('e4');
-  assert.equal(loc.calls.length, 0, 'no click when mismatch');
+  assert.equal(nonEvaluateCalls(loc).length, 0, 'no click when mismatch');
   assert.equal(field.manual_required, true);
   assert.match(field.manual_reason, /does not match option label/);
 });
@@ -696,7 +704,7 @@ await test('H4 fillCheckbox: ambiguous "maybe" → MANUAL (no check/uncheck)', a
   const field = { suggested_value: 'maybe', class: 'legal' };
   await nonstandardFillField(MOCK_PAGE, 'e3', field, table);
   const loc = table.resolvedLocators.get('e3');
-  assert.equal(loc.calls.length, 0, 'no action on ambiguous value');
+  assert.equal(nonEvaluateCalls(loc).length, 0, 'no action on ambiguous value');
   assert.equal(field.manual_required, true);
   assert.match(field.manual_reason, /ambiguous value/);
 });
@@ -706,7 +714,7 @@ await test('H4 fillCheckbox: NaN → MANUAL (not silently truthy)', async () => 
   const field = { suggested_value: NaN, class: 'legal' };
   await nonstandardFillField(MOCK_PAGE, 'e3', field, table);
   const loc = table.resolvedLocators.get('e3');
-  assert.equal(loc.calls.length, 0);
+  assert.equal(nonEvaluateCalls(loc).length, 0);
   assert.equal(field.manual_required, true);
 });
 
