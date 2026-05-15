@@ -22,6 +22,7 @@ export default function ReportViewer({
 
   useEffect(() => {
     let cancelled = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setData(null)
     setLoadError(null)
     fetch(`/api/career/evaluate/stage-b/report/${encodeURIComponent(jobId)}`)

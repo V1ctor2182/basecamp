@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * enhance-kit — shared theme, components, and chart utilities for .tsx enhancer files.
  *

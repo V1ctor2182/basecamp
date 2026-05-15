@@ -27,7 +27,7 @@ function textContent(node: React.ReactNode): string {
   if (typeof node === 'string') return node
   if (typeof node === 'number') return String(node)
   if (Array.isArray(node)) return node.map(textContent).join('')
-  if (typeof node === 'object' && 'props' in node) return textContent((node as any).props.children)
+  if (typeof node === 'object' && 'props' in node) return textContent((node as { props: { children?: React.ReactNode } }).props.children)
   return ''
 }
 
@@ -437,7 +437,7 @@ function LearnApp() {
       await api.upload(files)
       await loadTree()
       showToast(`Uploaded ${files.length} file${files.length > 1 ? 's' : ''}`)
-    } catch (err) {
+    } catch {
       showToast('Upload failed')
     } finally {
       setUploading(false)
@@ -718,7 +718,7 @@ function LearnApp() {
                           } else {
                             setNewDirName(''); setNewDirPath(''); await loadTree(); showToast('Folder added')
                           }
-                        } catch (e) {
+                        } catch {
                           showToast('Failed to add folder')
                         }
                       }}
@@ -1038,7 +1038,7 @@ function MarkdownPreview({ content, filePath, onActiveHeading }: {
 
   // Heading component with auto-generated id
   const heading = (Tag: 'h1' | 'h2' | 'h3' | 'h4') =>
-    ({ children, ...props }: any) => <Tag id={slugify(textContent(children))} {...props}>{children}</Tag>
+    ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => <Tag id={slugify(textContent(children))} {...props}>{children}</Tag>
 
   const markdownContent = (
     <ReactMarkdown

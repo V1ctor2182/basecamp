@@ -92,7 +92,7 @@ export default function Portals() {
         const keys = configKeysFor(s.type)
         const missing = keys.filter(k => k === 'path' || k === 'branch'
           ? false
-          : !String((s.config as any)[k] ?? '').trim())
+          : !String((s.config as Record<string, unknown>)[k] ?? '').trim())
         if (missing.length) errs[i] = `Config missing: ${missing.join(', ')}`
       }
     })
@@ -240,7 +240,7 @@ export default function Portals() {
                       key={k}
                       className="af-input"
                       placeholder={k}
-                      value={String((s.config as any)[k] ?? '')}
+                      value={String((s.config as Record<string, unknown>)[k] ?? '')}
                       onChange={e => updateConfig(i, k, e.target.value)}
                     />
                   ))}
