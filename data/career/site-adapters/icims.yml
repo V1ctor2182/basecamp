@@ -1,0 +1,39 @@
+# iCIMS — multi-step form, sometimes mounted on tenant subdomain.
+# Job listings: jobs.icims.com / {tenant}.icims.com
+#
+# Mirrors the inline ADAPTERS entry from 04-m2.
+
+name: iCIMS
+id: icims
+priority: 110
+detection:
+  url_patterns:
+    - "icims\\.com"
+    - "jobs\\.icims\\.com"
+flow:
+  type: multi-step
+  next_button:
+    name_hints:
+      - Next
+      - Continue
+      - Save & Continue
+  progress_bar:
+    name_hints:
+      - progress
+      - application progress
+  step_list:
+    name_hints:
+      - steps
+      - application sections
+  submit_button:
+    name_hints:
+      - Submit
+      - Submit Application
+controls:
+  address_autocomplete:
+    control_type: google_places
+    detect:
+      class_contains: pac-input
+known_fields: []
+quirks:
+  - "iCIMS frequently uses iframes — applier must auto-pierce frames via Playwright"

@@ -1,0 +1,34 @@
+# Lever — single-step form. Job listings: jobs.lever.co/<company>/...
+
+name: Lever
+id: lever
+priority: 100
+detection:
+  # REVIEW C1 fix: hostname-only matching means a path-bearing pattern
+  # like `lever\.co/[^/]+/` never matches. Use trailing-anchor hostnames
+  # so custom Lever-hosted subdomains (e.g. hire.lever.co) still hit.
+  url_patterns:
+    - "(^|\\.)lever\\.co$"
+flow:
+  type: single-step
+  submit_button:
+    selectors:
+      - "button.template-btn-submit"
+    name_hints:
+      - Submit Application
+known_fields:
+  - label_pattern: "^full name"
+    class: hard
+    maps_to: identity.name
+  - label_pattern: "^email"
+    class: hard
+    maps_to: identity.email
+  - label_pattern: "^phone"
+    class: hard
+    maps_to: identity.phone
+  - label_pattern: "(resume|cv)"
+    class: file
+    maps_to: resume
+quirks:
+  - "Lever's submit button class is template-btn-submit — stable across listings"
+  - "Some Lever forms embed an Equal Employment Opportunity section — falls under legal class"

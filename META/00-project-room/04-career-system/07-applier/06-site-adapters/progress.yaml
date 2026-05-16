@@ -1,5 +1,301 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-schema-loader-detector-simple-yamls"
+    name: "SiteAdapter Zod schema + YAML loader + URL detector + 5 simple bundled YAMLs (_common/default/greenhouse/ashby/lever)"
+    status: completed
+    estimated_files:
+      - "src/career/applier/siteAdapters/schema.mjs"
+      - "src/career/applier/siteAdapters/loader.mjs"
+      - "src/career/applier/siteAdapters/detector.mjs"
+      - "data/career/site-adapters/_common.yml"
+      - "data/career/site-adapters/default.yml"
+      - "data/career/site-adapters/greenhouse.yml"
+      - "data/career/site-adapters/ashby.yml"
+      - "data/career/site-adapters/lever.yml"
+      - "scripts/smoke-site-adapters-loader.mjs"
+    estimated_lines: 580
+    depends_on: []
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Foundation: Zod schema + loader + URL detector + 5 simple-ATS YAMLs.
+      No integration yet (m2 wires into 05/03; m3 migrates 04-m2 inline).
+
+      Locked design (OQ1 + OQ4):
+        - OQ1 YAML distribution: 5 YAMLs in m1 (_common + default +
+          greenhouse + ashby + lever — all single-step flows per spec
+          "初版只确保 Greenhouse / Ashby / Lever 3 个工作"). The 3
+          multi-step YAMLs (workday/icims/successfactors) land in m3
+          when the multi-step flow.next_button.selectors path is
+          actually consumed.
+        - OQ4 detection signal: URL-only in m1. Schema accepts a
+          `dom_signatures: selector[]` field but loader does NOT consume
+          it yet (Phase 2 / 飞轮). DOM signature checking would require
+          a Page reference at detection time (async) and complicate the
+          API for marginal gain — Greenhouse/Ashby/Lever/Workday/iCIMS
+          all URL-detectable from job listing links.
+
+      Files:
+        - src/career/applier/siteAdapters/schema.mjs (~110 LOC):
+          · Zod SiteAdapterSchema strict — fields: name / id / priority /
+            detection {url_patterns, dom_signatures} / flow {type,
+            next_button, submit_button, progress_bar, step_list} /
+            controls {date_picker, address_autocomplete, custom_dropdown,
+            file_upload} / known_fields[] / quirks[]
+          · ControlHintSchema: control_type + detect {class_contains,
+            tag_name, aria_role}
+          · KnownFieldSchema: label_pattern (regex source) + class +
+            maps_to + confidence
+          · compileAdapter(raw) → compiled with url_patterns + label_patterns
+            pre-compiled to RegExp /i
+
+        - src/career/applier/siteAdapters/loader.mjs (~100 LOC):
+          · loadAdaptersFromDir(dir) → { adapters[], common, default }
+          · js-yaml parse + Zod validate; mtime-based cache
+          · Error: malformed YAML → throw with file path; ZodError
+            wrapped with adapter id
+
+        - src/career/applier/siteAdapters/detector.mjs (~70 LOC):
+          · detectSiteAdapter(jobUrl, registry) → CompiledAdapter
+          · URL parsing via new URL(); hostname match; raw-string fallback
+          · Priority-DESC iteration; default.yml priority=0 lowest fallback
+          · Never returns null (default catches everything)
+
+        - data/career/site-adapters/_common.yml (~30 LOC):
+            shared next_button/submit_button name_hints merged into
+            every adapter at load time
+
+        - data/career/site-adapters/default.yml (~25 LOC):
+            id=default, priority=0, url_patterns=['.*']
+
+        - data/career/site-adapters/greenhouse.yml (~50 LOC):
+            id=greenhouse, priority=100, url_patterns boards.greenhouse.io,
+            single-step, submit_button selectors ['#submit_app'],
+            known_fields seed (first_name etc.)
+
+        - data/career/site-adapters/ashby.yml (~40 LOC):
+            id=ashby, priority=100, url_patterns jobs.ashbyhq.com
+
+        - data/career/site-adapters/lever.yml (~40 LOC):
+            id=lever, priority=100, url_patterns jobs.lever.co
+
+        - scripts/smoke-site-adapters-loader.mjs (~250 LOC, ~14 asserts):
+          · Schema: required fields rejected, optional defaults applied
+          · _common.yml NOT returned as adapter (filtered + merged)
+          · _common merge: greenhouse inherits next_button name_hints
+          · loader: bad YAML → throw with file path
+          · loader: ZodError on malformed adapter
+          · compileAdapter: url_patterns + label_patterns compiled /i
+          · detector: greenhouse / ashby / lever / unknown / malformed-URL
+          · detector: priority ordering (100 > 0 fallback)
+          · loader caching: second load same mtime → reuses cache
+
+      验收:
+        - 14+ smoke green, pure-Node (<1s)
+        - js-yaml usable as transitive dep (verify before m1 — already
+          used by identityLookup.mjs / legalLookup.mjs)
+
+  - id: "m2-activate-detection-rules-known-fields"
+    name: "Adapter activation: push controls into 05 DETECTION_RULES + push known_fields into 03-classifier regex layer"
+    status: completed
+    estimated_files:
+      - "src/career/applier/siteAdapters/activate.mjs"
+      - "src/career/applier/classifier/regexRules.mjs"
+      - "scripts/smoke-site-adapters-activate.mjs"
+    estimated_lines: 450
+    depends_on: ["m1-schema-loader-detector-simple-yamls"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Wire the loaded adapter into the live system:
+        (a) adapter.controls.{date_picker,...} → 05 DETECTION_RULES
+        (b) adapter.known_fields → 03-classifier regex rule list (prepend)
+      Both pluggable + reversible (deactivate cleans up).
+
+      Locked design (OQ2):
+        - known_fields semantics: AUGMENT (prepend), not OVERRIDE. Adapter
+          known_fields try first; if none matches, classifier falls
+          through to generic regex rules (regexRules.mjs). This is safer:
+          a typo in adapter known_fields can't break generic detection;
+          worst case it just doesn't fire.
+
+      Files:
+        - src/career/applier/siteAdapters/activate.mjs (~180 LOC):
+          · activateAdapter(adapter) → DeactivationToken
+              Side effects:
+              1. For each adapter.controls.{category}: registerDetectionRule
+                 on controlRouter.mjs's DETECTION_RULES.
+                 Rule shape:
+                   (entry, info, _classifiedField) => {
+                     if (!info) return null
+                     const hint = adapter.controls[category]
+                     // ALL of {class_contains, tag_name, aria_role}
+                     // provided must match. Returns hint.control_type on
+                     // match, else null.
+                   }
+              2. For each adapter.known_fields: register on classifier's
+                 extra-rules seam (regexRules registerExtraRules).
+              3. Returns DeactivationToken { revert: () => void } that
+                 removes EXACTLY the rules this activation added.
+          · deactivateAdapter(token) — token.revert()
+          · Module-level _activeTokens: Set<DeactivationToken> for
+            diagnostics + revert-twice panic
+          · Idempotent re-activation: caller's responsibility to
+            deactivate first; isAdapterActive(adapterId) helper
+
+        - src/career/applier/classifier/regexRules.mjs (~+40 LOC):
+          · Add registerExtraRules(rules) + a token-based revert.
+          · Existing HARD_PATTERNS / LEGAL_PATTERNS / etc unchanged.
+          · classifyField prepends extra rules to the standard rule
+            sweep so adapter known_fields fire first.
+
+        - scripts/smoke-site-adapters-activate.mjs (~200 LOC, ~10 asserts):
+          · activate greenhouse → DETECTION_RULES gains greenhouse
+            entries → detectControlType on a date-picker ref returns
+            greenhouse-preferred ControlType
+          · deactivate via token → DETECTION_RULES back to baseline
+          · double-deactivate → throws
+          · known_fields prepend: classifier sees adapter rule first;
+            falls through to generic if no match
+          · stack: activate ashby on top of greenhouse → both sets of
+            rules stack; deactivate ashby cleans up only ashby
+          · isAdapterActive: tracks active set
+          · adapter with NO controls → activation no-ops on 05;
+            known_fields-only adapter still injects classifier rules
+          · DETECTION_RULES signature contract honored (3-arg, returns
+            ControlType | null)
+
+      验收:
+        - 10+ smoke green
+        - activate/deactivate reversible; repeated cycles leave
+          DETECTION_RULES + classifier regex lists at baseline
+
+  - id: "m3-migrate-multi-step-yamls-endpoint-room-complete"
+    name: "Migrate siteAdapter.mjs (04 m2) → new loader + 3 multi-step YAMLs (workday/icims/successfactors) + endpoint wiring + ROOM COMPLETE"
+    status: completed
+    estimated_files:
+      - "src/career/applier/multistep/siteAdapter.mjs"
+      - "src/career/applier/multistep/endpoint.mjs"
+      - "data/career/site-adapters/workday.yml"
+      - "data/career/site-adapters/icims.yml"
+      - "data/career/site-adapters/successfactors.yml"
+      - "scripts/smoke-site-adapters-migration-room-complete.mjs"
+    estimated_lines: 600
+    depends_on: ["m2-activate-detection-rules-known-fields"]
+    complexity_flags: ["design_decisions", "error_handling_heavy"]
+    open_questions: []
+    description: |
+      Migration + multi-step YAMLs + endpoint wiring + ROOM COMPLETE.
+
+      Locked design (OQ3 + OQ1 multi-step YAMLs):
+        - OQ3 migration: siteAdapter.mjs (04 m2, ~140 LOC) becomes a
+          THIN RE-EXPORT from the new loader. Public API preserved
+          (detectAdapter, getAdapter, resolveNextButtonHints,
+          resolveProgressBarHints, resolveStepListHints,
+          resolveSubmitHints, KNOWN_IDS, ADAPTERS). stepProbe.mjs
+          imports unchanged. Inline ADAPTERS array removed — its 4
+          entries (workday/icims/successfactors/generic) replaced by
+          4 YAML files (workday/icims/successfactors/default).
+
+      Files:
+        - src/career/applier/multistep/siteAdapter.mjs (~80 LOC, was ~140):
+          · Re-exports detectAdapter, KNOWN_IDS, getAdapter,
+            resolveNextButtonHints, resolveProgressBarHints,
+            resolveStepListHints, resolveSubmitHints from new loader,
+            translating new schema's flow.next_button.name_hints to
+            legacy nextButtonHints field name.
+          · Eager-loads adapters at module import (synchronous boot —
+            same as current behavior). Loader's loadAdaptersFromDir is
+            async so siteAdapter.mjs exposes an async ensureInit() that
+            endpoint.mjs awaits before first startMachine.
+
+        - src/career/applier/multistep/endpoint.mjs (~+30 LOC):
+          · startMachine: after detecting site adapter via
+            detectSiteAdapter(jobUrl), call activateAdapter(adapter)
+            BEFORE _runMachine; store DeactivationToken on running
+            context; deactivate on completion (try/finally on success
+            OR failure path).
+          · _machineDeps.site_adapter override still honored for smoke.
+
+        - data/career/site-adapters/workday.yml (~80 LOC):
+            id=workday, priority=110, url_patterns myworkdayjobs.com,
+            multi-step, controls.date_picker → mui_datepicker hint,
+            known_fields work_auth/sponsorship, quirks notes
+
+        - data/career/site-adapters/icims.yml (~60 LOC):
+            id=icims, priority=110, url_patterns icims.com, multi-step,
+            controls.address_autocomplete → google_places hint
+
+        - data/career/site-adapters/successfactors.yml (~50 LOC):
+            id=successfactors, priority=110, multi-step
+
+        - scripts/smoke-site-adapters-migration-room-complete.mjs (~280
+          LOC, ~12 asserts):
+          · Migration: legacy detectAdapter('workday URL') still →
+            'workday'; resolveNextButtonHints('workday') returns YAML's
+            name_hints
+          · existing smoke-multistep-site-adapter.mjs still green after
+            migration (regression gate)
+          · workday URL → activateAdapter pushes mui_datepicker hint
+          · icims URL → google_places hint for address fields
+          · greenhouse URL (single-step) → no progress_bar hints
+          · activate+deactivate around runMachine: token reverted in
+            try/finally even on machine error
+          · _machineDeps.site_adapter override path works for smoke
+          · E2E: mocked startMachine with workday URL → activateAdapter
+            fired → _runMachine called with adapter context → deactivate
+            on completion
+
+      ROOM COMPLETE rollups:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml 06-site-adapters: planning → active
+        - 07-applier parent: 75% → 88% (7/8 children ✅)
+        - 04-career-system: 94% → 97% (30/34 features)
+
+      下游 unblocked:
+        - self-iteration/02-data-flywheel (累积同 domain 失败自动 propose
+          new adapter YAML)
+        - 08-human-gate-tracker (dashboard 显示 active adapter id)
+
+      验收 (Room close):
+        - 12+ migration smoke green
+        - existing 04-multi-step smoke (43+37+30+43 = 153/153) STILL
+          passes after migration
+        - 05 smoke (157/157) STILL passes — adapter activation doesn't
+          break baseline
+        - 8 ATS YAMLs + _common + default validate against schema
+          (5 from m1 + 3 from m3)
+
+commits:
+  - hash: "cb5bc3e"
+    date: "2026-05-15"
+    message: "[04-career-system/07-applier/06-site-adapters] m1: SiteAdapter schema + loader + URL detector + 5 simple ATS YAMLs (smoke 29/29)"
+    files_changed: 10
+    specs_affected:
+      - "intent-site-adapters-001 (anchors: siteAdapters/schema.mjs + loader.mjs + detector.mjs + smoke-site-adapters-loader.mjs + 5 bundled YAMLs)"
+    milestones_affected:
+      - "m1-schema-loader-detector-simple-yamls (→ completed)"
+  - hash: "8271bda"
+    date: "2026-05-16"
+    message: "[04-career-system/07-applier/06-site-adapters] m2: activateAdapter — push controls into 05 DETECTION_RULES + known_fields into 03-classifier (smoke 23/23)"
+    files_changed: 4
+    specs_affected:
+      - "intent-site-adapters-001 (anchors: siteAdapters/activate.mjs + classifier/regexRules.mjs registerExtraRules seam + smoke-site-adapters-activate.mjs)"
+    milestones_affected:
+      - "m2-activate-detection-rules-known-fields (→ completed)"
+  - hash: "da7eed7"
+    date: "2026-05-16"
+    message: "[04-career-system/07-applier/06-site-adapters] m3: migrate inline registry → YAML facade + 3 multi-step YAMLs + endpoint activation + ROOM COMPLETE (smoke 29/29, Room total 81/81)"
+    files_changed: 15
+    specs_affected:
+      - "intent-site-adapters-001 (anchors: multistep/siteAdapter.mjs facade rewrite + multistep/endpoint.mjs activation lifecycle + 3 multi-step YAMLs + smoke-site-adapters-migration-room-complete.mjs)"
+    milestones_affected:
+      - "m3-migrate-multi-step-yamls-endpoint-room-complete (→ completed, ROOM COMPLETE)"
+    rollups:
+      - "room.yaml lifecycle: planning → active"
+      - "_tree.yaml 06-site-adapters: planning → active"
+      - "07-applier parent: 75% → 88% (7/8 children ✅)"
+      - "04-career-system: 94% → 97% (29/34 features)"
+current_sprint: "Sprint 18 — Site Adapters"
 blockers: []
-status_note: "Feature 暂搁置（backlog），未来再评估优先级。"
-last_updated: "2026-04-22"
+status_note: "🎉 ROOM COMPLETE 2026-05-16 (3/3 milestones, 81/81 smoke green = 29 loader + 23 activate + 29 migration). m3 shipped: multistep/siteAdapter.mjs rewritten as thin facade (~250 LOC) over m1 loader with try/catch + minimal fallback registry per REVIEW C3 (top-level await failure no longer brings down endpoint.mjs/server.mjs); 3 multi-step YAMLs (workday/icims/successfactors) replacing the pre-m3 inline registry; endpoint.mjs.startMachine activates adapter via getCompiledAdapter(jobUrl) before runMachine + reverts in finally (try/finally atomic — survives runMachine throw); __SMOKE_skipAdapterActivation harness flag (REVIEW M2/H3: renamed from _skipAdapterActivation to avoid production exposure). workday.yml known_fields corrected to point at real legal.yml keys (work_authorization.authorized_us_yes_no / work_authorization.requires_sponsorship_now) per REVIEW C1; workday.yml controls.date_picker REMOVED per REVIEW C2 (MuiPickersDay is MUI not Workday); _common.yml Forward removed per REVIEW C4 (was leaking to workday/icims via merge); getCompiledAdapter URL heuristic tightened to `://` per REVIEW C5; activate.mjs class_contains startsWith now requires hyphen-prefix per REVIEW H3 adv. Plan-agent + adversarial review across 3 milestones: 11 CRITICAL + 5 HIGH + 4 MEDIUM applied — every fix has REVIEW-named regression. Regression: 04-multi-step 153/153 + 05 nonstandard 157/157 + 03 field-classifier 95/95 + 02-playwright-runtime/apply-sessions 43/43 + 06 (this Room) 81/81 = 529/529 green. Room totals: schema.mjs ~250 LOC + loader.mjs ~190 + detector.mjs ~80 + activate.mjs ~225 + multistep/siteAdapter.mjs ~250 (facade rewrite) + regexRules.mjs +95 LOC seam + endpoint.mjs +35 LOC + 8 bundled YAMLs (5 single-step from m1 + 3 multi-step from m3) = ~1125 LOC production + ~1400 smoke. ROOM COMPLETE rollups: room.yaml planning→active, _tree.yaml planning→active, 07-applier 75%→88% (7/8 children ✅), 04-career-system 94%→97% (29/34 features). 下游 unblocked: self-iteration/02-data-flywheel (累积同 domain 失败 propose 新 adapter YAML); 08-human-gate-tracker/03+/04 (consumes adapter id + per-ATS quirks for interview prep + followup cadence)."
+last_updated: "2026-05-15"

@@ -1,0 +1,13 @@
+# default.yml — priority-0 fallback. Matches every URL via /.*/ so any
+# URL not claimed by a higher-priority adapter lands here.
+
+name: Default
+id: default
+priority: 0
+detection:
+  url_patterns:
+    - ".*"
+flow:
+  type: single-step
+quirks:
+  - "Unknown ATS — relying on generic ARIA + 05 detection rules"

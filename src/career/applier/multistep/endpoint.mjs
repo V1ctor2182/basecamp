@@ -37,6 +37,13 @@ import '../nonstandard/strategies/datePickers.mjs';
 import '../nonstandard/strategies/addressControls.mjs';
 import '../nonstandard/strategies/selectionControls.mjs';
 import '../nonstandard/strategies/specialControls.mjs';
+// 07-applier/06-site-adapters m3 wiring: per-ATS adapter activation
+// pushes adapter.controls into 05's DETECTION_RULES and known_fields
+// into 03-classifier for the duration of this apply. Token reverted in
+// the finally block of the fire-and-forget runner so DETECTION_RULES
+// returns to baseline whether the apply succeeds, errors, or is paused.
+import { detectAdapter, getCompiledAdapter } from './siteAdapter.mjs';
+import { activateAdapter } from '../siteAdapters/activate.mjs';
 
 // ── In-memory controller registry ───────────────────────────────────
 //
@@ -161,7 +168,34 @@ export async function startMachine(body, deps = {}) {
   };
 
   const runMachineFn = deps._runMachine || realRunMachine;
-  const detectedAdapter = siteAdapter || detectAdapterForUrl(jobUrl);
+  // m3 (06-site-adapters): detectAdapter now goes through the YAML-backed
+  // facade. Caller-supplied siteAdapter still wins; otherwise the facade
+  // maps the URL onto the legacy 'workday'|'icims'|'successfactors'|'generic'
+  // enum (single-step ATS like greenhouse collapse to 'generic' for the
+  // multi-step state machine). Activation uses the TRUE compiled adapter
+  // (getCompiledAdapter(jobUrl)) so single-step ATS hints DO take effect
+  // even though the machine treats them as 'generic'.
+  const detectedAdapter = siteAdapter || detectAdapter(jobUrl);
+  /** @type {import('../siteAdapters/activate.mjs').DeactivationToken|null} */
+  let activationToken = null;
+  // REVIEW M2/H3 fix: rename the test-only bypass from `_skipAdapterActivation`
+  // to `__SMOKE_skipAdapterActivation` so a future caller forwarding
+  // request body fields into deps can't accidentally trigger it. The
+  // underscore-prefixed convention pairs with `_runMachine` / `_getPage`
+  // / `_machineDeps` for the machine layer; the double-underscore +
+  // SMOKE prefix makes the intent unmistakable.
+  if (!deps.__SMOKE_skipAdapterActivation) {
+    try {
+      const compiled = getCompiledAdapter(jobUrl);
+      activationToken = activateAdapter(compiled);
+    } catch (err) {
+      // REVIEW L3 fix: don't swallow silently — surface to stderr so
+      // a misconfigured YAML doesn't quietly disable per-ATS hints.
+      // The apply can still proceed without activation.
+      console.warn('startMachine: activateAdapter failed, proceeding without per-ATS hints:', err.message);
+      activationToken = null;
+    }
+  }
 
   // Fire-and-forget. Errors land in ctrl.lastError so getStatus reflects.
   (async () => {
@@ -196,6 +230,21 @@ export async function startMachine(body, deps = {}) {
       ctrl.lastError = String(err?.message ?? err).slice(0, 300);
       ctrl.state = 'done';
     } finally {
+      // m3 (06-site-adapters): deactivate adapter rules whether the
+      // apply succeeded, errored, or paused. Failure to revert leaves
+      // global DETECTION_RULES polluted for subsequent applies.
+      // REVIEW H2 fix: log revert errors instead of silent swallow.
+      // Double-revert is a real bug (caller forgot the contract or two
+      // cleanup paths racing); we want it visible without crashing the
+      // outer runner.
+      if (activationToken) {
+        try {
+          activationToken.revert();
+        } catch (err) {
+          console.warn('startMachine: adapter revert failed:', err.message);
+        }
+        activationToken = null;
+      }
       // Resolve any dangling approval so callers don't hang forever.
       // H2 fix from review: snapshot draftInfo to lastDraftInfo so
       // getStatus can still report "errored at step N" after settle.
@@ -367,21 +416,10 @@ async function defaultGetPage() {
   return getPage();
 }
 
-function detectAdapterForUrl(jobUrl) {
-  // Defer to siteAdapter — but lazy-import to avoid forcing siteAdapter
-  // into the smoke's mock path when caller passes explicit siteAdapter.
-  try {
-    // Synchronous fall-back: simple substring match (URL.hostname has been
-    // exhaustively tested in m2's siteAdapter, but importing it here
-    // would force a synchronous-only path — caller can pass siteAdapter
-    // explicitly to skip this.)
-    const lower = String(jobUrl).toLowerCase();
-    if (lower.includes('myworkdayjobs.com') || lower.includes('workdayjobs.com')) return 'workday';
-    if (lower.includes('icims.com')) return 'icims';
-    if (lower.includes('successfactors.com')) return 'successfactors';
-  } catch {}
-  return 'generic';
-}
+// m3 (06-site-adapters): the inline `detectAdapterForUrl` substring
+// fallback was removed in favor of the YAML-backed `detectAdapter` from
+// siteAdapter.mjs (now a thin facade over siteAdapters/loader.mjs +
+// detector.mjs). startMachine calls detectAdapter directly above.
 
 // ── Test hooks ──────────────────────────────────────────────────────
 

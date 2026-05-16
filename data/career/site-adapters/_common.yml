@@ -1,0 +1,34 @@
+# _common.yml — shared defaults merged into every adapter at load time.
+#
+# This file is NOT an adapter (no id / detection / flow.type). The loader
+# concatenates its array fields (selectors, name_hints) onto each
+# adapter's same-named fields so common hints fall through as a fallback
+# after adapter-specific hints fail.
+#
+# Adapter-specific entries come FIRST in the merged array — _common's
+# entries append as last-resort.
+
+flow:
+  next_button:
+    # REVIEW C4 fix: removed `Forward` from common defaults. Only
+    # SuccessFactors actually uses "Forward" as a Next-button label;
+    # leaving it here meant Workday / iCIMS / Greenhouse / etc. would
+    # also try to click any "Forward" button (e.g. browser-style
+    # pagination), causing mis-clicks. Adapters that need `Forward`
+    # declare it themselves (successfactors.yml).
+    name_hints:
+      - Next
+      - Continue
+      - Save and Continue
+      - Save & Continue
+  submit_button:
+    name_hints:
+      - Submit
+      - Submit Application
+      - Apply
+      - Apply Now
+
+# REVIEW M4 fix: removed `quirks` from _common — loader's
+# mergeCommonDefaults only merges flow regions, so common quirks
+# silently disappeared. If shared quirks are needed later, wire them
+# through mergeCommonDefaults explicitly.

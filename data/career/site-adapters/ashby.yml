@@ -1,0 +1,29 @@
+# Ashby — single-step form. Job listings: jobs.ashbyhq.com/<company>/...
+
+name: Ashby
+id: ashby
+priority: 100
+detection:
+  url_patterns:
+    - "jobs\\.ashbyhq\\.com"
+    - "ashbyhq\\.com"
+flow:
+  type: single-step
+  submit_button:
+    name_hints:
+      - Submit Application
+known_fields:
+  - label_pattern: "^name"
+    class: hard
+    maps_to: identity.name
+  - label_pattern: "^email"
+    class: hard
+    maps_to: identity.email
+  - label_pattern: "(linkedin)"
+    class: hard
+    maps_to: identity.links.linkedin
+  - label_pattern: "(resume|cv)"
+    class: file
+    maps_to: resume
+quirks:
+  - "Ashby uses a single page form; no multi-step state needed"
