@@ -1,5 +1,289 @@
-milestones: []
-current_sprint: null
+milestones:
+  - id: "m1-stores-schemas-capture-hooks"
+    name: "4 JSONL stores + Zod schemas + capture hooks wired across apply lifecycle"
+    status: pending
+    estimated_files:
+      - "src/career/feedback/stores.mjs"
+      - "src/career/feedback/schemas.mjs"
+      - "src/career/applier/multistep/endpoint.mjs"
+      - "src/career/applier/classifier/index.mjs"
+      - "scripts/smoke-feedback-stores.mjs"
+    estimated_lines: 650
+    depends_on: []
+    complexity_flags: ["design_decisions", "error_handling_heavy"]
+    open_questions: []
+    description: |
+      Foundation: 3 NEW append-only JSONL stores (field-misclassified,
+      field-edits, site-failures) + Zod schemas + capture hooks at every
+      apply touchpoint. open-question-diffs is NOT a new file — m2's
+      induction reads qa-bank/history.jsonl directly (OQ5).
+
+      Locked design (OQ4 + OQ5):
+        - OQ4 cold start: create empty JSONL files lazily on first
+          append, not via init-career.sh. Reduces install-time complexity.
+        - OQ5 qa-bank/history.jsonl reuse: skip duplicate
+          feedback/open-question-diffs.jsonl. qa-bank/history.jsonl
+          already captures {q, a_draft, a_final, edit_distance, company,
+          role, template_used} on Mark Submitted — m2 induction reads
+          that file directly. Only 3 NEW JSONL files in feedback/.
+
+      Files:
+        - src/career/feedback/schemas.mjs (~120 LOC):
+          · FieldMisclassifiedSchema: ts / jobId / field_label /
+            predicted_class / actual_class / actual_mapping / site
+            / refId
+          · FieldEditSchema: ts / jobId / field_id / field_label /
+            suggested / user_final / edit_distance / confidence
+          · SiteFailureSchema: ts / jobId / domain / site_adapter_id /
+            step_idx / error_kind / error_message / snapshot_excerpt
+          · All strict; ts is ISO 8601.
+
+        - src/career/feedback/stores.mjs (~160 LOC):
+          · FEEDBACK_DIR = data/career/feedback/
+          · appendJsonl(filename, record, schema) — Zod-validated, atomic
+            (write to tmp + rename, mirrors draftsStore pattern)
+          · readJsonl(filename, { filter?, since?, limit? }) — line-by-
+            line stream; no full-file load
+          · countByGroup(filename, groupKey, sinceMs) — for m2 threshold
+          · 3 typed wrappers: recordFieldMisclassified / recordFieldEdit
+            / recordSiteFailure
+
+        - Capture hook wiring (touches existing files):
+          · endpoint.mjs approve-step route: compute edit_distance vs
+            draft.suggested_value; recordFieldEdit on actual change
+          · endpoint.mjs error path: recordSiteFailure with
+            URL.hostname + site_adapter id + step_idx + classified
+            error.kind (TIMEOUT/STALE_REF/ELEMENT_GONE/CLASSIFY/OTHER)
+          · classifier/index.mjs reclassify hook (only if reclassify
+            endpoint exists; otherwise capture via approve-step's class
+            override in edits)
+
+      Smoke (~250 LOC, ~14 asserts):
+        - schemas: validate record shape, reject bad enums
+        - stores: atomic append, no duplicate writes under concurrent
+          calls, file lazy-created on first append
+        - readJsonl: filter / since / limit honored, streaming
+        - countByGroup: 5 same-site records → returns 5
+        - Capture hooks (mocked): approve-step records field-edit on
+          actual edit (skipped when user accepts as-is); error path
+          records site-failure; classifier reclassify (if endpoint exists)
+        - Fixture isolation: backup/restore data/career/feedback/
+
+      验收:
+        - 14+ smoke green, pure-Node (<2s)
+        - .gitignore covers feedback/*.jsonl
+
+  - id: "m2-induce-worker-haiku-threshold"
+    name: "AI induction worker (Haiku) + threshold detection + proposal storage"
+    status: pending
+    estimated_files:
+      - "src/career/feedback/induce.mjs"
+      - "src/career/feedback/induceClassifierRule.mjs"
+      - "src/career/feedback/induceSiteAdapter.mjs"
+      - "scripts/smoke-feedback-induce.mjs"
+    estimated_lines: 550
+    depends_on: ["m1-stores-schemas-capture-hooks"]
+    complexity_flags: ["prompt_engineering", "external_api"]
+    open_questions: []
+    description: |
+      LLM induction: when ≥5 same-group records of a feedback type
+      accumulate, call Haiku to propose a fix. Proposals saved to
+      data/career/feedback/suggested/{type}-{ts}.json pending m3 review.
+      NEVER auto-applied.
+
+      Locked design (OQ1 + OQ2 + OQ6):
+        - OQ1 model: Haiku across the board. Input ≤20 JSONL rows
+          (~2k tokens); pattern extraction is Haiku's sweet spot.
+          Sonnet only escalates if Haiku output fails Zod twice.
+        - OQ2 threshold: fixed 5 per spec.
+        - OQ6 trigger: server-side check called from endpoint.mjs at
+          apply close (cheap groupBy over last 30d) + manual "Run
+          induction now" button (m4 UI).
+        - Proposal shape:
+            { id (uuid), type ('classifier-rule' | 'site-adapter'),
+              created_at, source_records [refs], proposal {...},
+              status ('pending' | 'approved' | 'rejected') }
+
+      Files:
+        - src/career/feedback/induce.mjs (~140 LOC):
+          · INDUCTION_THRESHOLD = 5
+          · maybeInduce(feedbackType) → Promise<Proposal[]>
+              countByGroup; for each group at threshold, dispatch to
+              type-specific induce-X. Tracks last-induced group keys
+              to avoid re-inducing same batch.
+          · pendingSuggestions() / readSuggestion(id) for m3
+
+        - src/career/feedback/induceClassifierRule.mjs (~150 LOC):
+          · Input: 5+ FieldMisclassified records (same site, 30d)
+          · Haiku prompt: propose ONE regex + class + maps_to
+          · Validate via Zod; retry once with Sonnet on parse fail
+          · Returns Proposal { type:'classifier-rule', ... }
+
+        - src/career/feedback/induceSiteAdapter.mjs (~180 LOC):
+          · Input: 5+ SiteFailure records (same domain, 30d)
+          · Haiku prompt: propose site-adapter YAML stub
+          · Validate against SiteAdapterSchema from 06-m1/schema.mjs
+          · Returns Proposal { type:'site-adapter', ... }
+
+      Smoke (~200 LOC, ~10 asserts):
+        - threshold not met (<5) → no proposal
+        - threshold met + mocked Haiku → valid proposal saved
+        - Haiku output Zod-invalid → retry with Sonnet; 2nd fail → skip
+          + telemetry (no crash)
+        - Idempotent re-run: same group not re-inducted
+        - readSuggestion roundtrip
+        - Mocked AnthropicClient (existing pattern in
+          src/career/lib/anthropicClient.mjs)
+
+      验收:
+        - 10+ smoke green
+        - Real Haiku calls gated behind ANTHROPIC_API_KEY (smoke mocks)
+
+  - id: "m3-approve-reject-seam-apply-suggestion"
+    name: "Approve/reject REST + applySuggestion writes to learned-classifier-rules.yml / new site-adapter YAML"
+    status: pending
+    estimated_files:
+      - "src/career/feedback/applySuggestion.mjs"
+      - "server.mjs"
+      - "data/career/feedback/learned-classifier-rules.yml"
+      - "scripts/smoke-feedback-apply-suggestion.mjs"
+    estimated_lines: 450
+    depends_on: ["m2-induce-worker-haiku-threshold"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Approve/reject mechanism. NEVER bypasses the human gate.
+
+      Locked design (OQ7):
+        - Classifier-rule proposals → append to data/career/feedback/
+          learned-classifier-rules.yml. classifier/regexRules.mjs reads
+          this on boot via 06's registerExtraRules seam. On approve we
+          also call registerExtraRules in-process so the change is live
+          within the same Node process (no restart).
+        - Site-adapter proposals → write data/career/site-adapters/
+          {domain}.yml directly. 06's loader mtime cache invalidates
+          on next loadAdapters call (REVIEW C3 already verified this).
+        - Reject: write to feedback/rejected-ids.json + delete proposal.
+          m2 induce respects rejected set so it doesn't re-propose.
+
+      Files:
+        - src/career/feedback/applySuggestion.mjs (~180 LOC):
+          · approveSuggestion(id):
+              classifier-rule → append YAML + registerExtraRules live
+              site-adapter → write YAML + loader._clearCache()
+          · rejectSuggestion(id):
+              rejected-ids.json += id; delete proposal file
+          · ensureLearnedRulesLoaded() — called from classifier boot:
+              reads learned-classifier-rules.yml + registerExtraRules
+              (idempotent, token-tracked)
+
+        - server.mjs (~+80 LOC):
+          · GET  /api/career/feedback/suggestions[?status=pending|all]
+          · POST /api/career/feedback/suggestions/:id/approve
+          · POST /api/career/feedback/suggestions/:id/reject
+          · GET  /api/career/feedback/stats?since=ISODate
+          · All Zod-validated; 400 / 404 / 409 paths
+
+        - data/career/feedback/learned-classifier-rules.yml:
+          # Auto-generated; user-approved suggestions only.
+          rules: []
+
+      Smoke (~200 LOC, ~10 asserts):
+        - approve classifier-rule → file appended + classifyField
+          returns new mapping live (registerExtraRules took effect)
+        - approve site-adapter → YAML created + loader detects on next
+          loadAdapters (cache invalidated)
+        - reject → rejected-ids.json updated + proposal deleted
+        - Re-induce skips rejected ids
+        - HTTP routes: 200/400/404/409 paths
+        - server.mjs registration: routes mount
+        - learned-rules.yml malformed → boot warns + skips (graceful)
+
+      验收:
+        - 10+ smoke green
+        - Approved rule takes effect within SAME process — verified
+          by re-running classifyField on a matching label
+
+  - id: "m4-learning-tab-ui-room-complete"
+    name: "Learning tab UI (React + ECharts) + stats endpoints + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "src/career/Learning.tsx"
+      - "src/career/learning.css"
+      - "src/career/CareerApp.tsx"
+      - "server.mjs"
+      - "scripts/smoke-feedback-stats-endpoint.mjs"
+    estimated_lines: 600
+    depends_on: ["m3-approve-reject-seam-apply-suggestion"]
+    complexity_flags: ["design_decisions"]
+    open_questions: []
+    description: |
+      Frontend Learning tab visualizing the 3 flywheels + qa-bank
+      history + pending suggestions + accuracy trend. ROOM COMPLETE.
+
+      Locked design:
+        - Reuse ECharts (already in package.json, used by evaluator/
+          ReportViewer.tsx).
+        - Reuse Apply.tsx / Resumes.tsx visual patterns. No new design
+          tokens.
+
+      Files:
+        - src/career/Learning.tsx (~330 LOC):
+          · 4 collapsible cards:
+              ① 30-day flywheel stats (3 jsonl counts + qa-bank/
+                 history.jsonl Open-Q submissions count)
+              ② Accuracy trend — ECharts line chart, 14-day window
+                 1 - (misclassified / total_classified)
+              ③ Pending suggestions list — Approve/Reject buttons
+                 + inline diff preview (classifier regex preview;
+                 side-by-side YAML for site-adapter)
+              ④ Site adapter coverage — (domain, success, failure,
+                 has_adapter?) table sorted by failure_count DESC
+          · State: useState + fetchAndCache (Apply.tsx pattern)
+          · Loading + error states per section
+
+        - src/career/learning.css (~80 LOC):
+          · .c-learning-* tokens matching c-resumes-* style
+          · Card grid + Approve/Reject button styles
+
+        - src/career/CareerApp.tsx (~+20 LOC):
+          · Learning tab in top nav (after Settings)
+
+        - server.mjs (~+50 LOC):
+          · GET /api/career/feedback/stats — aggregate counts +
+            14-day accuracy series
+          · GET /api/career/feedback/site-coverage — domain × outcomes
+
+      Smoke (~150 LOC, ~8 asserts):
+        - Stats endpoint shape
+        - 14-day accuracy series: array of {date, value} (value ∈ [0,1])
+        - Site coverage join correctness
+        - Empty flywheels → zeros, not undefined
+        - Approve via HTTP → suggestion status flips → list endpoint
+          shows it under 'all' not 'pending'
+        - tsc + vite build clean (gated)
+
+      ROOM COMPLETE rollups:
+        - room.yaml lifecycle: planning → active
+        - _tree.yaml self-iteration/02-data-flywheel: planning → active
+        - self-iteration parent: 0% → 33% (1/3 ROOMs ✅)
+        - 07-applier: 88% → 91%
+        - 04-career-system: 97% → 98%
+
+      下游 unblocked:
+        - self-iteration/01-code-calibration (consumes site-failures +
+          field-misclassified evidence captured by m1)
+        - self-iteration/03-iteration-dashboard (extends Learning tab
+          with code-fix escalation queue)
+
+      验收 (Room close):
+        - 8+ smoke green + UI build clean
+        - End-to-end: simulate 5 field-misclassified → maybeInduce →
+          mocked Haiku returns rule → Learning tab shows it → Approve
+          → classifyField routes the new label correctly (in-process)
+
+commits: []
+current_sprint: "Sprint 19 — Data Flywheel"
 blockers: []
-status_note: "Feature 暂搁置（backlog），未来再评估优先级。"
-last_updated: "2026-04-22"
+status_note: "Plan A 锁定 2026-05-17 via plan-milestones skill. 4 milestones, ~2250 LOC + ~800 smoke. OQ1=Haiku w/ Sonnet retry on Zod fail, OQ2=fixed threshold 5, OQ3=manual approve, OQ4=lazy-create JSONL on first append, OQ5=reuse qa-bank/history.jsonl (skip duplicate open-question-diffs file), OQ6=trigger on apply close + manual button, OQ7=learned classifier rules in YAML read via 06's registerExtraRules seam. Ready to start m1."
+last_updated: "2026-05-17"
