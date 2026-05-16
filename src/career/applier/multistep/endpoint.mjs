@@ -44,6 +44,20 @@ import '../nonstandard/strategies/specialControls.mjs';
 // returns to baseline whether the apply succeeds, errors, or is paused.
 import { detectAdapter, getCompiledAdapter } from './siteAdapter.mjs';
 import { activateAdapter } from '../siteAdapters/activate.mjs';
+// 07-applier/self-iteration/02-data-flywheel m1 — capture hooks. The
+// flywheel records two events at the multi-step endpoint boundary:
+//   ① approve-step: when user edits a draft suggested_value, append a
+//      field-edits record (m2 induction reads these for narrative style).
+//   ② runMachine error path: append a site-failures record so m2 can
+//      propose a new site-adapter YAML when a domain hits ≥5 failures.
+// Stores are append-only JSONL; capture failures are best-effort
+// (caught + logged; never break the apply).
+import {
+  recordFieldEdit,
+  recordSiteFailure,
+  editDistance,
+  classifyError,
+} from '../../feedback/stores.mjs';
 
 // ── In-memory controller registry ───────────────────────────────────
 //
@@ -131,6 +145,12 @@ export async function startMachine(body, deps = {}) {
     lastDraftInfo: null, // H2: preserved snapshot of last draft when machine settles
     pauseRequested: false, // L5: flag for pause-before-first-approve
     started_at: new Date().toISOString(),
+    // 02-data-flywheel m1: stashed so the capture hooks (approveStep,
+    // error path) can attribute records without re-reading the session
+    // file. siteAdapter populated after detection further below; jobUrl
+    // mirrored here for the runMachine error catch.
+    siteAdapter: null,
+    jobUrl,
   };
   _machines.set(jobId, ctrl);
 
@@ -176,6 +196,10 @@ export async function startMachine(body, deps = {}) {
   // (getCompiledAdapter(jobUrl)) so single-step ATS hints DO take effect
   // even though the machine treats them as 'generic'.
   const detectedAdapter = siteAdapter || detectAdapter(jobUrl);
+  // 02-data-flywheel m1: stash the detected adapter id on the ctrl
+  // so the runMachine error path's site-failure record knows which
+  // adapter (and therefore which site-adapter YAML) to attribute to.
+  ctrl.siteAdapter = detectedAdapter;
   /** @type {import('../siteAdapters/activate.mjs').DeactivationToken|null} */
   let activationToken = null;
   // REVIEW M2/H3 fix: rename the test-only bypass from `_skipAdapterActivation`
@@ -225,10 +249,23 @@ export async function startMachine(body, deps = {}) {
       ctrl.lastOutcome = result.outcome;
       ctrl.lastError = result.error || null;
       ctrl.state = 'done';
+      // REVIEW C1 (adv) fix CRITICAL: runMachine reports MOST internal
+      // errors via `result.outcome === OUTCOME.ERROR` WITHOUT throwing
+      // (max-steps, Next-click failed, persist failed, etc.). Without
+      // this branch, the site-failure flywheel would record almost
+      // nothing in production — the smoke only passed because the mock
+      // literally throws.
+      if (result.outcome === OUTCOME.ERROR) {
+        _fireSiteFailure(jobId, ctrl, { message: result.error || 'unknown machine error' });
+      }
     } catch (err) {
       ctrl.lastOutcome = OUTCOME.ERROR;
       ctrl.lastError = String(err?.message ?? err).slice(0, 300);
       ctrl.state = 'done';
+      // REVIEW H1 (Plan) fix: drop the await — fire-and-forget so a
+      // slow filesystem doesn't defer the finally cleanup (activation
+      // token revert).
+      _fireSiteFailure(jobId, ctrl, err);
     } finally {
       // m3 (06-site-adapters): deactivate adapter rules whether the
       // apply succeeded, errored, or paused. Failure to revert leaves
@@ -282,6 +319,41 @@ export function approveStep(jobId, body) {
   const pending = ctrl.pendingApproval;
   if (!pending) {
     return { status: 409, error: 'no pending approval — machine is between steps' };
+  }
+  // 02-data-flywheel m1: capture user edits to the draft as field-edit
+  // records. Best-effort fire-and-forget — recording failure must NEVER
+  // block the approve flow. Skips records when distance=0 (user accepted
+  // as-is) or when the refId can't be matched (defensive).
+  const edits = Array.isArray(body.edits) ? body.edits : [];
+  if (edits.length && pending.draftInfo?.draft?.fields) {
+    const fieldMap = new Map(pending.draftInfo.draft.fields.map((f) => [f.refId, f]));
+    for (const edit of edits) {
+      if (!edit || !edit.refId) continue;
+      const field = fieldMap.get(edit.refId);
+      if (!field) continue;
+      // REVIEW H2 (adv) fix: slice BEFORE computing distance so the
+      // recorded suggested/user_final and the recorded edit_distance
+      // agree. Pre-fix, two strings differing only past index 8000
+      // would land in storage as equal but with edit_distance > 0,
+      // confusing m2 induction.
+      const suggested = String(field.suggested_value ?? '').slice(0, 8000);
+      const userFinal = String(edit.suggested_value ?? '').slice(0, 8000);
+      const dist = editDistance(suggested, userFinal);
+      if (dist === 0) continue;
+      recordFieldEdit({
+        ts: new Date().toISOString(),
+        jobId,
+        field_id: edit.refId,
+        field_label: String(field.label || '').slice(0, 400),
+        suggested,
+        user_final: userFinal,
+        edit_distance: dist,
+        confidence: field.confidence || 'medium',
+        site: ctrl.siteAdapter || undefined,
+      }).catch((err) => {
+        console.warn('feedback: recordFieldEdit failed:', err.message);
+      });
+    }
   }
   // H2: snapshot draftInfo so getStatus can show "errored/paused at step N"
   // after the controller's pending is cleared.
@@ -420,6 +492,36 @@ async function defaultGetPage() {
 // fallback was removed in favor of the YAML-backed `detectAdapter` from
 // siteAdapter.mjs (now a thin facade over siteAdapters/loader.mjs +
 // detector.mjs). startMachine calls detectAdapter directly above.
+
+// 02-data-flywheel m1: site-failure capture helper (extracted per
+// REVIEW C1 + H1 + H4 + L5 so it's called from BOTH the runMachine
+// throw-catch AND the result.outcome===ERROR branch, fire-and-forget).
+function _fireSiteFailure(jobId, ctrl, err) {
+  let domain = 'unknown';
+  if (typeof ctrl.jobUrl === 'string' && ctrl.jobUrl) {
+    try {
+      const h = new URL(ctrl.jobUrl).hostname;
+      if (h) domain = h;
+    } catch {
+      // REVIEW L5 fix: prefer 'unknown' over truncated raw URL — m2's
+      // groupBy(domain) on a URL fragment is just noise.
+      domain = 'unknown';
+    }
+  }
+  recordSiteFailure({
+    ts: new Date().toISOString(),
+    jobId,
+    domain: domain.slice(0, 253),
+    site_adapter_id: ctrl.siteAdapter || 'generic',
+    // REVIEW H4 fix: null when error preceded any approval rather than
+    // defaulting to 0 (which m2 would mis-cluster as "step-0 failures").
+    step_idx: ctrl.lastDraftInfo?.stepIdx ?? null,
+    error_kind: classifyError(err),
+    error_message: String(err?.message ?? err).slice(0, 400),
+  }).catch((recErr) => {
+    console.warn('feedback: recordSiteFailure failed:', recErr.message);
+  });
+}
 
 // ── Test hooks ──────────────────────────────────────────────────────
 

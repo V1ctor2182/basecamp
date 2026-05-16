@@ -1,7 +1,7 @@
 milestones:
   - id: "m1-stores-schemas-capture-hooks"
     name: "4 JSONL stores + Zod schemas + capture hooks wired across apply lifecycle"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/feedback/stores.mjs"
       - "src/career/feedback/schemas.mjs"
@@ -285,5 +285,5 @@ milestones:
 commits: []
 current_sprint: "Sprint 19 — Data Flywheel"
 blockers: []
-status_note: "Plan A 锁定 2026-05-17 via plan-milestones skill. 4 milestones, ~2250 LOC + ~800 smoke. OQ1=Haiku w/ Sonnet retry on Zod fail, OQ2=fixed threshold 5, OQ3=manual approve, OQ4=lazy-create JSONL on first append, OQ5=reuse qa-bank/history.jsonl (skip duplicate open-question-diffs file), OQ6=trigger on apply close + manual button, OQ7=learned classifier rules in YAML read via 06's registerExtraRules seam. Ready to start m1."
+status_note: "🟢 m1 COMPLETE 2026-05-17. Foundation shipped: schemas.mjs (~135 LOC) — 3 Zod schemas (FieldMisclassified / FieldEdit / SiteFailure) with strict mode, ISO 8601 ts w/ offset support (REVIEW H3 Plan: default datetime() rejected +00:00 forms), step_idx nullable per REVIEW H4 (pre-first-draft failures correctly record null). stores.mjs (~245 LOC) — appendJsonl with per-file async mutex serializing concurrent in-process writes (REVIEW C2 critical: libuv appendFile chunks for records >PIPE_BUF; without mutex 8KB+ records corrupt JSONL), readJsonl streaming line-by-line, countByGroup for m2 threshold, editDistance Levenshtein, classifyError using err.name/err.code first (REVIEW H3 adv: substring matching false-positived paths like '/classifier/foo.mjs'). endpoint.mjs capture hooks (+95 LOC) — approveStep records field-edit on user edits (slice-first per REVIEW H2 so distance reflects stored values), runMachine ERROR path records site-failure via _fireSiteFailure helper called from BOTH the throw-catch AND result.outcome===ERROR branch (REVIEW C1 critical: pre-fix the dominant prod path silently dropped failures since runMachine returns ERROR without throwing). Domain falls back to 'unknown' on URL parse fail (REVIEW L5). All capture failures fire-and-forget with console.warn (REVIEW H1 Plan: await blocked finally cleanup). Plan-agent + adversarial review: 2 CRITICAL + 4 HIGH + 2 MEDIUM applied — every fix has REVIEW-named regression. Smoke 24/24 green (17 baseline + 7 review regressions). Regression: 04-multi-step 153/153 + 05 nonstandard 157/157 + 06 site-adapters 81/81 + 03 field-classifier 95/95 still green. Next: m2 Haiku induction worker + threshold detection."
 last_updated: "2026-05-17"
