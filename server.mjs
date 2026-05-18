@@ -3086,6 +3086,112 @@ app.get('/api/career/finder/scheduler/status', async (_req, res) => {
   }
 });
 
+// ─── Finder: pipeline.json read (paginated job list for Pipeline UI) ───
+// Returns the scanned + (optionally) evaluated jobs from data/career/
+// pipeline.json. Query params:
+//   q       — case-insensitive substring filter on company / role
+//   sort    — 'score' | 'posted_at' | 'scraped_at' | 'company' (default 'score')
+//   order   — 'asc' | 'desc' (default 'desc')
+//   limit   — page size (default 50, max 200)
+//   offset  — page offset (default 0)
+// Always returns { total, filtered, jobs[], last_scan_at } so the UI can
+// render pagination without a separate count round-trip.
+app.get('/api/career/finder/pipeline', async (req, res) => {
+  try {
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.json({ total: 0, filtered: 0, jobs: [], last_scan_at: null });
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.json({ total: 0, filtered: 0, jobs: [], last_scan_at: null });
+    }
+    const allJobs = Array.isArray(parsed?.jobs) ? parsed.jobs : [];
+    const total = allJobs.length;
+
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
+    const sortKey = ['score', 'posted_at', 'scraped_at', 'company'].includes(req.query.sort)
+      ? req.query.sort
+      : 'score';
+    const order = req.query.order === 'asc' ? 'asc' : 'desc';
+    const limit = Math.min(Math.max(1, Number(req.query.limit) || 50), 200);
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+
+    let jobs = allJobs;
+    if (q) {
+      jobs = jobs.filter((j) => {
+        const company = String(j.company ?? '').toLowerCase();
+        const role = String(j.role ?? '').toLowerCase();
+        return company.includes(q) || role.includes(q);
+      });
+    }
+    const filtered = jobs.length;
+
+    // Score for sort = Stage A score (Haiku); falls back to 0 when not yet
+    // evaluated. status=null jobs land at the bottom under DESC.
+    function scoreOf(j) {
+      const sa = j.evaluation?.stage_a?.score;
+      return Number.isFinite(sa) ? sa : -Infinity;
+    }
+    jobs = [...jobs].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'score') {
+        cmp = scoreOf(a) - scoreOf(b);
+      } else if (sortKey === 'posted_at' || sortKey === 'scraped_at') {
+        const aStr = String(a[sortKey] ?? '');
+        const bStr = String(b[sortKey] ?? '');
+        cmp = aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
+      } else if (sortKey === 'company') {
+        const aStr = String(a.company ?? '').toLowerCase();
+        const bStr = String(b.company ?? '').toLowerCase();
+        cmp = aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
+      }
+      return order === 'asc' ? cmp : -cmp;
+    });
+
+    const page = jobs.slice(offset, offset + limit);
+
+    // Trim each row to the UI-relevant subset — description + raw payload
+    // can be megabytes, no point shipping them for a table view.
+    const trimmed = page.map((j) => ({
+      id: j.id,
+      company: j.company,
+      role: j.role,
+      location: j.location,
+      url: j.url,
+      source: j.source ? { type: j.source.type, name: j.source.name } : null,
+      tags: j.tags,
+      comp_hint: j.comp_hint,
+      posted_at: j.posted_at,
+      scraped_at: j.scraped_at,
+      status: j.status,
+      evaluation: j.evaluation
+        ? {
+            stage_a: j.evaluation.stage_a
+              ? {
+                  score: j.evaluation.stage_a.score,
+                  verdict: j.evaluation.stage_a.verdict,
+                  reasoning: j.evaluation.stage_a.reasoning,
+                }
+              : null,
+            stage_b: j.evaluation.stage_b ? { score: j.evaluation.stage_b.score } : null,
+          }
+        : null,
+      needs_manual_enrich: !!j.needs_manual_enrich,
+    }));
+
+    res.json({
+      total,
+      filtered,
+      jobs: trimmed,
+      last_scan_at: parsed.last_scan_at ?? null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message ?? e).slice(0, 300) });
+  }
+});
+
 // ─── Finder: portals.yml CRUD ──────────────────────────────────────────
 app.get('/api/career/finder/portals', async (_req, res) => {
   try {
