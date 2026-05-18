@@ -3,9 +3,10 @@ room:
   name: "Iteration Dashboard"
   parent: "00-project-room/04-career-system/07-applier/self-iteration"
   type: feature
-  lifecycle: in_dev
+  lifecycle: done
   created_at: "2026-05-11"
   updated_at: "2026-05-18"
+  completed_at: "2026-05-18"
   owner: fullstack
   contributors: []
   prompt_test:

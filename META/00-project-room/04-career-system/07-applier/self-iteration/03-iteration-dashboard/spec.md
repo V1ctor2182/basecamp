@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/07-applier/self-iteration/03-iteration-dashboard`
 **Type**: feature
-**Lifecycle**: in_dev (milestones locked 2026-05-18, 3 spec overrides)
+**Lifecycle**: done (ROOM COMPLETE 2026-05-18, 3/3 milestones shipped)
 **Owner**: fullstack
 **Parent**: `00-project-room/04-career-system/07-applier/self-iteration`
 
@@ -38,13 +38,13 @@ Self-iteration sub-epic 的 UX 层。让"applier 正在进化"可观察：(a) �
 
 ~400 LOC React (Iteration.tsx + iteration.css + 4 component) + ~120 LOC server.mjs (5 个新 endpoint) + ~100 LOC smoke. ~3 milestones.
 
-## 验收 (status after plan-milestones)
+## 验收 (status at ROOM COMPLETE)
 
-- (a) ✅ achievable — health/events/pending all backed by existing stores; 10 applies → real numbers
-- (b) ✅ achievable (with override) — Promote modal writes truth.yml stub; operator runs capture-fixture.mjs manually to fill HTML; then `npm run tune:snapshot` for PR
-- (c) ⚠️ **DESCOPED** — Tier 2/3 placeholder only. Pattern-clustering left for a future room (e.g. `04-iteration-improver` if/when needed)
-- (d) ✅ — D2 30s + AbortController
-- (e) ✅ — D1 STATUS_COLORS reused, no new palette
+- (a) ✅ — `/api/career/iteration/{health,events,pending,coverage}` all return live data over existing stores; 1 apply + 34 site-failures render correctly in V1 corpus
+- (b) ✅ — Promote modal ships with D3 review gate (stub yaml preview + capture-fixture command); confirm POSTs to `/promote/:id` → stub lands in `promote-queue/`; operator completes via capture-fixture
+- (c) ⚠️ DESCOPED — Tier 2/3 placeholder cards display `(0)` with tooltip "pattern clustering not in scope; future room"
+- (d) ✅ — D2 enforced: 30s `setInterval` + `AbortController` aborted on unmount + `loadingMoreRef` guards poll-vs-load-more race
+- (e) ✅ — D1 enforced: 17 unique CSS hexes, all already present in `learning.css`. Zero new palette tokens.
 
 ## Milestones (LOCKED 2026-05-18)
 

@@ -330,3 +330,210 @@
 .c-iter-btn-ghost:hover:not(:disabled) {
   background: #f4efe5;
 }
+
+.c-iter-btn-promote {
+  background: #fde7e3;
+  border-color: #f3c0b0;
+  color: #8c1f0e;
+}
+.c-iter-btn-promote:hover:not(:disabled) {
+  background: #f8d6cc;
+}
+
+/* D. Coverage detail (collapsible) */
+
+.c-iter-coverage-details {
+  /* details element resets — match neighboring card padding/border */
+}
+
+.c-iter-coverage-summary {
+  cursor: pointer;
+  user-select: none;
+  list-style: revert;
+}
+
+.c-iter-coverage-body {
+  margin-top: 12px;
+}
+
+.c-iter-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.c-iter-table th,
+.c-iter-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #f4efe5;
+}
+
+.c-iter-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b6356;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.c-iter-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.c-iter-muted {
+  color: #6b6356;
+}
+
+.c-iter-v-code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  background: #f4efe5;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.c-iter-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.c-iter-tag-ok {
+  background: #ebf6e7;
+  color: #1f5e10;
+}
+
+.c-iter-tag-warn {
+  background: #fff1b8;
+  color: #7a5e00;
+}
+
+.c-iter-coverage-tuner {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #2d2520;
+}
+
+/* Promote modal — D3 review-before-write gate */
+
+.c-iter-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 10, 8, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.c-iter-modal {
+  background: #ffffff;
+  border: 1px solid #e8e2d2;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(12, 10, 8, 0.15);
+}
+
+.c-iter-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #f4efe5;
+}
+
+.c-iter-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #2d2520;
+}
+
+.c-iter-modal-close {
+  padding: 4px 8px;
+}
+
+.c-iter-modal-body {
+  padding: 16px 20px;
+}
+
+.c-iter-modal-text {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #2d2520;
+  line-height: 1.4;
+}
+
+.c-iter-modal-cmd {
+  background: #0c0a08;
+  color: #f4efe5;
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.c-iter-modal-details {
+  margin-top: 6px;
+}
+
+.c-iter-modal-details summary {
+  font-size: 12px;
+  color: #6b6356;
+  cursor: pointer;
+  user-select: none;
+}
+
+.c-iter-modal-yaml {
+  margin: 6px 0 0;
+  background: #f4efe5;
+  border: 1px solid #ebe6dc;
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  overflow-x: auto;
+  max-height: 240px;
+  color: #2d2520;
+  white-space: pre;
+}
+
+.c-iter-modal-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 20px 12px;
+  padding: 8px 10px;
+  background: #ebf6e7;
+  border: 1px solid #d1ecc7;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #1f5e10;
+}
+
+.c-iter-modal-error {
+  margin: 0 20px 12px;
+}
+
+.c-iter-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid #f4efe5;
+}

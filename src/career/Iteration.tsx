@@ -18,9 +18,11 @@ import {
   ListChecks,
   Inbox,
   ExternalLink,
-  AlertCircle,
   CheckCircle2,
   ChevronDown,
+  FlaskConical,
+  Upload,
+  X,
 } from 'lucide-react'
 import './iteration.css'
 
@@ -70,19 +72,48 @@ type EventsResp = {
   nextCursor: { ts: string; id: string } | null
 }
 
+type PendingPromoteItem = {
+  id: string
+  ts: string
+  jobId?: string
+  domain: string
+  site_adapter_id?: string | null
+  error_kind: string
+  error_message: string
+}
+
 type PendingResp = {
-  promote: Array<{
-    id: string
-    ts: string
-    jobId?: string
-    domain: string
-    site_adapter_id?: string | null
-    error_kind: string
-    error_message: string
-  }>
+  promote: PendingPromoteItem[]
   pr_review: Array<{ id: string; ts: string; type: string; group_key: string }>
   tier2: unknown[]
   tier3: unknown[]
+}
+
+type CoverageFixture = {
+  id: string
+  vendor: string
+  page_type: string | null
+  must_detect_count: number
+  must_not_detect_count: number
+}
+
+type CoverageTuner = {
+  initial_allowlist: string[]
+  final_allowlist: string[]
+  converged: boolean
+  stalled: boolean
+  iterations: number
+}
+
+type CoverageResp = {
+  fixtures: CoverageFixture[]
+  tuner: CoverageTuner | null
+}
+
+type PromoteResp = {
+  status: 'created' | 'already_promoted'
+  path: string
+  url: string
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────
@@ -97,6 +128,15 @@ export default function Iteration() {
   const [loadingMore, setLoadingMore] = useState<boolean>(false)
   const [pending, setPending] = useState<PendingResp | null>(null)
   const [pendingError, setPendingError] = useState<string | null>(null)
+  const [coverage, setCoverage] = useState<CoverageResp | null>(null)
+  const [coverageError, setCoverageError] = useState<string | null>(null)
+  // Promote-modal state — D3 (review-before-write gate). The modal owns
+  // the selected pending-item snapshot so the underlying list can refresh
+  // mid-flight without yanking the modal contents out from under the user.
+  const [promoteTarget, setPromoteTarget] = useState<PendingPromoteItem | null>(null)
+  const [promoteBusy, setPromoteBusy] = useState(false)
+  const [promoteError, setPromoteError] = useState<string | null>(null)
+  const [promoteResult, setPromoteResult] = useState<PromoteResp | null>(null)
 
   // Mirror Learning.tsx pattern — mountedRef so post-async setState bails
   // when the component has unmounted, and an action-busy ref so polling
@@ -161,7 +201,54 @@ export default function Iteration() {
           if ((e as { name?: string })?.name === 'AbortError') return
           if (mountedRef.current) setPendingError((e as Error).message)
         }),
+      fetch('/api/career/iteration/coverage', { signal })
+        .then(async (r) => {
+          if (!r.ok) throw new Error(`coverage HTTP ${r.status}`)
+          if (!mountedRef.current) return
+          setCoverage((await r.json()) as CoverageResp)
+          setCoverageError(null)
+        })
+        .catch((e) => {
+          if ((e as { name?: string })?.name === 'AbortError') return
+          if (mountedRef.current) setCoverageError((e as Error).message)
+        }),
     ])
+  }, [])
+
+  // Promote handler — POSTs to /api/career/iteration/promote/:id only
+  // AFTER the user has reviewed the modal's stub yaml preview (D3).
+  const confirmPromote = useCallback(async (target: PendingPromoteItem) => {
+    setPromoteBusy(true)
+    setPromoteError(null)
+    setPromoteResult(null)
+    const ac = new AbortController()
+    try {
+      const r = await fetch(
+        `/api/career/iteration/promote/${encodeURIComponent(target.id)}`,
+        { method: 'POST', signal: ac.signal },
+      )
+      const body = (await r.json().catch(() => ({}))) as Partial<PromoteResp> & { error?: string }
+      if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`)
+      if (!mountedRef.current) return
+      setPromoteResult(body as PromoteResp)
+      // Refresh pending so the just-promoted item drops out of the queue.
+      // No need to re-fetch events; the next poll will pick up any newly-
+      // emitted activity. Pass a fresh signal because the abort scope
+      // here belongs to the promote round-trip.
+      fetchAll(new AbortController().signal).catch(() => {})
+    } catch (e) {
+      if ((e as { name?: string })?.name === 'AbortError') return
+      if (mountedRef.current) setPromoteError((e as Error).message)
+    } finally {
+      if (mountedRef.current) setPromoteBusy(false)
+    }
+  }, [fetchAll])
+
+  const closePromoteModal = useCallback(() => {
+    setPromoteTarget(null)
+    setPromoteError(null)
+    setPromoteResult(null)
+    setPromoteBusy(false)
   }, [])
 
   // Append next-page (load-more button). Uses the cursor returned by the
@@ -318,7 +405,23 @@ export default function Iteration() {
                 key: p.id,
                 primary: `${p.domain}`,
                 secondary: `${p.error_kind} — ${p.error_message.slice(0, 80)}`,
-                action: <PromotePlaceholder id={p.id} />,
+                action: (
+                  <button
+                    type="button"
+                    className="c-iter-btn c-iter-btn-promote"
+                    onClick={() => {
+                      // Clear stale result/error from a prior promote so
+                      // re-opening on a new item doesn't briefly flash
+                      // the previous success banner.
+                      setPromoteResult(null)
+                      setPromoteError(null)
+                      setPromoteTarget(p)
+                    }}
+                    title="Review stub + promote to fixture corpus"
+                  >
+                    <Upload size={14} /> Promote
+                  </button>
+                ),
               }))}
               total={pending.promote.length}
             />
@@ -362,6 +465,37 @@ export default function Iteration() {
           </div>
         )}
       </section>
+
+      {/* D. Coverage detail (collapsible) */}
+      <section className="c-iter-card">
+        <details className="c-iter-coverage-details">
+          <summary className="c-iter-card-title c-iter-coverage-summary">
+            <FlaskConical size={16} /> Coverage detail
+            {coverage && (
+              <span className="c-iter-pill">{coverage.fixtures.length}</span>
+            )}
+          </summary>
+          {coverageError ? (
+            <p className="c-iter-error">Failed to load: {coverageError}</p>
+          ) : !coverage ? (
+            <p className="c-iter-loading">Loading…</p>
+          ) : (
+            <CoverageBody coverage={coverage} />
+          )}
+        </details>
+      </section>
+
+      {/* Promote modal — D3 review-before-write gate */}
+      {promoteTarget && (
+        <PromoteModal
+          target={promoteTarget}
+          busy={promoteBusy}
+          error={promoteError}
+          result={promoteResult}
+          onCancel={closePromoteModal}
+          onConfirm={() => confirmPromote(promoteTarget)}
+        />
+      )}
     </div>
   )
 }
@@ -454,19 +588,171 @@ function PendingGroup({
   )
 }
 
-function PromotePlaceholder({ id }: { id: string }) {
-  // m3 will wire the actual modal + POST /promote/:id. m2 ships the
-  // queue display only; the disabled button keeps the visual contract
-  // stable so m3 can swap behavior without re-layout.
+function CoverageBody({ coverage }: { coverage: CoverageResp }) {
   return (
-    <button
-      type="button"
-      className="c-iter-btn c-iter-btn-ghost"
-      disabled
-      title={`Modal coming in m3. For now: curl -XPOST /api/career/iteration/promote/${id}`}
-    >
-      <AlertCircle size={14} /> Promote
-    </button>
+    <div className="c-iter-coverage-body">
+      {coverage.fixtures.length === 0 ? (
+        <p className="c-iter-empty">No fixtures in data/career/eval-fixtures/.</p>
+      ) : (
+        <table className="c-iter-table">
+          <thead>
+            <tr>
+              <th>Fixture</th>
+              <th>Vendor</th>
+              <th>Page type</th>
+              <th className="c-iter-num">must_detect</th>
+              <th className="c-iter-num">must_not_detect</th>
+            </tr>
+          </thead>
+          <tbody>
+            {coverage.fixtures.map((fx) => (
+              <tr key={fx.id}>
+                <td><code className="c-iter-v-code">{fx.id}</code></td>
+                <td>{fx.vendor}</td>
+                <td className="c-iter-muted">{fx.page_type ?? '—'}</td>
+                <td className="c-iter-num">{fx.must_detect_count}</td>
+                <td className="c-iter-num">{fx.must_not_detect_count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="c-iter-coverage-tuner">
+        <strong>Tuner status</strong>:{' '}
+        {coverage.tuner === null ? (
+          <span className="c-iter-muted">
+            no tuner-log.json on disk — run <code>npm run tune:snapshot</code> to generate
+          </span>
+        ) : (
+          <span>
+            {coverage.tuner.iterations} iter ·{' '}
+            <span className={coverage.tuner.converged ? 'c-iter-tag c-iter-tag-ok' : 'c-iter-tag c-iter-tag-warn'}>
+              {coverage.tuner.converged ? 'converged' : coverage.tuner.stalled ? 'stalled' : 'in-progress'}
+            </span>{' '}
+            · diff: +
+            {coverage.tuner.final_allowlist
+              .filter((r) => !coverage.tuner!.initial_allowlist.includes(r))
+              .join(', ') || '∅'}{' '}
+            / -
+            {coverage.tuner.initial_allowlist
+              .filter((r) => !coverage.tuner!.final_allowlist.includes(r))
+              .join(', ') || '∅'}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PromoteModal({
+  target,
+  busy,
+  error,
+  result,
+  onCancel,
+  onConfirm,
+}: {
+  target: PendingPromoteItem
+  busy: boolean
+  error: string | null
+  result: PromoteResp | null
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  // D3: render the stub-yaml preview BEFORE the POST happens so the
+  // operator can review what's about to land in promote-queue/.
+  const suggestedSlug = (target.domain || '').split('.')[0]?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'unknown'
+  const vendor = target.site_adapter_id || 'custom'
+  const url = `https://${target.domain}/`
+
+  return (
+    <div className="c-iter-modal-backdrop" onClick={onCancel} role="dialog" aria-modal="true">
+      <div
+        className="c-iter-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="c-iter-modal-head">
+          <h3 className="c-iter-modal-title">
+            <Upload size={16} /> Promote evidence → fixture corpus
+          </h3>
+          <button
+            type="button"
+            className="c-iter-btn c-iter-btn-ghost c-iter-modal-close"
+            onClick={onCancel}
+            disabled={busy}
+            aria-label="Close"
+          >
+            <X size={14} />
+          </button>
+        </header>
+
+        <div className="c-iter-modal-body">
+          <p className="c-iter-modal-text">
+            Review the stub below. On <strong>Confirm</strong>, a TODO yaml lands in{' '}
+            <code className="c-iter-v-code">data/career/eval-fixtures/promote-queue/</code>{' '}
+            (gitignored). The HTML is <em>not</em> auto-captured — after confirm, run:
+          </p>
+          <pre className="c-iter-modal-cmd">
+{`node scripts/capture-fixture.mjs \\
+  --url ${url} \\
+  --vendor ${vendor} \\
+  --slug ${suggestedSlug}`}
+          </pre>
+          <details className="c-iter-modal-details">
+            <summary>Stub yaml preview</summary>
+            <pre className="c-iter-modal-yaml">
+{`# Promoted from site-failure evidence — pending fixture capture.
+url: ${JSON.stringify(url)}
+vendor: ${vendor}
+suggested_slug: ${suggestedSlug}
+
+evidence:
+  id: ${target.id}
+  ts: ${JSON.stringify(target.ts)}
+  domain: ${JSON.stringify(target.domain)}
+  site_adapter_id: ${JSON.stringify(target.site_adapter_id ?? null)}
+  error_kind: ${JSON.stringify(target.error_kind)}
+  error_message: ${JSON.stringify(target.error_message)}`}
+            </pre>
+          </details>
+        </div>
+
+        {result && (
+          <div className="c-iter-modal-success">
+            <CheckCircle2 size={14} />
+            <span>
+              {result.status === 'created' ? 'Promoted.' : 'Already in queue.'}{' '}
+              Stub at <code className="c-iter-v-code">{result.path.split('/').slice(-3).join('/')}</code>.{' '}
+              Run capture-fixture above to complete.
+            </span>
+          </div>
+        )}
+        {error && (
+          <p className="c-iter-error c-iter-modal-error">{error}</p>
+        )}
+
+        <footer className="c-iter-modal-foot">
+          <button
+            type="button"
+            className="c-iter-btn c-iter-btn-ghost"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            {result ? 'Close' : 'Cancel'}
+          </button>
+          {!result && (
+            <button
+              type="button"
+              className="c-iter-btn c-iter-btn-promote"
+              onClick={onConfirm}
+              disabled={busy}
+            >
+              {busy ? 'Promoting…' : 'Confirm promote'}
+            </button>
+          )}
+        </footer>
+      </div>
+    </div>
   )
 }
 

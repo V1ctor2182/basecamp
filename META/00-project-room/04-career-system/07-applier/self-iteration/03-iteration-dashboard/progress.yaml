@@ -60,7 +60,7 @@ milestones:
 
   - id: "m3-promote-modal-coverage-room-complete"
     name: "Promote modal + Coverage detail + smoke + ROOM COMPLETE"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/Iteration.tsx"   # promote modal + D section
       - "src/career/iteration.css"
@@ -83,8 +83,8 @@ milestones:
       counts + leaked-roles diagnostics. Smoke covers modal mount + confirm
       flow + the promote endpoint integration. ROOM COMPLETE rollup.
 
-current_sprint: "m3-promote-modal-coverage-room-complete"
+current_sprint: null
 blockers: []   # 01 + 02 ROOM COMPLETE — data sources all in place
-completion: 67  # 2/3 milestones shipped
+completion: 100  # 🎉 ROOM COMPLETE 2026-05-18 (3/3 milestones)
 status_note: "🔄 in_dev. Plan locked 2026-05-18 — 3 milestones, ~1040 LOC (spec ~620 under-counted by 1.7× for 5-store event normalization + multi-step promote flow). All 3 spec OQs + 2 new milestone-level OQs locked with the following SPEC OVERRIDES (user-approved): (1) Q2 event store → real-time aggregate over existing JSONL stores instead of new events.jsonl (avoids modifying frozen 01+02 emit-event paths; <500 records → perf fine). (2) Promote action writes a STUB truth.yml only (url + reason + vendor); operator runs capture-fixture.mjs manually to fill HTML (snapshot_excerpt schema cap = 400 chars insufficient for full fixture). (3) Tier 2/3 backlog displays placeholder (0) with tooltip in V1 — pattern clustering not in scope; descope acceptance (c) to a future room. Spec acceptance (a)(b)(d)(e) all achievable; (c) descoped. Reuses Learning.tsx visual tokens (no new palette per D1). All locked: D1 (STATUS_COLORS reuse), D2 (30s polling + AbortController), D3 (promote modal review gate), D4 (no [Run Tuner] button), D5 (0 LLM on render)."
 last_updated: "2026-05-18"
