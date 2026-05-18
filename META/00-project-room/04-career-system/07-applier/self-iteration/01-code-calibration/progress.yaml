@@ -49,6 +49,7 @@ milestones:
   - id: "m3-auto-tuner-convergence"
     name: "Deterministic auto-tuner + ≤5% regression gate + iteration log + reviewable diff"
     status: completed
+    commit: "95598daa26a71aef9a533b70e7850df0861693aa"
     estimated_files:
       - "src/career/eval/tuner.mjs"
       - "src/career/eval/candidates.mjs"
