@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, ListChecks, Star, Send, MessagesSquare, Settings, TrendingDown } from 'lucide-react'
+import { LayoutDashboard, ListChecks, Star, Send, MessagesSquare, Settings, TrendingDown, Activity } from 'lucide-react'
 
 const TABS: Array<{ to: string; label: string; Icon: typeof LayoutDashboard }> = [
   { to: '/career/overview', label: 'Overview', Icon: LayoutDashboard },
@@ -8,6 +8,7 @@ const TABS: Array<{ to: string; label: string; Icon: typeof LayoutDashboard }> =
   { to: '/career/applied', label: 'Applied', Icon: Send },
   { to: '/career/prep', label: 'Interview Prep', Icon: MessagesSquare },
   { to: '/career/learning', label: 'Learning', Icon: TrendingDown },
+  { to: '/career/iteration', label: 'Iteration', Icon: Activity },
   { to: '/career/settings', label: 'Settings', Icon: Settings },
 ]
 

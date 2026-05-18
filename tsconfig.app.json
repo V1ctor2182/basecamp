@@ -27,6 +27,6 @@
       "@enhance-kit": ["./src/enhance-kit.tsx"]
     }
   },
-  "include": ["src", "../**/*.tsx", "../**/*.ts"],
-  "exclude": ["../learn-dashboard"]
+  "include": ["src"],
+  "exclude": ["dist", "node_modules"]
 }
