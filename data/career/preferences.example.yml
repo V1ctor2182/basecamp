@@ -164,3 +164,15 @@ hard_filters:
     - "No visa sponsorship"
     - "Must be US citizen"
     - "Secret clearance required"
+
+
+# ────────────────────────────────────────────────────
+# Applier — Mode 2 multi-step behavior overrides (optional)
+# ────────────────────────────────────────────────────
+applier:
+  # When true, the multi-step state machine auto-approves a step iff
+  # EVERY field in the draft satisfies: confidence=high + class≠manual
+  # + !block_approve. LOW/MEDIUM/MANUAL/CAPTCHA still pause. Default
+  # off; opt in via Settings/Preferences UI after validating AI draft
+  # quality across 5-10 applies.
+  auto_approve_when_safe: false
