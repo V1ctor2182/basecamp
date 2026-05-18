@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Apply — ACME Robotics Careers</title>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <a href="/" aria-label="ACME home">ACME Robotics</a>
+      <nav>
+        <a href="/careers">Careers</a>
+        <a href="/about">About Us</a>
+        <a href="/contact">Contact</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Application — Robotics Engineer (RV-201)</h1>
+
+      <form id="custom-apply-form" action="/careers/apply" method="post" enctype="multipart/form-data">
+        <div class="row">
+          <label for="name">Your name <abbr title="required">*</abbr></label>
+          <input id="name" name="name" type="text" aria-required="true" required />
+        </div>
+
+        <div class="row">
+          <label for="email_addr">Email address <abbr title="required">*</abbr></label>
+          <input id="email_addr" name="email" type="email" aria-required="true" required />
+        </div>
+
+        <div class="row">
+          <label for="years_experience">Years of robotics experience <abbr title="required">*</abbr></label>
+          <input id="years_experience" name="yoe" type="number" min="0" max="50" aria-required="true" required />
+        </div>
+
+        <div class="row">
+          <label for="cv_file">Upload CV (PDF) <abbr title="required">*</abbr></label>
+          <input id="cv_file" name="cv" type="file" accept="application/pdf" aria-required="true" required />
+        </div>
+
+        <div class="row">
+          <span id="visa_label">Need visa sponsorship?</span>
+          <div role="radiogroup" aria-labelledby="visa_label">
+            <label><input type="radio" name="visa" value="yes" /> Yes</label>
+            <label><input type="radio" name="visa" value="no" /> No</label>
+          </div>
+        </div>
+
+        <div class="row">
+          <label>
+            <input type="checkbox" name="newsletter" />
+            Send me future opening updates
+          </label>
+        </div>
+
+        <div class="row">
+          <button type="submit">Send application</button>
+        </div>
+      </form>
+    </main>
+
+    <aside aria-label="Related openings">
+      <h3>You might also like</h3>
+      <ul>
+        <li><a href="/careers/123">Senior Robotics Lead</a></li>
+        <li><a href="/careers/124">Computer Vision Intern</a></li>
+      </ul>
+    </aside>
+
+    <footer>
+      <p>© ACME Robotics</p>
+      <a href="/privacy">Privacy</a>
+      <a href="/cookies">Cookie preferences</a>
+    </footer>
+  </div>
+</body>
+</html>

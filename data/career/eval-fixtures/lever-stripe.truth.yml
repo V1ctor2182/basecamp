@@ -1,0 +1,25 @@
+# Ground-truth annotation for lever-stripe.html
+# Hand-crafted seed fixture (m1). Modeled on Lever (jobs.lever.co) layout.
+# EH3: human-annotated.
+
+url: "https://jobs.lever.co/stripe/abc123"
+captured_at: 2026-05-18
+vendor: lever
+page_type: apply-form
+
+must_detect:
+  - { role: textbox, name: "Full name", required: true }
+  - { role: textbox, name: "Email", required: true }
+  - { role: textbox, name: "Phone" }
+  - { role: textbox, name: "Current company" }
+  - { role: textbox, name: "LinkedIn URL" }
+  - { role: radio, name: "Referral", required: true }
+  - { role: radio, name: "LinkedIn" }
+  - { role: radio, name: "Other" }
+  - { role: checkbox, name: "I consent to Stripe processing my data", required: true }
+  - { role: button, name: "Submit application" }
+
+must_not_detect:
+  - { name: "All openings", reason: "header nav" }
+  - { name: "Powered by Lever", reason: "vendor attribution" }
+  - { name: "Privacy", reason: "footer nav" }

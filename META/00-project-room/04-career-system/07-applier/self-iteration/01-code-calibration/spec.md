@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/07-applier/self-iteration/01-code-calibration`
 **Type**: feature
-**Lifecycle**: planning (Mode 2 LOCKED 2026-05-11)
+**Lifecycle**: in_dev (milestones locked 2026-05-18)
 **Owner**: backend
 **Parent**: `00-project-room/04-career-system/07-applier/self-iteration`
 
@@ -20,13 +20,13 @@ ATS fixture corpus + ground truth + deterministic auto-tuner for snapshot+refs r
 - **EH4 [MUST]** Fixture 离线 HTML 快照，**不是 live URL fetch** — CI 不依赖外网 + 可 reproduce
 - **EH5 [MUST]** Tuner 输出可 review 的 diff (不能直接 commit) — Claude Code 必须 review + smoke 确认后才 commit
 
-## Open Questions
+## Open Questions (LOCKED 2026-05-18)
 
-| ID | 问题 | 推荐 |
+| ID | 问题 | 决定 |
 |----|------|------|
-| Q1 | Fixture HTML 放 repo / LFS / submodule? | repo (~300KB OK) |
-| Q2 | Aggregate score 用 mean / median / min? | min (悲观, 防最坏 ATS) |
-| Q3 | Tuner 候选 fix 支持复合规则? | 简单 only V1, 复合规则等真数据驱动需要 |
+| Q1 | Fixture HTML 放 repo / LFS / submodule? | **repo** — `data/career/eval-fixtures/{vendor}/page.html`，~300KB 总量在可接受范围 |
+| Q2 | Aggregate score 用 mean / median / min? | **min** — 悲观聚合，防止某个 ATS 单 fixture 退化被 mean 掩盖 |
+| Q3 | Tuner 候选 fix 支持复合规则? | **simple only V1** — add-role / remove-role / add-state 三类单步候选；复合规则待真实数据驱动后再启 |
 
 ## Specs in this Room
 
@@ -40,14 +40,18 @@ ATS fixture corpus + ground truth + deterministic auto-tuner for snapshot+refs r
 
 ~450 LOC TypeScript (loader + eval runner + tuner + smoke + CLI) + ~300KB fixture data + ~150 行 ground truth YAMLs (~3-4 milestones).
 
-## 建议 Milestones
+## Milestones (LOCKED 2026-05-18)
 
-| m | 内容 | LOC |
+| m | 内容 | LOC (corrected) |
 |---|------|-----|
-| m1 | Fixture corpus + ground truth schema + loader + 首批 10 fixtures 手工捕获 | ~80 LOC TS + ~300KB HTML |
-| m2 | Eval runner + 三维 score + 报告输出 | ~120 LOC + smoke |
-| m3 | Deterministic auto-tuner loop + 收敛检测 + iteration log | ~200 LOC + smoke |
-| m4 | Smoke 集成 + CI block + ROOM COMPLETE | ~50 LOC |
+| m1 | Fixture corpus + ground-truth schema + loader + capture CLI + 10 fixtures (8 vendor + 2 custom) | ~280 LOC TS + ~300KB HTML + ~150 LOC YAML |
+| m2 | Eval runner + 3-dim score (coverage/noise/aria_accuracy, aggregate=min) + report | ~330 LOC + smoke |
+| m3 | Deterministic auto-tuner + ≤5% per-fixture regression gate + iteration log + reviewable diff | ~480 LOC + smoke |
+| m4 | npm scripts + CI smoke (test:eval-snapshot <60s) + README + ROOM COMPLETE | ~150 LOC |
+
+Total: ~1240 LOC TS + ~300KB HTML + ~150 LOC YAML — 2.7× spec's original ~450 LOC estimate. Correction sources: first-of-kind Playwright offline-HTML capture infra (m1), 3-dim diff-matching with fuzzy-name edge cases (m2), greedy search + per-fixture gate machinery + reviewable-diff emitter (m3).
+
+Tune target: [src/career/applier/runtime/snapshot.mjs](../../../../../src/career/applier/runtime/snapshot.mjs) `INTERACTIVE_ROLES` (9 roles) + `EMITTED_STATES` (5 states).
 
 ## 验收 criteria (locked)
 

@@ -1,0 +1,24 @@
+# Ground-truth annotation for custom-acme.html
+# Hand-crafted seed fixture (m1). Custom company form (non-vendor ATS).
+# EH3: human-annotated.
+
+url: "https://acme-robotics.example.com/careers/apply/rv-201"
+captured_at: 2026-05-18
+vendor: custom
+page_type: apply-form
+
+must_detect:
+  - { role: textbox, name: "Your name", required: true }
+  - { role: textbox, name: "Email address", required: true }
+  - { role: spinbutton, name: "Years of robotics experience", required: true }
+  - { role: radio, name: "Yes" }
+  - { role: radio, name: "No" }
+  - { role: checkbox, name: "Send me future opening updates" }
+  - { role: button, name: "Send application" }
+
+must_not_detect:
+  - { name: "About Us", reason: "header nav" }
+  - { name: "Contact", reason: "header nav" }
+  - { name: "Senior Robotics Lead", reason: "related-openings aside, not form" }
+  - { name: "Computer Vision Intern", reason: "related-openings aside, not form" }
+  - { name: "Cookie preferences", reason: "footer nav" }

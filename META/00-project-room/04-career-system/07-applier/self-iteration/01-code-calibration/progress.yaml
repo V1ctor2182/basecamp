@@ -1,7 +1,95 @@
-milestones: []
-current_sprint: null
-blockers:
-  - "Depends on 08-snapshot-refs-layer m1+ (need snapshot serializer to eval against)"
-completion: 0
-status_note: "🔄 planning. Mode 2 LOCKED 2026-05-11 — this Room is GO. Calibration/eval harness for 08-snapshot-refs-layer + horizontal fixture corpus for 03/04/06. ~450 LOC TS + ~300KB fixture data. MUST land after 08 m1 (need snapshot serializer to eval). 5 constraints (EH1-EH5) + 3 open questions (Q1-Q3) locked from spec — Q1-Q3 final decisions deferred to plan-milestones with recommendations given."
-last_updated: "2026-05-11"
+milestones:
+  - id: "m1-fixture-corpus-loader"
+    name: "Fixture corpus + ground-truth schema + loader + capture CLI"
+    status: completed
+    estimated_files:
+      - "src/career/eval/fixtures/schema.mjs"
+      - "src/career/eval/fixtures/loader.mjs"
+      - "src/career/eval/fixtures/capture.mjs"
+      - "data/career/eval-fixtures/{greenhouse,lever,ashby,workday,icims,smartrecruiters,jobvite,bamboo,custom-1,custom-2}/{page.html,ground-truth.yml}"
+      - "scripts/smoke-eval-fixtures.mjs"
+    estimated_lines: 280   # spec said 80; corrected 3.5× for first-of-kind capture flow
+    depends_on: []
+    complexity_flags:
+      - "first_of_kind"     # no prior Playwright-offline-HTML fixture infra in repo
+      - "external_api"      # capture CLI drives Playwright against live ATS pages
+      - "design_decisions"  # ground-truth schema shape locked here, downstream all keys off it
+    open_questions: []     # Q1 locked: fixtures live in-repo under data/career/eval-fixtures/
+    description: |
+      Zod schema for per-fixture ground-truth YAML (must_detect[]: {field_label, role, name, states[]}
+      + must_not_detect[]: {selector_hint, why} + metadata: {vendor, captured_at, page_type}).
+      Loader pairs page.html with ground-truth.yml + validates. Capture CLI opens a live URL via
+      Playwright, freezes outer HTML to disk, scaffolds the ground-truth template for manual
+      annotation (EH3: no LLM fill). Ships first 10 fixtures (8 vendor + 2 custom per acceptance a).
+
+  - id: "m2-eval-runner-score"
+    name: "Eval runner + 3-dim score (coverage/noise/aria_accuracy) + report"
+    status: pending
+    estimated_files:
+      - "src/career/eval/runner.mjs"
+      - "src/career/eval/score.mjs"
+      - "src/career/eval/report.mjs"
+      - "scripts/eval-snapshot.mjs"
+      - "scripts/smoke-eval-runner.mjs"
+    estimated_lines: 330   # spec said 120; corrected ~2.75× for diff-matching edge cases + offline HTML loading quirks
+    depends_on: ["m1-fixture-corpus-loader"]
+    complexity_flags:
+      - "design_decisions"  # name-matching semantics (fuzzy? exact? case?) decided here
+    open_questions: []     # Q2 locked: aggregate = min (pessimistic, defends worst ATS)
+    description: |
+      Runner loads fixture HTML into a Playwright page (`page.setContent`), calls existing
+      snapshot.mjs, diffs the emitted lines against ground-truth must_detect/must_not_detect.
+      Score: coverage = found/must_detect, noise = leaked/must_not_detect, aria_accuracy =
+      role+state-correct/found. Aggregate = min(coverage, 1-noise, aria_accuracy). Report:
+      per-fixture table + aggregate to JSON + human console. `eval-snapshot` CLI exit non-zero
+      if aggregate < configured threshold (acceptance b: baseline 60-80%).
+
+  - id: "m3-auto-tuner-convergence"
+    name: "Deterministic auto-tuner + ≤5% regression gate + iteration log + reviewable diff"
+    status: pending
+    estimated_files:
+      - "src/career/eval/tuner.mjs"
+      - "src/career/eval/candidates.mjs"
+      - "src/career/eval/iterationLog.mjs"
+      - "scripts/tune-snapshot.mjs"
+      - "scripts/smoke-eval-tuner.mjs"
+    estimated_lines: 480   # spec said 200; corrected 2.4× for greedy-search + per-fixture gate + reviewable diff machinery
+    depends_on: ["m2-eval-runner-score"]
+    complexity_flags:
+      - "design_decisions"  # search ordering, gate semantics, tie-breaking
+      - "error_handling_heavy"  # convergence detection, max-iterations cutoff, revert path
+    open_questions: []     # Q3 locked: simple candidates only (add-role / remove-role / add-state); compound rules deferred
+    description: |
+      Tuner: collect a11y roles of missing must_detect elements across all fixtures → generate
+      candidate fixes (Q3: simple only — toggle one role or one state at a time) → greedy try
+      each → keep iff aggregate improves AND no fixture regresses >5% (EH2) → revert otherwise →
+      stop at convergence (no improving candidate) or 20 iterations (acceptance d). Iteration
+      log: JSON per step with candidate, before/after per-fixture scores, decision, reason.
+      `tune-snapshot` CLI emits a unified diff against snapshot.mjs INTERACTIVE_ROLES /
+      EMITTED_STATES into `data/career/eval-fixtures/proposed-allowlist.diff` for review
+      (EH5: never auto-commit). Same fixtures + same initial allowlist → same diff (EH1).
+
+  - id: "m4-ci-smoke-room-complete"
+    name: "CI smoke + npm scripts + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "package.json"
+      - "scripts/smoke-eval-snapshot-ci.mjs"
+      - "src/career/eval/README.md"
+      - "META/00-project-room/04-career-system/07-applier/self-iteration/01-code-calibration/spec.md"
+    estimated_lines: 150
+    depends_on: ["m3-auto-tuner-convergence"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Wire `npm run eval:snapshot` / `npm run tune:snapshot` / `npm run test:eval-snapshot`.
+      CI smoke runs all 10 fixtures with the committed allowlist + asserts aggregate ≥ 90% +
+      per-fixture coverage ≥ 95% + noise ≤ 5% (acceptance c) + total wall-time < 60s
+      (acceptance f). README documents capture → annotate → tune → review → commit loop.
+      Lifecycle → done, ROOM COMPLETE rollup to parent + grandparent progress.
+
+current_sprint: "m2-eval-runner-score"
+blockers: []   # 08-snapshot-refs-layer ROOM COMPLETE; snapshot.mjs INTERACTIVE_ROLES is the tune target
+completion: 25
+status_note: "🔄 in_dev. m1 shipped 2026-05-18 — schema/loader/capture CLI + 3 seed fixtures (greenhouse-anthropic, lever-stripe, custom-acme). Smoke 45/45 green. Phase 3.5 dual review applied 2 CRITICAL (file://-URL SSRF, page_type YAML injection) + 5 HIGH (TOCTOU readdir race, bidi-spoofing chars in name/reason, impossible dates like 2026-13-45, overwrite guard only checked truth not html, redundant waitForLoadState) + 4 MEDIUM (symlink rejection, keepBrowserAlive flag, CLI arg parser swallowing `--flag --flag`, captured_at portable signature) with named regression tests. Next: m2 eval runner."
+last_updated: "2026-05-18"
