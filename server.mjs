@@ -76,6 +76,23 @@ import {
   getStatus as multiStepGetStatus,
 } from './src/career/applier/multistep/endpoint.mjs';
 import { JOB_ID_RE as APPLY_SESSIONS_JOB_ID_RE } from './src/career/applier/multistep/applySessionsStore.mjs';
+// 07-applier/self-iteration/02-data-flywheel m3 — approve/reject seam
+// for Haiku-induced proposals. Importing this module runs its top-level
+// await of ensureLearnedRulesLoaded, which wires user-approved classifier
+// rules into the live classifier at boot via 06's registerExtraRules seam.
+import {
+  approveSuggestion as feedbackApproveSuggestion,
+  rejectSuggestion as feedbackRejectSuggestion,
+} from './src/career/feedback/applySuggestion.mjs';
+import {
+  listSuggestions as feedbackListSuggestions,
+  readSuggestion as feedbackReadSuggestion,
+} from './src/career/feedback/suggestionStore.mjs';
+import {
+  FEEDBACK_DIR as FEEDBACK_DIR_PATH,
+  readJsonl as feedbackReadJsonl,
+  _FILES as FEEDBACK_FILES,
+} from './src/career/feedback/stores.mjs';
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const app = express();
@@ -4723,6 +4740,134 @@ app.post('/api/career/applier/multi-step/:jobId/resume', async (req, res) => {
       return res.status(result.status || 500).json({ error: result.error });
     }
     res.status(202).json({ sessionId: result.sessionId, started_at: result.started_at });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+// ── 07-applier/self-iteration/02-data-flywheel m3 — feedback approve/reject ──
+//
+// Routes wrap applySuggestion.mjs's approveSuggestion / rejectSuggestion +
+// suggestionStore's listSuggestions / readSuggestion + stores.mjs's
+// readJsonl for the stats endpoint. Approved classifier rules take effect
+// in-process (no restart); approved site-adapters land in
+// data/career/site-adapters/ and the m1 loader cache is busted.
+
+const FEEDBACK_STATUS_VALUES = Object.freeze(['pending', 'approved', 'rejected', 'all']);
+// REVIEW H3 (adv) fix: case-sensitive + no optional `.json` suffix.
+// Pre-fix /i let `FOO` through which then split-brained on case-
+// insensitive macOS FS vs case-sensitive Linux prod. The optional
+// `.json` group was also useless — readSuggestion adds it.
+// Max length matches ProposalEnvelopeSchema.id cap (120).
+const SUGGESTION_ID_RE = /^[a-z0-9_-]{1,120}$/;
+
+app.get('/api/career/feedback/suggestions', async (req, res) => {
+  try {
+    const status = typeof req.query.status === 'string' ? req.query.status : 'pending';
+    if (!FEEDBACK_STATUS_VALUES.includes(status)) {
+      return res.status(400).json({
+        error: `status must be one of ${FEEDBACK_STATUS_VALUES.join(' | ')}`,
+      });
+    }
+    const list = await feedbackListSuggestions({ status });
+    res.json({ suggestions: list, count: list.length });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+app.get('/api/career/feedback/suggestions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!SUGGESTION_ID_RE.test(id)) {
+      return res.status(400).json({ error: 'invalid suggestion id format' });
+    }
+    const found = await feedbackReadSuggestion(id);
+    if (!found) return res.status(404).json({ error: `proposal not found: ${id}` });
+    res.json(found);
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+app.post('/api/career/feedback/suggestions/:id/approve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!SUGGESTION_ID_RE.test(id)) {
+      return res.status(400).json({ error: 'invalid suggestion id format' });
+    }
+    let result;
+    try {
+      result = await feedbackApproveSuggestion(id);
+    } catch (err) {
+      const status = err.status || 500;
+      return res.status(status).json({ error: String(err?.message ?? err).slice(0, 300) });
+    }
+    res.status(200).json(result);
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+app.post('/api/career/feedback/suggestions/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!SUGGESTION_ID_RE.test(id)) {
+      return res.status(400).json({ error: 'invalid suggestion id format' });
+    }
+    let result;
+    try {
+      result = await feedbackRejectSuggestion(id);
+    } catch (err) {
+      const status = err.status || 500;
+      return res.status(status).json({ error: String(err?.message ?? err).slice(0, 300) });
+    }
+    res.status(200).json(result);
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+app.get('/api/career/feedback/stats', async (req, res) => {
+  try {
+    // Light counts-only stats endpoint — m4 Learning tab will expand
+    // this with 14-day accuracy series + site coverage join. m3 ships
+    // enough for HTTP-route plumbing tests.
+    const sinceParam = typeof req.query.since === 'string' ? Date.parse(req.query.since) : NaN;
+    const since = Number.isFinite(sinceParam)
+      ? sinceParam
+      : Date.now() - 30 * 24 * 60 * 60 * 1000;
+
+    async function count(filename) {
+      let n = 0;
+      try {
+        for await (const _r of feedbackReadJsonl(filename, { since })) {
+          void _r;
+          n += 1;
+        }
+      } catch {}
+      return n;
+    }
+    const [misclassified, edits, failures, suggestions] = await Promise.all([
+      count(FEEDBACK_FILES.FIELD_MISCLASSIFIED),
+      count(FEEDBACK_FILES.FIELD_EDITS),
+      count(FEEDBACK_FILES.SITE_FAILURES),
+      feedbackListSuggestions({ status: 'all' }),
+    ]);
+    res.json({
+      since: new Date(since).toISOString(),
+      flywheels: {
+        field_misclassified: misclassified,
+        field_edits: edits,
+        site_failures: failures,
+      },
+      suggestions: {
+        total: suggestions.length,
+        pending: suggestions.filter((s) => s.status === 'pending').length,
+        approved: suggestions.filter((s) => s.status === 'approved').length,
+        rejected: suggestions.filter((s) => s.status === 'rejected').length,
+      },
+    });
   } catch (err) {
     res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
   }
