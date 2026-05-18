@@ -1,0 +1,333 @@
+/* Learning tab — 07-applier/self-iteration/02-data-flywheel m4.
+ * Visual tokens match c-resumes-* / ov-* in neighboring files so the
+ * Career app stays cohesive. No new fonts or palette deviations. */
+
+.c-learning-root {
+  padding: 24px 32px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.c-learning-header {
+  margin-bottom: 24px;
+}
+
+.c-learning-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: #0c0a08;
+}
+
+.c-learning-sub {
+  margin: 4px 0 0;
+  color: #6b6356;
+  font-size: 13px;
+}
+
+.c-learning-card {
+  background: #ffffff;
+  border: 1px solid #e8e2d2;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.c-learning-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d2520;
+}
+
+.c-learning-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 6px;
+  background: #fbe5d6;
+  color: #bf3a06;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.c-learning-loading,
+.c-learning-empty {
+  margin: 4px 0 0;
+  color: #6b6356;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.c-learning-error {
+  margin: 4px 0 0;
+  color: #bf3a06;
+  font-size: 13px;
+}
+
+/* Card ① — stats grid */
+
+.c-learning-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.c-learning-stat {
+  background: #f4efe5;
+  border: 1px solid #ebe6dc;
+  border-radius: 6px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.c-learning-stat-ok {
+  background: #ebf6e7;
+  border-color: #d1ecc7;
+}
+.c-learning-stat-warn {
+  background: #fff6dd;
+  border-color: #f0e2a5;
+}
+.c-learning-stat-muted {
+  background: #fafafa;
+  border-color: #ebe6dc;
+}
+
+.c-learning-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0c0a08;
+  line-height: 1.1;
+}
+
+.c-learning-stat-label {
+  font-size: 11px;
+  color: #6b6356;
+  margin-top: 2px;
+}
+
+/* Card ② — chart */
+
+.c-learning-chart {
+  width: 100%;
+}
+
+/* Card ③ — suggestions */
+
+.c-learning-suggestions {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.c-learning-suggestion {
+  border: 1px solid #ebe6dc;
+  border-radius: 6px;
+  padding: 12px 14px;
+  background: #fafaf7;
+}
+
+.c-learning-suggestion-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #2d2520;
+  flex-wrap: wrap;
+}
+
+.c-learning-suggestion-group {
+  font-weight: 600;
+  color: #0c0a08;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.c-learning-suggestion-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.c-learning-kv {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 13px;
+}
+
+.c-learning-k {
+  min-width: 86px;
+  color: #6b6356;
+  font-size: 12px;
+}
+
+.c-learning-v {
+  color: #2d2520;
+  word-break: break-word;
+}
+
+.c-learning-v-code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  background: #f4efe5;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.c-learning-rationale {
+  font-style: italic;
+  color: #4a4138;
+}
+
+.c-learning-yaml-details {
+  margin-top: 4px;
+}
+
+.c-learning-yaml-details summary {
+  font-size: 12px;
+  color: #6b6356;
+  cursor: pointer;
+  user-select: none;
+}
+
+.c-learning-yaml {
+  background: #f4efe5;
+  border: 1px solid #ebe6dc;
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  overflow-x: auto;
+  max-height: 320px;
+}
+
+.c-learning-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.c-learning-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #ebe6dc;
+  background: #ffffff;
+  color: #2d2520;
+  transition: background 0.1s ease;
+}
+
+.c-learning-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.c-learning-btn:hover:not(:disabled) {
+  background: #f4efe5;
+}
+
+.c-learning-btn-ok {
+  background: #ebf6e7;
+  border-color: #c0e6b0;
+  color: #1f5e10;
+}
+.c-learning-btn-ok:hover:not(:disabled) {
+  background: #d8efcc;
+}
+
+.c-learning-btn-bad {
+  background: #fde7e3;
+  border-color: #f3c0b0;
+  color: #8c1f0e;
+}
+.c-learning-btn-bad:hover:not(:disabled) {
+  background: #f8d6cc;
+}
+
+.c-learning-btn-ghost {
+  background: transparent;
+}
+
+/* Card ④ — coverage table */
+
+.c-learning-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.c-learning-table th,
+.c-learning-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid #f4efe5;
+}
+
+.c-learning-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b6356;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.c-learning-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.c-learning-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.c-learning-tag-type {
+  background: #e8e5fa;
+  color: #3a2da3;
+}
+
+.c-learning-tag-ok {
+  background: #ebf6e7;
+  color: #1f5e10;
+}
+
+.c-learning-tag-warn {
+  background: #fff1b8;
+  color: #7a5e00;
+}
+
+.c-learning-muted {
+  color: #6b6356;
+}
+
+/* Footer */
+
+.c-learning-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #f4efe5;
+  font-size: 12px;
+}

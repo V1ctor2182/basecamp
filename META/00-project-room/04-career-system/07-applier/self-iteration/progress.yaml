@@ -1,7 +1,10 @@
 milestones: []
-current_sprint: null
-blockers:
-  - "Depends on 02-playwright-runtime m1+ and 08-snapshot-refs-layer m1+ (need browser runtime + snapshot serializer to feed iteration loops)"
-completion: 0
-status_note: "🔄 planning. Sub-epic restructure 2026-05-11 — synthesizes original 07-feedback-flywheel (PRD) + 09-snapshot-eval-harness (research-driven) + new 03-iteration-dashboard into one coherent self-iteration sub-system. 3 子 Room: 01-code-calibration (改代码), 02-data-flywheel (改数据), 03-iteration-dashboard (可视化). Shared evidence-store contract. Blocked on 02-playwright-runtime + 08-snapshot-refs-layer foundations. Open 估计 ~1200-1700 LOC across 3 子 Room (~ 8-10 milestones total)."
-last_updated: "2026-05-11"
+current_sprint: "Sprint 19 — Data Flywheel shipped"
+blockers: []
+completion: 33  # 1/3 子 Rooms ✅
+children_completion:
+  "01-code-calibration": 0
+  "02-data-flywheel": 100  # 🎉 ROOM COMPLETE 2026-05-18 (4/4 m; 4 JSONL stores + Haiku induction + approve/reject seam + Learning tab UI)
+  "03-iteration-dashboard": 0
+status_note: "🟢 self-iteration 33% (1/3 子 Rooms ✅). 02-data-flywheel ROOM COMPLETE 2026-05-18 (4/4 milestones, 97/97 smoke green). m1 capture hooks (3 JSONL stores wired into endpoint approve-step + error path), m2 Haiku induction worker w/ Sonnet retry + per-feedbackType mutex, m3 approve/reject seam + 5 REST routes + per-id mutex + applySuggestion writes learned-classifier-rules.yml / site-adapter YAML, m4 Learning tab (React + Nivo) + 14-day error trend + site coverage. Plan-agent + adversarial review across 4 milestones: ~13 CRITICAL + ~20 HIGH + ~10 MEDIUM all applied with REVIEW-named regression tests. End-to-end loop closure verified: m2 induce → m3 approve → classifyField sees live rule (no restart) AND m2 induce → m3 reject → m2 skip re-induction. Next: 01-code-calibration (改代码 — fixture corpus + tuner + PR generation) and/or 03-iteration-dashboard (可视化 — extends Learning tab w/ code-fix escalation queue)."
+last_updated: "2026-05-18"

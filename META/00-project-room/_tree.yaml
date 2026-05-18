@@ -454,7 +454,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/07-applier/self-iteration/02-data-flywheel"
       type: feature
-      lifecycle: planning
+      lifecycle: active
       owner: fullstack
       parent: "00-project-room/04-career-system/07-applier/self-iteration"
       children: []
