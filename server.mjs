@@ -4854,6 +4854,66 @@ app.get('/api/career/feedback/stats', async (req, res) => {
       count(FEEDBACK_FILES.SITE_FAILURES),
       feedbackListSuggestions({ status: 'all' }),
     ]);
+    // m4: 14-day classifier-error trend (issue rate per day). We
+    // don't track total classifications so this is a "issues per day"
+    // proxy — lower = better. Surface as `error_series` for the
+    // Learning tab Nivo line chart.
+    //
+    // REVIEW C1 adv / #2 Plan: bucket by LOCAL day, not UTC. Pre-fix
+    // setUTCHours(0,0,0,0) caused records near midnight to land in the
+    // wrong bucket relative to the user's wall clock (UTC-7 user
+    // recording at 22:30 local would see it in "tomorrow's" UTC bucket).
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const trendDays = 14;
+    const trendStart = new Date();
+    trendStart.setHours(0, 0, 0, 0);
+    trendStart.setDate(trendStart.getDate() - (trendDays - 1));
+    const HEAVY_EDIT_THRESHOLD = 50;
+    function localDayKey(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+    const trendBuckets = new Array(trendDays).fill(0).map((_, i) => ({
+      date: localDayKey(new Date(trendStart.getTime() + i * DAY_MS)),
+      issues: 0,
+    }));
+    const dayIdx = (ts) => {
+      const t = Date.parse(ts);
+      if (!Number.isFinite(t)) return -1;
+      const d = new Date(t);
+      d.setHours(0, 0, 0, 0);
+      return Math.round((d.getTime() - trendStart.getTime()) / DAY_MS);
+    };
+    try {
+      for await (const r of feedbackReadJsonl(FEEDBACK_FILES.FIELD_MISCLASSIFIED, {
+        since: trendStart.getTime(),
+      })) {
+        const i = dayIdx(r.ts);
+        if (i >= 0 && i < trendDays) trendBuckets[i].issues += 1;
+      }
+      for await (const r of feedbackReadJsonl(FEEDBACK_FILES.FIELD_EDITS, {
+        since: trendStart.getTime(),
+      })) {
+        const i = dayIdx(r.ts);
+        // Count only "heavy" edits per HEAVY_EDIT_THRESHOLD — small edits
+        // are typing fixes, not classifier issues. REVIEW M1 adv:
+        // finite-check edit_distance so older records with undefined
+        // field don't get truthy-compared.
+        if (
+          i >= 0 &&
+          i < trendDays &&
+          Number.isFinite(r.edit_distance) &&
+          r.edit_distance > HEAVY_EDIT_THRESHOLD
+        ) {
+          trendBuckets[i].issues += 1;
+        }
+      }
+    } catch {
+      // Best-effort — fall through with whatever we have.
+    }
+
     res.json({
       since: new Date(since).toISOString(),
       flywheels: {
@@ -4867,7 +4927,70 @@ app.get('/api/career/feedback/stats', async (req, res) => {
         approved: suggestions.filter((s) => s.status === 'approved').length,
         rejected: suggestions.filter((s) => s.status === 'rejected').length,
       },
+      error_series: trendBuckets,
     });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+// 02-data-flywheel m4 — site coverage join. Counts failures from
+// site-failures.jsonl per-domain; learner can spot domains that need
+// a new adapter YAML. has_adapter from the m1 loader's registry.
+app.get('/api/career/feedback/site-coverage', async (_req, res) => {
+  try {
+    const failByDomain = new Map();
+    try {
+      for await (const r of feedbackReadJsonl(FEEDBACK_FILES.SITE_FAILURES, {
+        since: Date.now() - 30 * 24 * 60 * 60 * 1000,
+      })) {
+        if (!r.domain) continue;
+        // REVIEW H3 adv / M4 adv: lowercase key so `Acme.com` and
+        // `acme.com` aggregate. URL.hostname is already lowercased by
+        // the WHATWG URL parser, but defensive against raw-string
+        // fallback in the m1 capture hook (when URL parse fails).
+        const key = String(r.domain).toLowerCase();
+        const cur = failByDomain.get(key) || { failures: 0, adapters: new Set() };
+        cur.failures += 1;
+        if (r.site_adapter_id) cur.adapters.add(r.site_adapter_id);
+        failByDomain.set(key, cur);
+      }
+    } catch {}
+
+    // Cross-reference against the loaded site-adapter registry to mark
+    // which domains already have a bundled / approved adapter. Lazy-
+    // import to avoid pulling 06 into every server route's hot path.
+    let registry = null;
+    try {
+      const { loadAdapters } = await import('./src/career/applier/siteAdapters/loader.mjs');
+      registry = await loadAdapters();
+    } catch {}
+
+    function hasAdapter(domain) {
+      if (!registry) return false;
+      for (const a of registry.adapters) {
+        for (const rx of a.detection.urlRegexes) {
+          if (rx.test(domain)) return true;
+        }
+      }
+      return false;
+    }
+
+    const rows = Array.from(failByDomain.entries())
+      .map(([domain, { failures, adapters }]) => ({
+        domain,
+        failures,
+        site_adapter_id: adapters.size === 1 ? [...adapters][0] : null,
+        has_adapter: hasAdapter(domain),
+      }))
+      // REVIEW H2 adv: deterministic tiebreak on domain alpha so the UI
+      // table doesn't reorder between refreshes when failure counts tie.
+      .sort((a, b) => b.failures - a.failures || a.domain.localeCompare(b.domain))
+      // REVIEW H2 adv: bound row count — a misbehaving cron could
+      // explode failByDomain; UI table shouldn't paginate beyond 50.
+      .slice(0, 50);
+
+    res.json({ rows, count: rows.length });
   } catch (err) {
     res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
   }
