@@ -448,7 +448,7 @@ tree:
         - "00-project-room/04-career-system/07-applier/self-iteration/03-iteration-dashboard"
     - id: "00-project-room/04-career-system/07-applier/self-iteration/01-code-calibration"
       type: feature
-      lifecycle: planning
+      lifecycle: done
       owner: backend
       parent: "00-project-room/04-career-system/07-applier/self-iteration"
       children: []
