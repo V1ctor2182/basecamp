@@ -2,6 +2,7 @@ milestones:
   - id: "m1-event-aggregator-endpoints"
     name: "Event aggregator + 5 REST endpoints + smoke"
     status: completed
+    commit: "6a989dc2d5491194f21b27de43190d91b93be53b"
     estimated_files:
       - "src/career/iteration/eventStream.mjs"
       - "src/career/iteration/promote.mjs"
