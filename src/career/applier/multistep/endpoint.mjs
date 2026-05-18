@@ -83,6 +83,9 @@ export const StartBodySchema = z
     jdSummary: z.string().max(20000).optional(),
     narrativeVoice: z.string().max(20000).optional(),
     maxSteps: z.number().int().min(1).max(50).optional(),
+    // Per-apply override of preferences.applier.auto_approve_when_safe.
+    // Default off; HTTP layer reads preferences.yml and forwards.
+    autoApproveWhenSafe: z.boolean().optional(),
   })
   .strict();
 
@@ -124,6 +127,14 @@ export const ResumeBodySchema = z
  */
 export async function startMachine(body, deps = {}) {
   const { jobId, jobUrl, siteAdapter, resumeId, jdSummary, narrativeVoice, maxSteps } = body;
+  // Optional "auto-approve when safe" mode (preferences.applier.auto_approve_when_safe).
+  // Passed via body.autoApproveWhenSafe by the HTTP layer (server.mjs reads
+  // preferences.yml and forwards the flag) OR via deps for smoke tests.
+  // Default off — every existing apply path is unaffected.
+  const autoApproveWhenSafe =
+    typeof body.autoApproveWhenSafe === 'boolean'
+      ? body.autoApproveWhenSafe
+      : !!deps.autoApproveWhenSafe;
 
   // M4 fix from review: if a prior machine has settled (state='done')
   // but is lingering in the 30s grace window, allow restart by sweeping
@@ -151,6 +162,12 @@ export async function startMachine(body, deps = {}) {
     // mirrored here for the runMachine error catch.
     siteAdapter: null,
     jobUrl,
+    // Auto-approve telemetry: count + list of (stepIdx, refIds) that
+    // were resolved without operator review. Surfaced on status response
+    // for post-apply audit.
+    autoApproveWhenSafe,
+    autoApproveCount: 0,
+    autoApproveLog: [],
   };
   _machines.set(jobId, ctrl);
 
@@ -172,6 +189,30 @@ export async function startMachine(body, deps = {}) {
       ctrl.pauseRequested = false;
       return Promise.resolve({ approved: false });
     }
+    // Auto-approve when safe (preferences.applier.auto_approve_when_safe).
+    // Strict gate — every field must satisfy ALL of:
+    //   - confidence === 'high'
+    //   - class !== 'manual'    (no CAPTCHA / rich text / shadow DOM)
+    //   - !block_approve         (no 05-non-standard-controls C2 block)
+    // Any failing field falls through to the normal human-approval path.
+    // Audit log records which (stepIdx, refIds) were auto-approved so
+    // post-apply review can spot drift.
+    if (ctrl.autoApproveWhenSafe && isDraftSafeToAutoApprove(approvalReq.draft)) {
+      const fields = (approvalReq.draft && approvalReq.draft.fields) || [];
+      ctrl.autoApproveCount += 1;
+      ctrl.autoApproveLog.push({
+        stepIdx: approvalReq.stepIdx,
+        isDependentRecheck: !!approvalReq.isDependentRecheck,
+        refIds: fields.map((f) => f.refId),
+        at: new Date().toISOString(),
+      });
+      // Cap log to last 50 entries — multi-step Workday can have many
+      // safe approvals across 5+ steps; we don't need unbounded growth.
+      if (ctrl.autoApproveLog.length > 50) {
+        ctrl.autoApproveLog.splice(0, ctrl.autoApproveLog.length - 50);
+      }
+      return Promise.resolve({ approved: true, edits: [], _auto: true });
+    }
     return new Promise((resolve) => {
       ctrl.pendingApproval = {
         resolve,
@@ -186,6 +227,15 @@ export async function startMachine(body, deps = {}) {
       ctrl.state = 'awaiting-approval';
     });
   };
+
+  /**
+   * Strict safety gate — see comment in `approve` above. Exported (via
+   * helper at end of file) so smoke tests can drive the logic without
+   * spinning up a full machine.
+   * @param {{fields?: Array<object>}} draft
+   * @returns {boolean}
+   */
+  // (helper defined at module scope below to avoid closure capture in tests)
 
   const runMachineFn = deps._runMachine || realRunMachine;
   // m3 (06-site-adapters): detectAdapter now goes through the YAML-backed
@@ -463,8 +513,22 @@ export async function getStatus(jobId) {
         // H2: surface lastDraftInfo so dashboard can show "errored at step N"
         // after the machine has settled and pendingApproval was wiped.
         lastDraftInfo: ctrl.lastDraftInfo || null,
+        // Auto-approve audit — counts + per-step log of refIds resolved
+        // without operator review. Empty + 0 when the feature is off.
+        autoApprove: {
+          enabled: !!ctrl.autoApproveWhenSafe,
+          count: ctrl.autoApproveCount || 0,
+          log: ctrl.autoApproveLog || [],
+        },
       }
-    : { state: 'idle', lastOutcome: null, lastError: null, pending: null, lastDraftInfo: null };
+    : {
+        state: 'idle',
+        lastOutcome: null,
+        lastError: null,
+        pending: null,
+        lastDraftInfo: null,
+        autoApprove: { enabled: false, count: 0, log: [] },
+      };
 
   return {
     status: 200,
@@ -475,6 +539,35 @@ export async function getStatus(jobId) {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Strict safety gate for auto-approve mode. Returns true iff EVERY
+ * field in the draft satisfies:
+ *   - confidence === 'high'        (no LOW/MEDIUM/MANUAL ambiguity)
+ *   - class !== 'manual'           (no CAPTCHA / rich text / shadow DOM)
+ *   - !block_approve               (no 05-non-standard-controls C2 block)
+ *
+ * An empty draft (zero fields) is treated as safe — the machine emits
+ * one approve() call per step needing review, and an empty list means
+ * the step already passed `stepNeedsApproval` filtering (defensive).
+ *
+ * Exported for smoke testability — no closure capture so tests can
+ * drive the gate without spinning up the full machine.
+ *
+ * @param {{fields?: Array<object>}|null|undefined} draft
+ * @returns {boolean}
+ */
+export function isDraftSafeToAutoApprove(draft) {
+  if (!draft || typeof draft !== 'object') return false;
+  const fields = Array.isArray(draft.fields) ? draft.fields : [];
+  for (const f of fields) {
+    if (!f || typeof f !== 'object') return false;
+    if (f.confidence !== 'high') return false;
+    if (f.class === 'manual') return false;
+    if (f.block_approve === true) return false;
+  }
+  return true;
+}
 
 function redactSession(session) {
   // Currently no PII redaction — session is already sanitized (no raw

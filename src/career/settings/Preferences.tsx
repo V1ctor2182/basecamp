@@ -57,6 +57,10 @@ type HardFilters = {
   jd_text_blocklist: string[]
 }
 
+type ApplierPrefs = {
+  auto_approve_when_safe: boolean
+}
+
 type Preferences = {
   targets: TargetRole[]
   comp_target: CompTarget
@@ -66,6 +70,7 @@ type Preferences = {
   scoring_weights: ScoringWeights
   thresholds: Thresholds
   evaluator_strategy: EvaluatorStrategy
+  applier: ApplierPrefs
 }
 
 const CURRENCY_OPTIONS = ['USD', 'EUR', 'GBP', 'CAD', 'CNY']
@@ -132,6 +137,7 @@ function BLANK(): Preferences {
       tech_match: 0.2, comp_match: 0.2, location_match: 0.2, company_match: 0.2, growth_signal: 0.2,
     },
     thresholds: { strong: 4.5, worth: 4.0, consider: 3.5, skip_below: 3.0 },
+    applier: { auto_approve_when_safe: false },
     evaluator_strategy: {
       stage_a: { enabled: true, model: 'claude-haiku-4-5', threshold: 3.5 },
       stage_b: {
@@ -784,6 +790,38 @@ export default function Preferences() {
               )}
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Applier — Mode 2 multi-step behavior */}
+      <section className="af-section">
+        <h3 className="af-section-title">Applier — Mode 2 auto-approve</h3>
+        <p className="af-section-desc">
+          多步骤申请的 approve step 自动通过策略。默认关闭 — 每个 step 都要你审核 AI 起草的字段。
+          打开后，<strong>仅当 step 里所有字段都满足 high confidence + class≠manual + 没有 block_approve 标记</strong> 时，
+          才自动通过。LOW/MEDIUM/MANUAL/CAPTCHA 永远暂停等你 — 05-non-standard-controls 的 4 条硬约束不变。
+          每次自动通过会记录到 apply session 供你审计。
+        </p>
+        <div className="af-subsection">
+          <div className="af-field">
+            <label className="af-radio-label">
+              <input
+                type="checkbox"
+                checked={prefs.applier.auto_approve_when_safe}
+                onChange={(e) =>
+                  setPrefs((p) => ({
+                    ...p,
+                    applier: { ...p.applier, auto_approve_when_safe: e.target.checked },
+                  }))
+                }
+              />
+              {' '}<strong>Auto-approve when safe</strong> — 跳过对 high-confidence 字段的人工审核
+            </label>
+          </div>
+          <p className="af-subsection-desc">
+            建议在跑过 5-10 次 apply 验证 AI 起草质量稳定后再启用。启用前请确认
+            Settings/QA-Bank 和 narrative.md 已经填好（否则开放题的"high confidence"答案可能不是你想说的）。
+          </p>
         </div>
       </section>
 

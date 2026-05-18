@@ -1506,6 +1506,21 @@ const EvaluatorStrategySchema = z.object({
   }),
 });
 
+// Mode 2 applier behavior overrides. Default-off; opt-in via UI toggle.
+const ApplierPrefsSchema = z.object({
+  // When TRUE, the multi-step state machine auto-resolves an approve step
+  // when EVERY field in the draft satisfies the strict safety gate:
+  //   - confidence === 'high'
+  //   - class !== 'manual'
+  //   - !block_approve
+  // LOW/MEDIUM confidence, MANUAL class (CAPTCHA / rich text / shadow DOM),
+  // and explicit block_approve flags STILL pause regardless. This narrows
+  // the human-in-the-loop to only the cases where the AI is genuinely
+  // uncertain (constraints #1/#2/#3/#4 of 05-non-standard-controls still
+  // hold). Each auto-approve is logged to apply-sessions for audit.
+  auto_approve_when_safe: z.boolean().default(false),
+});
+
 const PreferencesSchema = z.object({
   targets: z.array(TargetRoleSchema).max(50),
   comp_target: CompTargetSchema,
@@ -1515,6 +1530,9 @@ const PreferencesSchema = z.object({
   scoring_weights: ScoringWeightsSchema,
   thresholds: ThresholdsSchema,
   evaluator_strategy: EvaluatorStrategySchema,
+  // Optional — older preferences.yml files predate this key; default-fill
+  // keeps GET responses backward compatible.
+  applier: ApplierPrefsSchema.default({ auto_approve_when_safe: false }),
 });
 
 function defaultPreferences() {
@@ -1587,6 +1605,9 @@ function defaultPreferences() {
           block_g_playwright: true,
         },
       },
+    },
+    applier: {
+      auto_approve_when_safe: false,
     },
   };
 }
@@ -4651,6 +4672,17 @@ app.post('/api/career/applier/multi-step/start', async (req, res) => {
       body = MultiStepStartBodySchema.parse(req.body ?? {});
     } catch (e) {
       return res.status(400).json({ error: 'Invalid body', details: e.issues });
+    }
+    // Auto-approve mode: caller may override per-apply via body.autoApproveWhenSafe;
+    // otherwise read the preferences.yml setting (default off). Strict safety
+    // gate is enforced inside endpoint.mjs — this layer only forwards the flag.
+    if (typeof body.autoApproveWhenSafe !== 'boolean') {
+      try {
+        const prefs = await readPreferences();
+        body = { ...body, autoApproveWhenSafe: !!prefs?.applier?.auto_approve_when_safe };
+      } catch {
+        body = { ...body, autoApproveWhenSafe: false };
+      }
     }
     const result = await multiStepStart(body);
     if (result.error) {
