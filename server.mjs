@@ -4996,5 +4996,87 @@ app.get('/api/career/feedback/site-coverage', async (_req, res) => {
   }
 });
 
+// ── 07-applier/self-iteration/03-iteration-dashboard m1 — event-stream + promote ──
+//
+// 5 endpoints aggregate over existing append-only stores (feedback/*.jsonl
+// + qa-bank/history.jsonl + eval-fixtures/tuner-log.json + applications.json
+// + suggested/*.json). Real-time aggregate (Q2 override) — no new persistent
+// store. See src/career/iteration/eventStream.mjs for the normalization.
+
+import {
+  readEvents as iterationReadEvents,
+  buildHealth as iterationBuildHealth,
+  buildPending as iterationBuildPending,
+  buildCoverage as iterationBuildCoverage,
+} from './src/career/iteration/eventStream.mjs';
+import {
+  promoteEvidence as iterationPromoteEvidence,
+  EVIDENCE_ID_RE as ITERATION_EVIDENCE_ID_RE,
+} from './src/career/iteration/promote.mjs';
+
+app.get('/api/career/iteration/health', async (_req, res) => {
+  try {
+    res.json(await iterationBuildHealth());
+  } catch (err) {
+    console.error('[iteration/health]', err);
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+app.get('/api/career/iteration/events', async (req, res) => {
+  try {
+    const limit =
+      typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
+    const beforeTs =
+      typeof req.query.before_ts === 'string' ? req.query.before_ts : undefined;
+    const beforeId =
+      typeof req.query.before_id === 'string' ? req.query.before_id : undefined;
+    const sinceParam =
+      typeof req.query.since === 'string' ? Date.parse(req.query.since) : NaN;
+    const since = Number.isFinite(sinceParam) ? sinceParam : undefined;
+    res.json(await iterationReadEvents({ limit, beforeTs, beforeId, since }));
+  } catch (err) {
+    console.error('[iteration/events]', err);
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+app.get('/api/career/iteration/pending', async (_req, res) => {
+  try {
+    res.json(await iterationBuildPending());
+  } catch (err) {
+    console.error('[iteration/pending]', err);
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+app.get('/api/career/iteration/coverage', async (_req, res) => {
+  try {
+    res.json(await iterationBuildCoverage());
+  } catch (err) {
+    console.error('[iteration/coverage]', err);
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+app.post('/api/career/iteration/promote/:evidenceId', async (req, res) => {
+  try {
+    const id = String(req.params.evidenceId || '');
+    if (!ITERATION_EVIDENCE_ID_RE.test(id)) {
+      return res
+        .status(400)
+        .json({ error: 'evidenceId must be 12-hex sha256 prefix' });
+    }
+    const result = await iterationPromoteEvidence(id);
+    res.status(result.status === 'created' ? 201 : 200).json(result);
+  } catch (err) {
+    if (err?.code === 'EVIDENCE_NOT_FOUND') {
+      return res.status(404).json({ error: err.message });
+    }
+    console.error('[iteration/promote]', err);
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
 const port = process.env.PORT || 8000;
 app.listen(port, () => console.log(`API server on :${port}`));

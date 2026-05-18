@@ -1,7 +1,88 @@
-milestones: []
-current_sprint: null
-blockers:
-  - "Depends on self-iteration/01-code-calibration + 02-data-flywheel — needs real evidence store + qa-bank changelog + tuner log to render against"
-completion: 0
-status_note: "🔄 planning. UX layer of self-iteration sub-epic. 5 UI sections (Health 顶栏 / 事件流 / Pending Actions / 覆盖率 / Trend charts). ~400 LOC React + ~120 LOC server + ~100 LOC smoke. Blocked on 01 + 02 having real data to display (don't build empty dashboard). Estimated 3 milestones. Q1-Q3 open questions with recommendations for plan-milestones."
-last_updated: "2026-05-11"
+milestones:
+  - id: "m1-event-aggregator-endpoints"
+    name: "Event aggregator + 5 REST endpoints + smoke"
+    status: completed
+    estimated_files:
+      - "src/career/iteration/eventStream.mjs"
+      - "src/career/iteration/promote.mjs"
+      - "server.mjs"   # 5 new endpoints
+      - "scripts/smoke-iteration-endpoints.mjs"
+    estimated_lines: 400   # spec ~120 server; corrected 3.3× for 5-store aggregation
+    depends_on: []
+    complexity_flags:
+      - "design_decisions"   # event normalization shape, promote stub shape
+    open_questions: []  # all locked at plan-milestones — see status_note
+    description: |
+      Backend aggregator reads existing append-only stores (feedback/site-failures
+      + field-edits + field-misclassified + suggested/*.json + eval-fixtures/
+      tuner-log.json + apply-sessions/*) and normalizes to a unified Event
+      timeline `{ ts, kind, ref?, summary, payload }`. No new store written
+      (Q2 override). 5 endpoints:
+        GET  /api/career/iteration/health         — counts + rates
+        GET  /api/career/iteration/events?limit&before_ts  — paginated stream
+        GET  /api/career/iteration/pending        — promote queue + PR review
+        GET  /api/career/iteration/coverage       — fixtures + qa-bank cats
+        POST /api/career/iteration/promote/:id    — site-failure → fixture stub
+      Promote creates `data/career/eval-fixtures/{vendor-slug}.truth.yml` with
+      url + reason metadata only; HTML is filled in later via capture-fixture
+      (operator manual step). Smoke: contract tests for each endpoint + the
+      promote idempotency / duplicate-id refusal.
+
+  - id: "m2-iteration-page-event-stream"
+    name: "Iteration.tsx route + Health header + Event stream + Pending Actions"
+    status: pending
+    estimated_files:
+      - "src/career/Iteration.tsx"
+      - "src/career/iteration.css"
+      - "src/career/CareerNav.tsx"   # add new nav entry
+      - "src/career/App.tsx"   # add route
+      - "scripts/smoke-iteration-tsx-build.mjs"   # vite build verifies the page mounts
+    estimated_lines: 440   # spec ~280 React + 80 css; corrected 1.4×
+    depends_on: ["m1-event-aggregator-endpoints"]
+    complexity_flags:
+      - "design_decisions"   # event-card layout, polling cadence, abort cleanup
+    open_questions: []
+    description: |
+      New page at `/career/iteration`. Three top sections (D + E deferred to m3
+      / out-of-scope):
+        A. Health header — APPLY count / SUCCESS rate / 01 cover / 02 cache
+           hit / Pending counts. Reuses .c-resumes-* / ov-* tokens.
+        B. Event stream — paginated 30/page, infinite scroll on bottom, color
+           tier per event.kind (🟢 / 🟡 / 🔵 / 🟠 / 🔴 / 🟣 / 🟤 / ⚪) reusing
+           STATUS_COLORS (D1). formatRelative for timestamps.
+        C. Pending Actions queue — Promote (count + first 5) / PR review (link
+           to GitHub PRs labeled `tuner-output`) / Tier 2 (0) / Tier 3 (0)
+           with tooltip explaining placeholder.
+      30s polling via setInterval, AbortController cleanup on unmount (D2).
+      0 LLM call on render (D5).
+
+  - id: "m3-promote-modal-coverage-room-complete"
+    name: "Promote modal + Coverage detail + smoke + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "src/career/Iteration.tsx"   # promote modal + D section
+      - "src/career/iteration.css"
+      - "scripts/smoke-iteration-promote.mjs"
+      - "META/00-project-room/04-career-system/07-applier/self-iteration/03-iteration-dashboard/spec.md"
+      - "src/career/iteration/README.md"
+    estimated_lines: 200   # spec ~150 React + 50 smoke
+    depends_on: ["m2-iteration-page-event-stream"]
+    complexity_flags:
+      - "design_decisions"   # promote modal copy + Tier 2/3 tooltip wording
+    open_questions: []
+    description: |
+      Promote modal: clicking a Promote-action item opens a dialog showing
+      the auto-drafted truth.yml stub (url + vendor + reason from
+      site-failures.jsonl); user reviews → confirms → POST /promote/:id;
+      success toast tells operator to run `node scripts/capture-fixture.mjs`
+      with the same URL to fill the HTML. Confirms D3 gate (review-before-
+      write). D section (coverage detail): collapsible table reusing the
+      site-coverage data m2 of 02-data-flywheel already exposes — per-vendor
+      counts + leaked-roles diagnostics. Smoke covers modal mount + confirm
+      flow + the promote endpoint integration. ROOM COMPLETE rollup.
+
+current_sprint: "m2-iteration-page-event-stream"
+blockers: []   # 01 + 02 ROOM COMPLETE — data sources all in place
+completion: 33  # 1/3 milestones shipped
+status_note: "🔄 in_dev. Plan locked 2026-05-18 — 3 milestones, ~1040 LOC (spec ~620 under-counted by 1.7× for 5-store event normalization + multi-step promote flow). All 3 spec OQs + 2 new milestone-level OQs locked with the following SPEC OVERRIDES (user-approved): (1) Q2 event store → real-time aggregate over existing JSONL stores instead of new events.jsonl (avoids modifying frozen 01+02 emit-event paths; <500 records → perf fine). (2) Promote action writes a STUB truth.yml only (url + reason + vendor); operator runs capture-fixture.mjs manually to fill HTML (snapshot_excerpt schema cap = 400 chars insufficient for full fixture). (3) Tier 2/3 backlog displays placeholder (0) with tooltip in V1 — pattern clustering not in scope; descope acceptance (c) to a future room. Spec acceptance (a)(b)(d)(e) all achievable; (c) descoped. Reuses Learning.tsx visual tokens (no new palette per D1). All locked: D1 (STATUS_COLORS reuse), D2 (30s polling + AbortController), D3 (promote modal review gate), D4 (no [Run Tuner] button), D5 (0 LLM on render)."
+last_updated: "2026-05-18"
