@@ -32,6 +32,7 @@ milestones:
   - id: "m2-iteration-page-event-stream"
     name: "Iteration.tsx route + Health header + Event stream + Pending Actions"
     status: completed
+    commit: "8f136bb6d69a2ed1236399097790546d19c3335a"
     estimated_files:
       - "src/career/Iteration.tsx"
       - "src/career/iteration.css"
