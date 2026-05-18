@@ -26,6 +26,7 @@ milestones:
   - id: "m2-eval-runner-score"
     name: "Eval runner + 3-dim score (coverage/noise/aria_accuracy) + report"
     status: completed
+    commit: "a1712f467eb0cdb035c4acb96a15cb7713f92ce3"
     estimated_files:
       - "src/career/eval/runner.mjs"
       - "src/career/eval/score.mjs"
