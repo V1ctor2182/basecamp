@@ -291,6 +291,14 @@ commits:
       - "intent-data-flywheel-001 (anchors: feedback/schemas.mjs + feedback/stores.mjs + endpoint.mjs capture hooks + smoke-feedback-stores.mjs)"
     milestones_affected:
       - "m1-stores-schemas-capture-hooks (→ completed)"
+  - hash: "4152bc4"
+    date: "2026-05-18"
+    message: "[04-career-system/07-applier/self-iteration/02-data-flywheel] m2: Haiku induction worker + threshold detection + proposal storage (smoke 26/26)"
+    files_changed: 6
+    specs_affected:
+      - "intent-data-flywheel-001 (anchors: feedback/induce.mjs + induceClassifierRule.mjs + induceSiteAdapter.mjs + suggestionStore.mjs + smoke-feedback-induce.mjs)"
+    milestones_affected:
+      - "m2-induce-worker-haiku-threshold (→ completed)"
 current_sprint: "Sprint 19 — Data Flywheel"
 blockers: []
 status_note: "🟢 m2 COMPLETE 2026-05-18. Haiku induction worker shipped: suggestionStore.mjs (~200 LOC) — ProposalEnvelopeSchema (Zod v4 record(string, X) signature fix) + savePending atomic write + listSuggestions + markers CRUD with NUL-byte separator (REVIEW H4 adv: avoids collision with `:` in groupKey like `host:8080`) + rejected-ids reader. induceClassifierRule.mjs (~190 LOC) Haiku prompt with JSON-encoded interpolation + untrusted-content delimiter (REVIEW C1 adv: prompt injection via field_label could otherwise dictate the regex). induceSiteAdapter.mjs (~180 LOC) same protection on error_message + step_idx=0 vs null distinction (REVIEW L1). Both inducers: string-aware extractJson tokenizer (REVIEW H1 adv: braces in regex strings no longer unbalance), AbortController 30s timeout (REVIEW M6 adv), per-model attempts[] cost breakdown (REVIEW H2 adv), always-record cost regardless of success (REVIEW C3 adv: pre-fix dropped cost when both models failed → undercount daily spend). induce.mjs (~200 LOC) orchestrator with module-level per-feedbackType mutex serializing concurrent calls (REVIEW C2 adv / H3 Plan: pre-fix two parallel maybeInduce both passed gate → duplicate proposals) + record-expiry reset when currentCount < prior.count (REVIEW C2 Plan: pre-fix permanent freeze when records age out) + savePending try/catch preserving prior newProposals (REVIEW H7 adv) + groupRecords.slice(-N) tailing so Haiku sees most recent samples. Plan-agent + adversarial review: 4 CRITICAL + 4 HIGH + 2 MEDIUM applied — every fix has REVIEW-named regression. Smoke 26/26 green (19 baseline + 7 review regressions). Regression: 04-multi-step 153/153 + 05 nonstandard 157/157 + 06 site-adapters 81/81 + 03 field-classifier 95/95 still green. Next: m3 approve/reject seam + REST endpoints + applySuggestion that wires approved proposals into live classifier + site-adapter loader."
