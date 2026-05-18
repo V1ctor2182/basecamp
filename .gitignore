@@ -101,3 +101,7 @@ career-ops/
 data/career/eval-fixtures/proposed-allowlist.txt
 data/career/eval-fixtures/proposed-allowlist.diff
 data/career/eval-fixtures/tuner-log.json
+
+# 03-iteration-dashboard promote-evidence queue (operator workspace,
+# not committable — each entry tracks a pending fixture capture).
+data/career/eval-fixtures/promote-queue/

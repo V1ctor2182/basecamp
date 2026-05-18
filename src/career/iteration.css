@@ -1,0 +1,539 @@
+/* Iteration tab — 07-applier/self-iteration/03-iteration-dashboard m2.
+ * Reuses tokens from c-learning-* / c-resumes-* / ov-* so the Career
+ * app palette stays cohesive (D1: no new palette). */
+
+.c-iter-root {
+  padding: 24px 32px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.c-iter-header {
+  margin-bottom: 24px;
+}
+
+.c-iter-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: #0c0a08;
+}
+
+.c-iter-sub {
+  margin: 4px 0 0;
+  color: #6b6356;
+  font-size: 13px;
+}
+
+.c-iter-card {
+  background: #ffffff;
+  border: 1px solid #e8e2d2;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.c-iter-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d2520;
+}
+
+.c-iter-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 6px;
+  background: #fbe5d6;
+  color: #bf3a06;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.c-iter-loading,
+.c-iter-empty {
+  margin: 4px 0 0;
+  color: #6b6356;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.c-iter-error {
+  margin: 4px 0 0;
+  color: #bf3a06;
+  font-size: 13px;
+}
+
+/* A. Health stats grid (mirror Learning's .c-learning-stats-grid) */
+
+.c-iter-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.c-iter-stat {
+  background: #f4efe5;
+  border: 1px solid #ebe6dc;
+  border-radius: 6px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.c-iter-stat-ok {
+  background: #ebf6e7;
+  border-color: #d1ecc7;
+}
+.c-iter-stat-warn {
+  background: #fff6dd;
+  border-color: #f0e2a5;
+}
+.c-iter-stat-muted {
+  background: #fafafa;
+  border-color: #ebe6dc;
+}
+
+.c-iter-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0c0a08;
+  line-height: 1.1;
+}
+
+.c-iter-stat-label {
+  font-size: 11px;
+  color: #6b6356;
+  margin-top: 2px;
+}
+
+/* B. Event stream */
+
+.c-iter-events {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.c-iter-event {
+  border: 1px solid #ebe6dc;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: #fafaf7;
+}
+
+.c-iter-event-good {
+  background: #ebf6e7;
+  border-color: #d1ecc7;
+}
+.c-iter-event-warn {
+  background: #fff6dd;
+  border-color: #f0e2a5;
+}
+.c-iter-event-bad {
+  background: #fde7e3;
+  border-color: #f3c0b0;
+}
+.c-iter-event-info {
+  background: #fafaf7;
+  border-color: #ebe6dc;
+}
+
+.c-iter-event-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #6b6356;
+}
+
+.c-iter-event-dot {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.c-iter-event-kind {
+  font-weight: 600;
+  color: #2d2520;
+}
+
+.c-iter-event-ts {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.c-iter-event-summary {
+  margin-top: 2px;
+  font-size: 13px;
+  color: #2d2520;
+  word-break: break-word;
+}
+
+.c-iter-event-ref {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #6b6356;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+/* C. Pending Actions */
+
+.c-iter-pending {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.c-iter-pending-group {
+  border: 1px solid #ebe6dc;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: #fafaf7;
+}
+
+.c-iter-pending-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  cursor: help;
+}
+
+.c-iter-pending-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2d2520;
+}
+
+.c-iter-pending-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  background: #ebe6dc;
+  color: #6b6356;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.c-iter-pending-count-on {
+  background: #fbe5d6;
+  color: #bf3a06;
+}
+
+.c-iter-pending-empty {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #6b6356;
+  font-style: italic;
+}
+
+.c-iter-pending-list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.c-iter-pending-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 6px 8px;
+  background: #ffffff;
+  border: 1px solid #ebe6dc;
+  border-radius: 4px;
+}
+
+.c-iter-pending-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.c-iter-pending-primary {
+  font-size: 13px;
+  color: #2d2520;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  word-break: break-word;
+}
+
+.c-iter-pending-secondary {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #6b6356;
+  word-break: break-word;
+}
+
+.c-iter-pending-more {
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #6b6356;
+  font-style: italic;
+}
+
+.c-iter-pending-action {
+  flex-shrink: 0;
+}
+
+/* Buttons (mirror c-learning-btn family) */
+
+.c-iter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #ebe6dc;
+  background: #ffffff;
+  color: #2d2520;
+  transition: background 0.1s ease;
+  text-decoration: none;
+}
+
+.c-iter-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.c-iter-btn:hover:not(:disabled) {
+  background: #f4efe5;
+}
+
+.c-iter-btn-ghost {
+  background: transparent;
+}
+
+.c-iter-btn-ghost:hover:not(:disabled) {
+  background: #f4efe5;
+}
+
+.c-iter-btn-promote {
+  background: #fde7e3;
+  border-color: #f3c0b0;
+  color: #8c1f0e;
+}
+.c-iter-btn-promote:hover:not(:disabled) {
+  background: #f8d6cc;
+}
+
+/* D. Coverage detail (collapsible) */
+
+.c-iter-coverage-details {
+  /* details element resets — match neighboring card padding/border */
+}
+
+.c-iter-coverage-summary {
+  cursor: pointer;
+  user-select: none;
+  list-style: revert;
+}
+
+.c-iter-coverage-body {
+  margin-top: 12px;
+}
+
+.c-iter-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.c-iter-table th,
+.c-iter-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #f4efe5;
+}
+
+.c-iter-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b6356;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.c-iter-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.c-iter-muted {
+  color: #6b6356;
+}
+
+.c-iter-v-code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  background: #f4efe5;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.c-iter-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.c-iter-tag-ok {
+  background: #ebf6e7;
+  color: #1f5e10;
+}
+
+.c-iter-tag-warn {
+  background: #fff1b8;
+  color: #7a5e00;
+}
+
+.c-iter-coverage-tuner {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #2d2520;
+}
+
+/* Promote modal — D3 review-before-write gate */
+
+.c-iter-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 10, 8, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.c-iter-modal {
+  background: #ffffff;
+  border: 1px solid #e8e2d2;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(12, 10, 8, 0.15);
+}
+
+.c-iter-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #f4efe5;
+}
+
+.c-iter-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #2d2520;
+}
+
+.c-iter-modal-close {
+  padding: 4px 8px;
+}
+
+.c-iter-modal-body {
+  padding: 16px 20px;
+}
+
+.c-iter-modal-text {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #2d2520;
+  line-height: 1.4;
+}
+
+.c-iter-modal-cmd {
+  background: #0c0a08;
+  color: #f4efe5;
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.c-iter-modal-details {
+  margin-top: 6px;
+}
+
+.c-iter-modal-details summary {
+  font-size: 12px;
+  color: #6b6356;
+  cursor: pointer;
+  user-select: none;
+}
+
+.c-iter-modal-yaml {
+  margin: 6px 0 0;
+  background: #f4efe5;
+  border: 1px solid #ebe6dc;
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  overflow-x: auto;
+  max-height: 240px;
+  color: #2d2520;
+  white-space: pre;
+}
+
+.c-iter-modal-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 20px 12px;
+  padding: 8px 10px;
+  background: #ebf6e7;
+  border: 1px solid #d1ecc7;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #1f5e10;
+}
+
+.c-iter-modal-error {
+  margin: 0 20px 12px;
+}
+
+.c-iter-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid #f4efe5;
+}

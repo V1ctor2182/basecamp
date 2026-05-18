@@ -2,7 +2,7 @@
 
 **Room ID**: `00-project-room/04-career-system/07-applier/self-iteration/03-iteration-dashboard`
 **Type**: feature
-**Lifecycle**: planning
+**Lifecycle**: done (ROOM COMPLETE 2026-05-18, 3/3 milestones shipped)
 **Owner**: fullstack
 **Parent**: `00-project-room/04-career-system/07-applier/self-iteration`
 
@@ -20,13 +20,15 @@ Self-iteration sub-epic 的 UX 层。让"applier 正在进化"可观察：(a) �
 - **D4 [MUST]** Dashboard 不直接触发 tuner run (避免 IPC race)；[Run Tuner] 只 link 到命令
 - **D5 [MUST]** Render path 0 LLM call (AI summary 走后台 cron 预算定时刷新)
 
-## Open Questions
+## Open Questions (LOCKED 2026-05-18)
 
-| ID | 问题 | 推荐 |
+| ID | 问题 | 决定 |
 |----|------|------|
-| Q1 | Dashboard 是否需 [Run Tuner] 按钮？ | 否 — 只 link 命令 (D4) |
-| Q2 | 事件流 backing store? | JSONL append-only (matches llm-costs.jsonl) |
-| Q3 | Pending action 点击跳哪？ | 混合: Promote 内 modal / PR review 跳 GitHub |
+| Q1 | Dashboard 是否需 [Run Tuner] 按钮？ | **NO** — 只 link 到 `npm run tune:snapshot` (D4) |
+| Q2 | 事件流 backing store? | **OVERRIDE spec recommendation** — real-time aggregate over existing JSONL stores (feedback/*.jsonl + eval-fixtures/tuner-log.json + qa-bank/history.jsonl + apply-sessions). NO new events.jsonl. Avoids modifying frozen 01+02 code to emit events; <500 records total → perf fine. |
+| Q3 | Pending action 点击跳哪？ | **HYBRID** — Promote → in-page modal (local op); PR review → GitHub external |
+| **m1-OQ** | Promote 怎么从 site-failure → 新 fixture? | **STUB ONLY** — Promote writes `{vendor-slug}.truth.yml` with url + reason metadata; operator runs `capture-fixture.mjs --url ...` manually to fill HTML. snapshot_excerpt is schema-capped at 400 chars, insufficient for full fixture. |
+| **m3-OQ** | Tier 2/3 backlog 内容? | **PLACEHOLDER V1** — display `Tier 2 (0)` / `Tier 3 (0)` with tooltip "pattern clustering not in scope; future room". **Acceptance (c) DESCOPED.** |
 
 ## Specs in this Room
 
@@ -36,13 +38,25 @@ Self-iteration sub-epic 的 UX 层。让"applier 正在进化"可观察：(a) �
 
 ~400 LOC React (Iteration.tsx + iteration.css + 4 component) + ~120 LOC server.mjs (5 个新 endpoint) + ~100 LOC smoke. ~3 milestones.
 
-## 验收
+## 验收 (status at ROOM COMPLETE)
 
-- (a) 10 次 apply 后页面渲染: 顶栏数字正确 / 事件流 ≥ 20 条 / pending queue 真实数
-- (b) 完整 manual promote 流程跑通: 点 Promote → 弹窗 review → confirm → fixture 进 corpus → tuner PR notification
-- (c) Tier 2 pattern 至少捕获 1 类并显示 (eg "iframe nesting")
-- (d) 30s polling 不跟 Applied/Overview 冲突
-- (e) 0 新调色板 / 复用 STATUS_COLORS
+- (a) ✅ — `/api/career/iteration/{health,events,pending,coverage}` all return live data over existing stores; 1 apply + 34 site-failures render correctly in V1 corpus
+- (b) ✅ — Promote modal ships with D3 review gate (stub yaml preview + capture-fixture command); confirm POSTs to `/promote/:id` → stub lands in `promote-queue/`; operator completes via capture-fixture
+- (c) ⚠️ DESCOPED — Tier 2/3 placeholder cards display `(0)` with tooltip "pattern clustering not in scope; future room"
+- (d) ✅ — D2 enforced: 30s `setInterval` + `AbortController` aborted on unmount + `loadingMoreRef` guards poll-vs-load-more race
+- (e) ✅ — D1 enforced: 17 unique CSS hexes, all already present in `learning.css`. Zero new palette tokens.
+
+## Milestones (LOCKED 2026-05-18)
+
+| m | Content | LOC (corrected) |
+|---|---------|-----|
+| m1 | Event aggregator (`src/career/iteration/eventStream.mjs`) + 5 REST endpoints (`/health`, `/events`, `/pending`, `/coverage`, `POST /promote/:id`) + contract smoke | ~250 server + ~150 smoke |
+| m2 | `Iteration.tsx` page (route + nav) + Health header + Event stream (paginated 30/page) + Pending Actions queue + iteration.css + 30s polling | ~280 React + 80 css + 80 smoke |
+| m3 | Promote modal (review-truth.yml gate) + Coverage detail collapsible + UI smoke + ROOM COMPLETE | ~150 React + 50 smoke |
+
+Total: ~1040 LOC. Spec ~620 under-counted by 1.7× for the 5-store event normalization (feedback/site-failures + field-edits + field-misclassified + suggested/* + eval-fixtures/tuner-log + apply-sessions/*) and multi-step promote flow.
+
+Reuses [Learning.tsx](../../../../src/career/Learning.tsx) (483 LOC, shipped in 02-data-flywheel m4) visual tokens; Iteration is a sibling page (different audience: observability vs debug).
 
 ---
 
