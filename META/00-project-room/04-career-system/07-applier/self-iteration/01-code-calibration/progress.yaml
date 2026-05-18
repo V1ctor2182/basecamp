@@ -75,6 +75,7 @@ milestones:
   - id: "m4-ci-smoke-room-complete"
     name: "CI smoke + npm scripts + ROOM COMPLETE"
     status: completed
+    commit: "5fd9cc26df13c6b0f70d58c7e94ad456c88b532d"
     estimated_files:
       - "package.json"
       - "scripts/smoke-eval-snapshot-ci.mjs"
