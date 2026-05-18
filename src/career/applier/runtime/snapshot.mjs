@@ -189,10 +189,14 @@ function pruneAxTree(rawNodes) {
 // Workday i18n strings have been observed containing \u200B (zero-width
 // space); we apply this to BOTH the displayed name AND the stored
 // name in the RefTable so getByRole still finds the element. (M2 fix.)
-const CONTROL_CHARS_RE = /[\u0000-\u001F\u007F-\u009F\u200B-\u200D\uFEFF]/g;
+// REVIEW H1 (m2 Plan + adv) fix: exported so 01-code-calibration's
+// runner.mjs can normalize truth-yml names through the SAME function
+// instead of mirroring the regex. Pre-fix the two files diverged on
+// next snapshot.mjs edit; export makes snapshot.mjs the single source.
+export const CONTROL_CHARS_RE = /[\u0000-\u001F\u007F-\u009F\u200B-\u200D\uFEFF]/g;
 const NAME_DISPLAY_CAP = 80;
 
-function normalizeName(rawName) {
+export function normalizeName(rawName) {
   if (!rawName) return '';
   // H2 fix: replace ASCII double-quote with single-quote in the stored
   // name BEFORE it reaches the RefTable + display. This way display and

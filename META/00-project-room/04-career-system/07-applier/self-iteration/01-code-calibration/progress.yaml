@@ -25,7 +25,7 @@ milestones:
 
   - id: "m2-eval-runner-score"
     name: "Eval runner + 3-dim score (coverage/noise/aria_accuracy) + report"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/eval/runner.mjs"
       - "src/career/eval/score.mjs"
@@ -89,8 +89,8 @@ milestones:
       (acceptance f). README documents capture → annotate → tune → review → commit loop.
       Lifecycle → done, ROOM COMPLETE rollup to parent + grandparent progress.
 
-current_sprint: "m2-eval-runner-score"
+current_sprint: "m3-auto-tuner-convergence"
 blockers: []   # 08-snapshot-refs-layer ROOM COMPLETE; snapshot.mjs INTERACTIVE_ROLES is the tune target
-completion: 25
-status_note: "🔄 in_dev. m1 shipped 2026-05-18 — schema/loader/capture CLI + 3 seed fixtures (greenhouse-anthropic, lever-stripe, custom-acme). Smoke 45/45 green. Phase 3.5 dual review applied 2 CRITICAL (file://-URL SSRF, page_type YAML injection) + 5 HIGH (TOCTOU readdir race, bidi-spoofing chars in name/reason, impossible dates like 2026-13-45, overwrite guard only checked truth not html, redundant waitForLoadState) + 4 MEDIUM (symlink rejection, keepBrowserAlive flag, CLI arg parser swallowing `--flag --flag`, captured_at portable signature) with named regression tests. Next: m2 eval runner."
+completion: 50
+status_note: "🔄 in_dev. m2 shipped 2026-05-18 — runner.mjs + report.mjs + eval-snapshot CLI + 37-assert smoke. End-to-end works: baseline aggregate 0% across 3 seeds (noise 100% — every must_not_detect leaks; calibration signal m3 will tune against, EXACTLY what spec acceptance (b) anticipated). Phase 3.5 dual review applied 1 CRITICAL stdout-flush race + 1 CRITICAL EH4 violation (setContent fires subresource fetches → route-abort all non-data:/about: requests) + 3 HIGH (normalizeName drift → exported from snapshot.mjs as single source, counts partition `uncategorized_missing` for m3 denominator clarity, out_of_allowlist captures observed_role for tuner add-role-vs-remap signal) + 1 HIGH smoke gap ({required:true, states:[]}) + 1 LOW (SOURCE_DATE_EPOCH determinism for EH1) — all with named regression tests. Tune target identified: noise=100% means snapshot allowlist + filter logic both need adjustment. Next: m3 deterministic auto-tuner."
 last_updated: "2026-05-18"
