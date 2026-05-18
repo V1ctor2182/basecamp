@@ -61,6 +61,7 @@ milestones:
   - id: "m3-promote-modal-coverage-room-complete"
     name: "Promote modal + Coverage detail + smoke + ROOM COMPLETE"
     status: completed
+    commit: "c46890887b64d7ebddd94f4845a0986ca868d1b4"
     estimated_files:
       - "src/career/Iteration.tsx"   # promote modal + D section
       - "src/career/iteration.css"
