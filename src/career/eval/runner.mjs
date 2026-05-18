@@ -80,7 +80,7 @@ export function parseSnapshotText(text) {
  * @param {import('playwright').Page} page
  * @returns {Promise<FixtureResult>}
  */
-export async function evalFixture(fixture, page) {
+export async function evalFixture(fixture, page, opts = {}) {
   // REVIEW H4 (adv) fix [CRITICAL: EH4 enforcement]: page.setContent
   // does NOT prevent subresource fetches. A fixture HTML referencing
   // `<img src=https://cdn...>` / `<link rel=stylesheet>` / `<script>`
@@ -105,7 +105,10 @@ export async function evalFixture(fixture, page) {
   } finally {
     await page.unroute('**/*', abortHandler).catch(() => {});
   }
-  const snap = await snapshot(page);
+  // m3: forward opts.roleAllowlist / opts.allowlistSet so the tuner can
+  // simulate allowlist variants without mutating snapshot.mjs's frozen
+  // INTERACTIVE_SET.
+  const snap = await snapshot(page, opts);
   const nodes = parseSnapshotText(snap.text);
   const score = scoreFixture(fixture, nodes);
   return {
@@ -224,8 +227,13 @@ export function scoreFixture(fixture, nodes) {
 
   for (const ban of truth.must_not_detect) {
     const banName = normalizeName(ban.name);
-    if (nodesByName.has(banName)) {
-      detail.leaked.push({ name: banName, reason: ban.reason });
+    const observed = nodesByName.get(banName);
+    if (observed && observed.length) {
+      // m3 fix: surface the observed role(s) so candidates.mjs can
+      // generate "remove role X" candidates. Pre-fix the tuner had no
+      // way to know which role to drop for a given leak.
+      const observedRoles = Array.from(new Set(observed.map((n) => n.role))).sort();
+      detail.leaked.push({ name: banName, reason: ban.reason, observed_roles: observedRoles });
     }
   }
 
@@ -320,7 +328,9 @@ export async function evalRegistry(registry, opts = {}) {
     for (const fx of registry.fixtures) {
       const page = await getPage();
       try {
-        const res = await evalFixture(fx, page);
+        // m3: forward roleAllowlist (and any other snapshot opts) to
+        // each per-fixture evalFixture call.
+        const res = await evalFixture(fx, page, opts);
         results.push(res);
       } finally {
         await page.close().catch(() => {});

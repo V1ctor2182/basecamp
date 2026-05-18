@@ -48,7 +48,7 @@ milestones:
 
   - id: "m3-auto-tuner-convergence"
     name: "Deterministic auto-tuner + ≤5% regression gate + iteration log + reviewable diff"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/eval/tuner.mjs"
       - "src/career/eval/candidates.mjs"
@@ -90,8 +90,8 @@ milestones:
       (acceptance f). README documents capture → annotate → tune → review → commit loop.
       Lifecycle → done, ROOM COMPLETE rollup to parent + grandparent progress.
 
-current_sprint: "m3-auto-tuner-convergence"
+current_sprint: "m4-ci-smoke-room-complete"
 blockers: []   # 08-snapshot-refs-layer ROOM COMPLETE; snapshot.mjs INTERACTIVE_ROLES is the tune target
-completion: 50
-status_note: "🔄 in_dev. m2 shipped 2026-05-18 — runner.mjs + report.mjs + eval-snapshot CLI + 37-assert smoke. End-to-end works: baseline aggregate 0% across 3 seeds (noise 100% — every must_not_detect leaks; calibration signal m3 will tune against, EXACTLY what spec acceptance (b) anticipated). Phase 3.5 dual review applied 1 CRITICAL stdout-flush race + 1 CRITICAL EH4 violation (setContent fires subresource fetches → route-abort all non-data:/about: requests) + 3 HIGH (normalizeName drift → exported from snapshot.mjs as single source, counts partition `uncategorized_missing` for m3 denominator clarity, out_of_allowlist captures observed_role for tuner add-role-vs-remap signal) + 1 HIGH smoke gap ({required:true, states:[]}) + 1 LOW (SOURCE_DATE_EPOCH determinism for EH1) — all with named regression tests. Tune target identified: noise=100% means snapshot allowlist + filter logic both need adjustment. Next: m3 deterministic auto-tuner."
+completion: 75
+status_note: "🔄 in_dev. m3 shipped 2026-05-18 — tuner.mjs + candidates.mjs + iterationLog.mjs + tune-snapshot CLI + 33-assert smoke. End-to-end: 1 iteration accepted (remove `link` from INTERACTIVE_ROLES), aggregate min 0% → 57.14%, converged, no regressions. Phase 3.5 dual review applied 2 CRITICAL (NaN/undefined baseline bypassed EH2 gate → perFixtureDeltas returns -Infinity; CLI --out/--log path traversal → could overwrite snapshot.mjs, EH5 violation → output paths validated under data/career/eval-fixtures with explicit --allow-external-out opt-in) + 4 HIGH (triedKeys now tracks rejected candidates so they're not infinitely re-evaluated; convergence vs stalled distinguished with `stalled` flag; rejected_candidates list captures every rejection per iteration, not just one example; MAX_CANDIDATES_PER_ITER=50 caps DoS via adversarial truth.yml) + 3 MEDIUM (CLI exit code 2 on non-convergence/stall for m4 CI gate; tuner outputs gitignored as ephemeral artifacts; rename proposed-allowlist.diff→.txt since not a real unified diff) + 2 smoke gaps (rejected_no_improvement, multiple rejection reasons per iter). Next: m4 npm scripts + CI smoke + ROOM COMPLETE."
 last_updated: "2026-05-18"

@@ -171,11 +171,15 @@ function readStates(axNode) {
  *
  * @returns {{ role: string, name: string, states: string[], backendNodeId: number | null }[]}
  */
-function pruneAxTree(rawNodes) {
+function pruneAxTree(rawNodes, allowlistSet = INTERACTIVE_SET) {
+  // 01-code-calibration m3 fix: optional allowlistSet param so the
+  // auto-tuner can simulate "what if we added/removed a role?" without
+  // monkey-patching the frozen module-level INTERACTIVE_SET. Default
+  // keeps the existing behavior for every other caller.
   const result = [];
   for (const n of rawNodes) {
     const role = n.role?.value;
-    if (!role || !INTERACTIVE_SET.has(role)) continue;
+    if (!role || !allowlistSet.has(role)) continue;
     const name = resolveAccessibleName(n);
     if (!name) continue; // Q4: no name → skip (m1 simplification)
     const states = readStates(n);
@@ -273,7 +277,17 @@ async function _raceTimeout(promise, ms, label) {
  * @param {import('playwright').Page} page
  * @returns {Promise<{ text: string, table: RefTable }>}
  */
-export async function snapshot(page) {
+export async function snapshot(page, opts = {}) {
+  // 01-code-calibration m3: optional roleAllowlist (Set<string> or
+  // string[]) lets the auto-tuner simulate allowlist variants without
+  // mutating the module-frozen INTERACTIVE_SET. Default = production
+  // allowlist; behavior unchanged for every other caller.
+  const allowlistSet =
+    opts.roleAllowlist == null
+      ? INTERACTIVE_SET
+      : opts.roleAllowlist instanceof Set
+        ? opts.roleAllowlist
+        : new Set(opts.roleAllowlist);
   const cdp = await getCDPSession(page);
   await ensureAccessibilityEnabled(cdp);
 
@@ -342,7 +356,7 @@ export async function snapshot(page) {
       skippedFrames++;
       continue;
     }
-    const pruned = pruneAxTree(nodes);
+    const pruned = pruneAxTree(nodes, allowlistSet);
     const refFrame = i === 0 ? null : pwFrame;
     const isIframe = i > 0;
     /** @type {Map<string, number>} */
