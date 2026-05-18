@@ -8,7 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "init:career": "bash scripts/init-career.sh"
+    "init:career": "bash scripts/init-career.sh",
+    "eval:snapshot": "SMOKE=1 node scripts/eval-snapshot.mjs",
+    "tune:snapshot": "SMOKE=1 node scripts/tune-snapshot.mjs",
+    "test:eval-snapshot": "SMOKE=1 node scripts/smoke-eval-snapshot-ci.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",

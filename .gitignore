@@ -96,3 +96,8 @@ skills-lock.json
 
 # Embedded repos / local workspaces
 career-ops/
+
+# 01-code-calibration tuner outputs (regenerable, never committed — EH5).
+data/career/eval-fixtures/proposed-allowlist.txt
+data/career/eval-fixtures/proposed-allowlist.diff
+data/career/eval-fixtures/tuner-log.json

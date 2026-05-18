@@ -171,11 +171,15 @@ function readStates(axNode) {
  *
  * @returns {{ role: string, name: string, states: string[], backendNodeId: number | null }[]}
  */
-function pruneAxTree(rawNodes) {
+function pruneAxTree(rawNodes, allowlistSet = INTERACTIVE_SET) {
+  // 01-code-calibration m3 fix: optional allowlistSet param so the
+  // auto-tuner can simulate "what if we added/removed a role?" without
+  // monkey-patching the frozen module-level INTERACTIVE_SET. Default
+  // keeps the existing behavior for every other caller.
   const result = [];
   for (const n of rawNodes) {
     const role = n.role?.value;
-    if (!role || !INTERACTIVE_SET.has(role)) continue;
+    if (!role || !allowlistSet.has(role)) continue;
     const name = resolveAccessibleName(n);
     if (!name) continue; // Q4: no name → skip (m1 simplification)
     const states = readStates(n);
@@ -189,10 +193,14 @@ function pruneAxTree(rawNodes) {
 // Workday i18n strings have been observed containing \u200B (zero-width
 // space); we apply this to BOTH the displayed name AND the stored
 // name in the RefTable so getByRole still finds the element. (M2 fix.)
-const CONTROL_CHARS_RE = /[\u0000-\u001F\u007F-\u009F\u200B-\u200D\uFEFF]/g;
+// REVIEW H1 (m2 Plan + adv) fix: exported so 01-code-calibration's
+// runner.mjs can normalize truth-yml names through the SAME function
+// instead of mirroring the regex. Pre-fix the two files diverged on
+// next snapshot.mjs edit; export makes snapshot.mjs the single source.
+export const CONTROL_CHARS_RE = /[\u0000-\u001F\u007F-\u009F\u200B-\u200D\uFEFF]/g;
 const NAME_DISPLAY_CAP = 80;
 
-function normalizeName(rawName) {
+export function normalizeName(rawName) {
   if (!rawName) return '';
   // H2 fix: replace ASCII double-quote with single-quote in the stored
   // name BEFORE it reaches the RefTable + display. This way display and
@@ -269,7 +277,17 @@ async function _raceTimeout(promise, ms, label) {
  * @param {import('playwright').Page} page
  * @returns {Promise<{ text: string, table: RefTable }>}
  */
-export async function snapshot(page) {
+export async function snapshot(page, opts = {}) {
+  // 01-code-calibration m3: optional roleAllowlist (Set<string> or
+  // string[]) lets the auto-tuner simulate allowlist variants without
+  // mutating the module-frozen INTERACTIVE_SET. Default = production
+  // allowlist; behavior unchanged for every other caller.
+  const allowlistSet =
+    opts.roleAllowlist == null
+      ? INTERACTIVE_SET
+      : opts.roleAllowlist instanceof Set
+        ? opts.roleAllowlist
+        : new Set(opts.roleAllowlist);
   const cdp = await getCDPSession(page);
   await ensureAccessibilityEnabled(cdp);
 
@@ -338,7 +356,7 @@ export async function snapshot(page) {
       skippedFrames++;
       continue;
     }
-    const pruned = pruneAxTree(nodes);
+    const pruned = pruneAxTree(nodes, allowlistSet);
     const refFrame = i === 0 ? null : pwFrame;
     const isIframe = i > 0;
     /** @type {Map<string, number>} */

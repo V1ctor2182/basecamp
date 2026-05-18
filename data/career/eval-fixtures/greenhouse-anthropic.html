@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Apply for Software Engineer at Anthropic — Greenhouse</title>
+</head>
+<body>
+  <header>
+    <nav aria-label="Primary">
+      <a href="https://www.anthropic.com">Anthropic</a>
+      <a href="/anthropic/jobs">Open positions</a>
+      <a href="/anthropic/privacy">Privacy Policy</a>
+    </nav>
+  </header>
+
+  <main id="main_fields">
+    <h1>Software Engineer, Infrastructure</h1>
+    <h2>San Francisco · Full-time</h2>
+
+    <form id="application-form" action="/anthropic/jobs/123/apply" method="post" enctype="multipart/form-data">
+      <fieldset>
+        <legend>Personal information</legend>
+
+        <div class="field">
+          <label for="first_name">First Name <span aria-hidden="true">*</span></label>
+          <input id="first_name" name="first_name" type="text" aria-required="true" required />
+        </div>
+
+        <div class="field">
+          <label for="last_name">Last Name <span aria-hidden="true">*</span></label>
+          <input id="last_name" name="last_name" type="text" aria-required="true" required />
+        </div>
+
+        <div class="field">
+          <label for="email">Email <span aria-hidden="true">*</span></label>
+          <input id="email" name="email" type="email" aria-required="true" required />
+        </div>
+
+        <div class="field">
+          <label for="phone">Phone</label>
+          <input id="phone" name="phone" type="tel" />
+        </div>
+
+        <div class="field">
+          <label for="resume">Resume/CV <span aria-hidden="true">*</span></label>
+          <input id="resume" name="resume" type="file" accept=".pdf,.doc,.docx" aria-required="true" />
+        </div>
+
+        <div class="field">
+          <label for="cover_letter">Cover Letter</label>
+          <textarea id="cover_letter" name="cover_letter" rows="6"></textarea>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Work eligibility</legend>
+
+        <div class="field">
+          <label for="work_auth">Are you authorized to work in the United States? <span aria-hidden="true">*</span></label>
+          <select id="work_auth" name="work_auth" aria-required="true" required>
+            <option value="">Select...</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="sponsorship">Will you now or in the future require sponsorship? <span aria-hidden="true">*</span></label>
+          <select id="sponsorship" name="sponsorship" aria-required="true" required>
+            <option value="">Select...</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+      </fieldset>
+
+      <div class="actions">
+        <button type="submit">Submit Application</button>
+      </div>
+    </form>
+  </main>
+
+  <footer>
+    <div role="banner" aria-label="cookie consent">
+      We use cookies. <button type="button">Accept</button>
+    </div>
+    <nav aria-label="Footer">
+      <a href="/anthropic/privacy">Privacy Policy</a>
+      <a href="/anthropic/terms">Terms of Service</a>
+      <a href="https://www.greenhouse.io">Powered by Greenhouse</a>
+    </nav>
+  </footer>
+</body>
+</html>

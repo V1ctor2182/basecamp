@@ -1,0 +1,25 @@
+# Ground-truth annotation for greenhouse-anthropic.html
+# Hand-crafted seed fixture (m1). Modeled on Greenhouse public boards.
+# EH3: human-annotated, never LLM-generated.
+
+url: "https://boards.greenhouse.io/anthropic/jobs/123"
+captured_at: 2026-05-18
+vendor: greenhouse
+page_type: apply-form
+
+must_detect:
+  - { role: textbox, name: "First Name", required: true }
+  - { role: textbox, name: "Last Name", required: true }
+  - { role: textbox, name: "Email", required: true }
+  - { role: textbox, name: "Phone" }
+  - { role: textbox, name: "Cover Letter" }
+  - { role: combobox, name: "Are you authorized to work in the United States?", required: true }
+  - { role: combobox, name: "Will you now or in the future require sponsorship?", required: true }
+  - { role: button, name: "Submit Application" }
+
+must_not_detect:
+  - { name: "Accept", reason: "cookie consent banner noise" }
+  - { name: "Privacy Policy", reason: "footer nav link, not form" }
+  - { name: "Terms of Service", reason: "footer nav link, not form" }
+  - { name: "Powered by Greenhouse", reason: "vendor attribution link" }
+  - { name: "Open positions", reason: "header nav, not form" }

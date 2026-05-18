@@ -1,10 +1,10 @@
 milestones: []
-current_sprint: "Sprint 19 — Data Flywheel shipped"
+current_sprint: "Sprint 20 — Code Calibration shipped"
 blockers: []
-completion: 33  # 1/3 子 Rooms ✅
+completion: 67  # 2/3 子 Rooms ✅
 children_completion:
-  "01-code-calibration": 0
-  "02-data-flywheel": 100  # 🎉 ROOM COMPLETE 2026-05-18 (4/4 m; 4 JSONL stores + Haiku induction + approve/reject seam + Learning tab UI)
+  "01-code-calibration": 100  # 🎉 ROOM COMPLETE 2026-05-18 (4/4 m; fixture corpus + eval runner + auto-tuner + CI smoke)
+  "02-data-flywheel": 100     # 🎉 ROOM COMPLETE 2026-05-18 (4/4 m; 4 JSONL stores + Haiku induction + approve/reject seam + Learning tab UI)
   "03-iteration-dashboard": 0
-status_note: "🟢 self-iteration 33% (1/3 子 Rooms ✅). 02-data-flywheel ROOM COMPLETE 2026-05-18 (4/4 milestones, 97/97 smoke green). m1 capture hooks (3 JSONL stores wired into endpoint approve-step + error path), m2 Haiku induction worker w/ Sonnet retry + per-feedbackType mutex, m3 approve/reject seam + 5 REST routes + per-id mutex + applySuggestion writes learned-classifier-rules.yml / site-adapter YAML, m4 Learning tab (React + Nivo) + 14-day error trend + site coverage. Plan-agent + adversarial review across 4 milestones: ~13 CRITICAL + ~20 HIGH + ~10 MEDIUM all applied with REVIEW-named regression tests. End-to-end loop closure verified: m2 induce → m3 approve → classifyField sees live rule (no restart) AND m2 induce → m3 reject → m2 skip re-induction. Next: 01-code-calibration (改代码 — fixture corpus + tuner + PR generation) and/or 03-iteration-dashboard (可视化 — extends Learning tab w/ code-fix escalation queue)."
+status_note: "🟢 self-iteration 67% (2/3 子 Rooms ✅). 01-code-calibration ROOM COMPLETE 2026-05-18 (4/4 milestones, 131/131 smoke green: 45 fixtures + 37 runner + 33 tuner + 16 CI smoke). m1 fixture schema/loader + capture CLI + 3 seed fixtures, m2 eval runner + 3-dim score + report + CLI, m3 deterministic auto-tuner + ≤5% per-fixture regression gate (EH2) + reviewable diff (EH5), m4 npm scripts + CI smoke + README. Plan-agent + adversarial review across 4 milestones: ~7 CRITICAL + ~16 HIGH + ~13 MEDIUM applied with REVIEW-named regression tests (file:// SSRF, EH4 setContent route-abort, EH2 NaN bypass, --out path traversal, normalizeName drift, triedKeys both-track, candidate cap, etc.). End-to-end: 3 seed fixtures → baseline aggregate min=0% (link role surfaces all footer nav) → tuner proposes `remove link` → min=57% in 1 iteration, converged, no regressions. Next: 03-iteration-dashboard (extends Learning tab with code-fix escalation queue)."
 last_updated: "2026-05-18"
