@@ -307,6 +307,20 @@ commits:
       - "intent-data-flywheel-001 (anchors: feedback/applySuggestion.mjs + suggestionStore.mjs serializeByKey export + server.mjs 5 feedback routes + smoke-feedback-apply-suggestion.mjs)"
     milestones_affected:
       - "m3-approve-reject-seam-apply-suggestion (→ completed)"
+  - hash: "5f443fb"
+    date: "2026-05-18"
+    message: "[04-career-system/07-applier/self-iteration/02-data-flywheel] m4: Learning tab UI + stats endpoints + ROOM COMPLETE (smoke 12/12, Room total 97/97)"
+    files_changed: 13
+    specs_affected:
+      - "intent-data-flywheel-001 (anchors: Learning.tsx + learning.css + CareerNav.tsx + CareerApp.tsx + server.mjs stats/site-coverage endpoints + smoke-feedback-stats-endpoint.mjs)"
+    milestones_affected:
+      - "m4-learning-tab-ui-room-complete (→ completed, ROOM COMPLETE)"
+    rollups:
+      - "room.yaml lifecycle: planning → active"
+      - "_tree.yaml 02-data-flywheel: planning → active"
+      - "self-iteration parent: 0% → 33% (1/3 子 Rooms ✅)"
+      - "07-applier: 88% → 91%"
+      - "04-career-system: 97% → 98%"
 current_sprint: "Sprint 19 — Data Flywheel"
 blockers: []
 status_note: "🎉 ROOM COMPLETE 2026-05-18 (4/4 milestones, 97/97 smoke green = m1 24 + m2 26 + m3 25 + m4 12 stats backend + UI build-verified via tsc + vite build). m4 shipped: server.mjs +110 LOC extended /api/career/feedback/stats with 14-day error_series (local-day bucketing per REVIEW C1 — pre-fix UTC caused off-by-one near midnight) + heavy-edit threshold (>50 chars) excluding small typo-fix edits + Number.isFinite guard per REVIEW M1; new /api/career/feedback/site-coverage joins recent failures with bundled-adapter detection (deterministic tiebreak alpha + 50-row limit per REVIEW H2 + lowercase domain Map key per REVIEW H3). Learning.tsx (~400 LOC) 4 collapsible cards: 30d flywheel stats / classifier error signals chart (Nivo line, 14d, lower=better) / pending suggestions with Approve+Reject buttons & inline regex/YAML preview / site adapter coverage table; AbortController + mountedRef guard on action fetch (REVIEW C4); actionBusyRef gates auto-refresh during in-flight POST (REVIEW C3 — pre-fix race could yield ghost 409); sanitizeForDisplay strips control + bidi + zero-width chars from LLM-emitted regex/rationale/YAML before render (REVIEW H4 social-engineering vector — react escapes HTML but doesn't address spoofing). learning.css ~260 LOC c-learning-* tokens matching c-resumes / ov-* style — no new palette. CareerNav.tsx + CareerApp.tsx wired Learning tab + route + VALID_TABS entry (REVIEW #1 Plan). Plan-agent + adversarial review: 4 CRITICAL + 5 HIGH + 1 MEDIUM applied — every fix has REVIEW-named regression. Regression: 04-multi-step 153/153 + 05 nonstandard 157/157 + 06 site-adapters 81/81 + 03 field-classifier 95/95 + feedback m1/m2/m3 = 75/75 still green. vite build clean (6.17s). ROOM COMPLETE rollups: room.yaml lifecycle planning→active, _tree.yaml planning→active, self-iteration parent 0%→33% (1/3 子 Rooms ✅), 07-applier 88%→91%, 04-career-system 97%→98%. 下游 unblocked: self-iteration/01-code-calibration (consumes site-failures + field-misclassified as fixture corpus for the code-fix loop), self-iteration/03-iteration-dashboard (extends Learning tab with code-fix escalation queue + 02↔01 escalation contract visualization)."
