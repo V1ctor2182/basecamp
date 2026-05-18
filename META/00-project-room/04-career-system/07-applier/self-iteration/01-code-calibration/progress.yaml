@@ -2,6 +2,7 @@ milestones:
   - id: "m1-fixture-corpus-loader"
     name: "Fixture corpus + ground-truth schema + loader + capture CLI"
     status: completed
+    commit: "3161e80897930b7ef77da1a87953f6f077291f0a"
     estimated_files:
       - "src/career/eval/fixtures/schema.mjs"
       - "src/career/eval/fixtures/loader.mjs"
