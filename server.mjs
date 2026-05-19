@@ -3192,6 +3192,104 @@ app.get('/api/career/finder/pipeline', async (req, res) => {
   }
 });
 
+// ─── Finder: raw-scan/latest.json read (drill-in view for Find Jobs UI) ─
+// Returns every job from the latest scan, tagged with _passed / _dropped_by /
+// _dropped_detail so the UI can show "what got filtered and why" alongside
+// passing jobs. Query params:
+//   q       — case-insensitive substring filter on company / role
+//   source  — exact match on source.name (e.g. 'Anthropic')
+//   status  — 'all' | 'passed' | 'dropped' (default 'all')
+//   limit   — page size (default 60, max 300)
+//   offset  — page offset (default 0)
+app.get('/api/career/finder/raw-jobs', async (req, res) => {
+  try {
+    const { RAW_SCAN_LATEST } = await import('./src/career/finder/scanRunner.mjs');
+    if (!existsSync(RAW_SCAN_LATEST)) {
+      return res.json({
+        total: 0,
+        passed: 0,
+        dropped: 0,
+        filtered: 0,
+        jobs: [],
+        sources: [],
+        dropped_by_rule: {},
+        last_scan_at: null,
+      });
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(await fs.readFile(RAW_SCAN_LATEST, 'utf-8'));
+    } catch {
+      return res.json({
+        total: 0,
+        passed: 0,
+        dropped: 0,
+        filtered: 0,
+        jobs: [],
+        sources: [],
+        dropped_by_rule: {},
+        last_scan_at: null,
+      });
+    }
+    const allJobs = Array.isArray(parsed?.jobs) ? parsed.jobs : [];
+
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
+    const source = typeof req.query.source === 'string' ? req.query.source.trim() : '';
+    const status = ['all', 'passed', 'dropped'].includes(req.query.status)
+      ? req.query.status
+      : 'all';
+    const limit = Math.min(Math.max(1, Number(req.query.limit) || 60), 300);
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+
+    let jobs = allJobs;
+    if (status === 'passed') jobs = jobs.filter((j) => j._passed === true);
+    else if (status === 'dropped') jobs = jobs.filter((j) => j._passed === false);
+    if (source) jobs = jobs.filter((j) => j.source && j.source.name === source);
+    if (q) {
+      jobs = jobs.filter((j) => {
+        const c = String(j.company ?? '').toLowerCase();
+        const r = String(j.role ?? '').toLowerCase();
+        return c.includes(q) || r.includes(q);
+      });
+    }
+
+    const filtered = jobs.length;
+    const page = jobs.slice(offset, offset + limit);
+    const trimmed = page.map((j) => ({
+      id: j.id,
+      company: j.company,
+      role: j.role,
+      location: j.location,
+      url: j.url,
+      source: j.source ? { type: j.source.type, name: j.source.name } : null,
+      tags: j.tags,
+      comp_hint: j.comp_hint,
+      posted_at: j.posted_at,
+      scraped_at: j.scraped_at,
+      _passed: j._passed,
+      _dropped_by: j._dropped_by,
+      _dropped_detail: j._dropped_detail,
+    }));
+
+    const sources = Array.from(
+      new Set(allJobs.map((j) => j.source?.name).filter((n) => typeof n === 'string')),
+    ).sort();
+
+    res.json({
+      total: parsed?.total ?? allJobs.length,
+      passed: parsed?.passed ?? allJobs.filter((j) => j._passed).length,
+      dropped: parsed?.dropped ?? allJobs.filter((j) => !j._passed).length,
+      dropped_by_rule: parsed?.dropped_by_rule ?? {},
+      filtered,
+      jobs: trimmed,
+      sources,
+      last_scan_at: parsed?.last_scan_at ?? null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message ?? e).slice(0, 300) });
+  }
+});
+
 // ─── Finder: portals.yml CRUD ──────────────────────────────────────────
 app.get('/api/career/finder/portals', async (_req, res) => {
   try {

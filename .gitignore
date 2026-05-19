@@ -47,6 +47,8 @@ data/career/cv.gdoc-id.local
 # Ephemeral runtime state / logs (regenerated per run)
 data/career/applications.json
 data/career/pipeline.json
+# find-jobs-redesign m1.a: raw-scan snapshot (runtime artifact, regenerable per scan).
+data/career/raw-scan/
 data/career/scan-history.jsonl
 data/career/archive.jsonl
 data/career/scan-cadence-state.json

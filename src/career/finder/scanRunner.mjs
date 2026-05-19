@@ -19,6 +19,13 @@ import { updateForTypes as updateCadenceForTypes } from './cadenceState.mjs';
 const DATA_DIR = path.resolve('data');
 const CAREER_DIR = path.join(DATA_DIR, 'career');
 export const PIPELINE_FILE = path.join(CAREER_DIR, 'pipeline.json');
+// 06-evaluator/find-jobs-redesign m1.a — raw-scan persistence.
+// Stores ALL scanned jobs (kept + dropped) with per-job filter outcome
+// so the Find Jobs UI can show "what got dropped and why" via a drill-in
+// drawer. Single snapshot file (latest scan only) — historical archive
+// can be added later if operator review patterns demand it.
+export const RAW_SCAN_DIR = path.join(CAREER_DIR, 'raw-scan');
+export const RAW_SCAN_LATEST = path.join(RAW_SCAN_DIR, 'latest.json');
 const PREFERENCES_FILE = path.join(CAREER_DIR, 'preferences.yml');
 
 // Conservative reader — yaml load with empty fallback. We do NOT Zod-parse here
@@ -283,6 +290,70 @@ async function runScanCore({ types } = {}) {
       );
     }
   }
+
+  // m1.a: Build and persist the raw-scan snapshot — every job pulled
+  // from the ATS APIs this run (NOT just the post-dedupe new ones) gets
+  // run through hardFilter again so the UI shows "for every job we
+  // scanned, would it pass your CURRENT filter, and if not, why?".
+  // Dedupe is a pipeline.json concern (don't re-add already-known jobs
+  // to the kept-list); the raw-scan view wants the full picture.
+  const rawFilterResult = applyHardFilterBatch(allJobs, prefs);
+  const rawThisRun = [
+    ...rawFilterResult.kept.map((j) => ({
+      ...j,
+      _passed: true,
+      _dropped_by: null,
+      _dropped_detail: null,
+    })),
+    ...rawFilterResult.dropped.map(({ job, rule_id, matched_value }) => ({
+      ...job,
+      _passed: false,
+      _dropped_by: rule_id,
+      _dropped_detail: matched_value,
+    })),
+  ];
+  let mergedRaw = rawThisRun;
+  if (typeFilter && existsSync(RAW_SCAN_LATEST)) {
+    try {
+      const existingRaw = JSON.parse(await fs.readFile(RAW_SCAN_LATEST, 'utf-8'));
+      const existingJobs = Array.isArray(existingRaw?.jobs) ? existingRaw.jobs : [];
+      const successfulSources = new Set();
+      for (const entry of scan_summary) {
+        if (!entry.error || entry.count > 0) {
+          successfulSources.add(`${entry.type}::${entry.source}`);
+        }
+      }
+      const otherJobs = existingJobs.filter((j) => {
+        if (!j || typeof j !== 'object' || !j.source) return false;
+        if (!typeFilter.has(j.source.type)) return true;
+        const tag = `${j.source.type}::${j.source.name}`;
+        return !successfulSources.has(tag);
+      });
+      mergedRaw = [...otherJobs, ...rawThisRun];
+    } catch (e) {
+      console.warn(
+        '[scanRunner] raw-scan merge: latest.json unparseable, falling back to filter-only result:',
+        e?.message
+      );
+    }
+  }
+  const droppedByRuleAggregate = {};
+  for (const j of mergedRaw) {
+    if (j._passed) continue;
+    const rule = j._dropped_by || 'unknown';
+    droppedByRuleAggregate[rule] = (droppedByRuleAggregate[rule] || 0) + 1;
+  }
+  if (!existsSync(RAW_SCAN_DIR)) {
+    await fs.mkdir(RAW_SCAN_DIR, { recursive: true });
+  }
+  await atomicWriteJson(RAW_SCAN_LATEST, {
+    last_scan_at: new Date().toISOString(),
+    total: mergedRaw.length,
+    passed: mergedRaw.filter((j) => j._passed).length,
+    dropped: mergedRaw.filter((j) => !j._passed).length,
+    dropped_by_rule: droppedByRuleAggregate,
+    jobs: mergedRaw,
+  });
 
   await atomicWriteJson(PIPELINE_FILE, {
     last_scan_at: new Date().toISOString(),
