@@ -149,36 +149,44 @@ function asArr(v) {
 // Returns { kept: bool, rule_id, matched_value } for a single Job.
 export function applyHardFilter(job, prefs) {
   const hf = prefs?.hard_filters ?? {};
+  // find-jobs-redesign m1: skip any rule the user has explicitly disabled
+  // (preferences.hard_filters.disabled_rules). Default-empty array →
+  // every rule runs (existing behavior).
+  const disabledRules = new Set(Array.isArray(hf.disabled_rules) ? hf.disabled_rules : []);
 
   // 1. source_filter
-  const blockedSources = asArr(hf.source_filter?.blocked_sources);
-  if (blockedSources.length > 0 && job.source?.type) {
-    const blockedLower = blockedSources.map((s) => String(s).toLowerCase());
-    if (blockedLower.includes(String(job.source.type).toLowerCase())) {
-      return { kept: false, rule_id: 'source_filter', matched_value: job.source.type };
+  if (!disabledRules.has('source_filter')) {
+    const blockedSources = asArr(hf.source_filter?.blocked_sources);
+    if (blockedSources.length > 0 && job.source?.type) {
+      const blockedLower = blockedSources.map((s) => String(s).toLowerCase());
+      if (blockedLower.includes(String(job.source.type).toLowerCase())) {
+        return { kept: false, rule_id: 'source_filter', matched_value: job.source.type };
+      }
     }
   }
 
   // 2. company_blocklist
-  const companyBlock = compileMatcher(asArr(hf.company_blocklist), 'contains', false);
-  {
+  if (!disabledRules.has('company_blocklist')) {
+    const companyBlock = compileMatcher(asArr(hf.company_blocklist), 'contains', false);
     const m = companyBlock(job.company);
     if (m) return { kept: false, rule_id: 'company_blocklist', matched_value: m };
   }
 
   // 3. title_blocklist
-  const titleBlock = compileMatcher(asArr(hf.title_blocklist), 'contains', false);
-  {
+  if (!disabledRules.has('title_blocklist')) {
+    const titleBlock = compileMatcher(asArr(hf.title_blocklist), 'contains', false);
     const m = titleBlock(job.role);
     if (m) return { kept: false, rule_id: 'title_blocklist', matched_value: m };
   }
 
   // 4. title_allowlist (drop if non-empty AND no match)
-  const allowList = asArr(hf.title_allowlist);
-  if (allowList.length > 0) {
-    const allow = compileMatcher(allowList, 'contains', false);
-    const m = allow(job.role);
-    if (!m) return { kept: false, rule_id: 'title_allowlist', matched_value: null };
+  if (!disabledRules.has('title_allowlist')) {
+    const allowList = asArr(hf.title_allowlist);
+    if (allowList.length > 0) {
+      const allow = compileMatcher(allowList, 'contains', false);
+      const m = allow(job.role);
+      if (!m) return { kept: false, rule_id: 'title_allowlist', matched_value: null };
+    }
   }
 
   // 5. location
@@ -187,7 +195,7 @@ export function applyHardFilter(job, prefs) {
   const disallowedCountries = asArr(hf.location?.disallowed_countries);
   const locs = Array.isArray(job.location) ? job.location.filter((l) => typeof l === 'string') : [];
 
-  if (allowedCities.length > 0 || allowedCountries.length > 0 || disallowedCountries.length > 0) {
+  if (!disabledRules.has('location') && (allowedCities.length > 0 || allowedCountries.length > 0 || disallowedCountries.length > 0)) {
     // Disallowed first (kills US-based jobs even if "Remote" is in array).
     const dis = locationMatchesDisallowedCountry(locs, disallowedCountries);
     if (dis) return { kept: false, rule_id: 'location', matched_value: `disallowed:${dis}` };
@@ -218,7 +226,7 @@ export function applyHardFilter(job, prefs) {
   // 6. seniority — accept the job if ANY extracted token is in `allowed`
   // ("Senior Staff Engineer" with allowed=[Staff] keeps; conservative).
   const allowedSeniority = Array.isArray(hf.seniority?.allowed) ? hf.seniority.allowed : [];
-  if (allowedSeniority.length > 0) {
+  if (!disabledRules.has('seniority') && allowedSeniority.length > 0) {
     const extracted = extractSeniorities(job.role);
     if (extracted.length > 0) {
       const allowedLower = new Set(allowedSeniority.map((s) => String(s).toLowerCase()));
@@ -232,7 +240,7 @@ export function applyHardFilter(job, prefs) {
 
   // 7. posted_within_days
   const within = hf.posted_within_days ?? 0;
-  if (within > 0 && typeof job.posted_at === 'string') {
+  if (!disabledRules.has('posted_within_days') && within > 0 && typeof job.posted_at === 'string') {
     const t = new Date(job.posted_at).getTime();
     if (!Number.isNaN(t)) {
       const ageDays = (Date.now() - t) / 86_400_000;
@@ -248,7 +256,7 @@ export function applyHardFilter(job, prefs) {
 
   // 8. comp_floor
   const cf = hf.comp_floor ?? {};
-  if (typeof cf.base_min === 'number' && cf.base_min > 0 && job.comp_hint) {
+  if (!disabledRules.has('comp_floor') && typeof cf.base_min === 'number' && cf.base_min > 0 && job.comp_hint) {
     const ch = job.comp_hint;
     const currencyOk = !cf.currency || !ch.currency || cf.currency.toLowerCase() === ch.currency.toLowerCase();
     if (currencyOk) {
@@ -265,6 +273,9 @@ export function applyHardFilter(job, prefs) {
   }
 
   // 9. jd_text_blocklist
+  if (disabledRules.has('jd_text_blocklist')) {
+    return { kept: true, rule_id: null, matched_value: null };
+  }
   const jdBlock = compileMatcher(asArr(hf.jd_text_blocklist), 'contains', false);
   if (typeof job.description === 'string') {
     const m = jdBlock(job.description);

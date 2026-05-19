@@ -51,6 +51,7 @@ type Preferences = {
       allowed_cities?: string[]
       disallowed_countries?: string[]
     }
+    disabled_rules?: string[]
   }
   // other prefs preserved on save
   [key: string]: unknown
@@ -411,6 +412,7 @@ function FilterEditor({
   const compFloor = hf.comp_floor?.base_min ?? 0
   const postedDays = hf.posted_within_days ?? 0
   const titleBlock = (hf.title_blocklist ?? []).join(', ')
+  const disabled = new Set(hf.disabled_rules ?? [])
 
   function setSeniorities(list: string[]) {
     onPatch((p) => ({ ...p, seniority: { allowed: list } }))
@@ -428,19 +430,31 @@ function FilterEditor({
     const list = s.split(',').map((x) => x.trim()).filter(Boolean)
     onPatch((p) => ({ ...p, title_blocklist: list }))
   }
+  function toggleRule(rule: string, nextEnabled: boolean) {
+    onPatch((p) => {
+      const existing = new Set(p.disabled_rules ?? [])
+      if (nextEnabled) existing.delete(rule)
+      else existing.add(rule)
+      return { ...p, disabled_rules: [...existing] }
+    })
+  }
 
   return (
     <div className="c-fj-section-body c-fj-filter-body">
       <div className={`c-fj-filter-grid`}>
         <FilterField
+          rule="seniority"
           highlighted={highlight === 'seniority'}
           label="Seniority allowlist"
-          hint="Empty = no seniority filter. Comma-separated."
+          hint="Empty = match any seniority. Comma-separated."
           dropCount={droppedByRule.seniority}
+          enabled={!disabled.has('seniority')}
+          onToggle={(b) => toggleRule('seniority', b)}
         >
           <input
             type="text"
             className="c-fj-input"
+            disabled={disabled.has('seniority')}
             value={allowedSeniorities.join(', ')}
             onChange={(e) =>
               setSeniorities(
@@ -455,14 +469,18 @@ function FilterEditor({
         </FilterField>
 
         <FilterField
+          rule="comp_floor"
           highlighted={highlight === 'comp_floor'}
           label="Min comp (USD)"
-          hint="0 = no comp filter. Drops jobs whose JD-stated comp is below."
+          hint="Drops jobs whose JD-stated comp is below. Disable to ignore comp entirely."
           dropCount={droppedByRule.comp_floor}
+          enabled={!disabled.has('comp_floor')}
+          onToggle={(b) => toggleRule('comp_floor', b)}
         >
           <input
             type="number"
             className="c-fj-input"
+            disabled={disabled.has('comp_floor')}
             min={0}
             step={10000}
             value={compFloor}
@@ -471,14 +489,18 @@ function FilterEditor({
         </FilterField>
 
         <FilterField
+          rule="posted_within_days"
           highlighted={highlight === 'posted_within_days'}
           label="Posted within (days)"
-          hint="0 = unlimited. Common: 60 days."
+          hint="0 = unlimited even when enabled. Common: 60 days."
           dropCount={droppedByRule.posted_within_days}
+          enabled={!disabled.has('posted_within_days')}
+          onToggle={(b) => toggleRule('posted_within_days', b)}
         >
           <input
             type="number"
             className="c-fj-input"
+            disabled={disabled.has('posted_within_days')}
             min={0}
             value={postedDays}
             onChange={(e) => setPostedDays(Number(e.target.value) || 0)}
@@ -486,18 +508,50 @@ function FilterEditor({
         </FilterField>
 
         <FilterField
+          rule="title_blocklist"
           highlighted={highlight === 'title_blocklist'}
           label="Title blocklist"
           hint="Comma-separated. Job dropped if role contains any of these (case-insensitive)."
           dropCount={droppedByRule.title_blocklist}
+          enabled={!disabled.has('title_blocklist')}
+          onToggle={(b) => toggleRule('title_blocklist', b)}
         >
           <input
             type="text"
             className="c-fj-input"
+            disabled={disabled.has('title_blocklist')}
             value={titleBlock}
             onChange={(e) => setTitleBlocklist(e.target.value)}
             placeholder="Embedded, Firmware, Game Developer"
           />
+        </FilterField>
+
+        <FilterField
+          rule="location"
+          highlighted={highlight === 'location'}
+          label="Location filter"
+          hint="Edit in full Preferences page. Toggle to disable the whole rule (keeps your country/city list)."
+          dropCount={droppedByRule.location}
+          enabled={!disabled.has('location')}
+          onToggle={(b) => toggleRule('location', b)}
+        >
+          <p className="c-fj-muted c-fj-filter-readonly">
+            {summarizeLocation(prefs.hard_filters.location)}
+          </p>
+        </FilterField>
+
+        <FilterField
+          rule="company_blocklist"
+          highlighted={highlight === 'company_blocklist'}
+          label="Company blocklist"
+          hint="Edit in full Preferences page. Toggle to disable without erasing the list."
+          dropCount={droppedByRule.company_blocklist}
+          enabled={!disabled.has('company_blocklist')}
+          onToggle={(b) => toggleRule('company_blocklist', b)}
+        >
+          <p className="c-fj-muted c-fj-filter-readonly">
+            {((prefs.hard_filters as { company_blocklist?: string[] }).company_blocklist || []).join(', ') || '— empty —'}
+          </p>
         </FilterField>
       </div>
 
@@ -520,30 +574,76 @@ function FilterEditor({
 }
 
 function FilterField({
+  rule,
   label,
   hint,
   highlighted,
   dropCount,
+  enabled,
+  onToggle,
   children,
 }: {
+  rule: string
   label: string
   hint: string
   highlighted: boolean
   dropCount?: number
+  enabled: boolean
+  onToggle: (next: boolean) => void
   children: React.ReactNode
 }) {
   return (
-    <div className={`c-fj-filter-field${highlighted ? ' c-fj-filter-field-hi' : ''}`}>
-      <label className="c-fj-filter-label">
-        {label}
-        {typeof dropCount === 'number' && dropCount > 0 && (
-          <span className="c-fj-filter-dropcount" title="Jobs dropped by this rule">{dropCount}</span>
-        )}
-      </label>
+    <div
+      className={
+        `c-fj-filter-field` +
+        (highlighted ? ' c-fj-filter-field-hi' : '') +
+        (enabled ? '' : ' c-fj-filter-field-off')
+      }
+    >
+      <div className="c-fj-filter-header">
+        <label className="c-fj-filter-label">
+          {label}
+          {typeof dropCount === 'number' && dropCount > 0 && (
+            <span
+              className={`c-fj-filter-dropcount${enabled ? '' : ' c-fj-filter-dropcount-off'}`}
+              title={enabled ? 'Jobs dropped by this rule' : 'Jobs this rule WOULD drop if re-enabled'}
+            >
+              {dropCount}
+            </span>
+          )}
+        </label>
+        <label className="c-fj-filter-toggle" title={enabled ? 'Disable this rule' : 'Enable this rule'}>
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => onToggle(e.target.checked)}
+            aria-label={`${enabled ? 'Disable' : 'Enable'} ${rule}`}
+          />
+          <span className="c-fj-filter-toggle-track">
+            <span className="c-fj-filter-toggle-thumb" />
+          </span>
+          <span className="c-fj-filter-toggle-label">{enabled ? 'On' : 'Off'}</span>
+        </label>
+      </div>
       {children}
       <span className="c-fj-filter-hint">{hint}</span>
     </div>
   )
+}
+
+function summarizeLocation(loc?: {
+  allowed_countries?: string[]
+  allowed_cities?: string[]
+  disallowed_countries?: string[]
+}): string {
+  if (!loc) return '— empty —'
+  const allowed = [...(loc.allowed_countries || []), ...(loc.allowed_cities || [])]
+  const disallowed = loc.disallowed_countries || []
+  if (allowed.length === 0 && disallowed.length === 0) return '— empty —'
+  const parts: string[] = []
+  if (allowed.length) parts.push(`allow: ${allowed.join(', ')}`)
+  if (disallowed.length) parts.push(`block: ${disallowed.join(', ')}`)
+  return parts.join(' · ')
 }
 
 function Pager({

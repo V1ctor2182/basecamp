@@ -115,6 +115,14 @@
   100% { box-shadow: 0 0 0 16px rgba(243, 192, 176, 0); }
 }
 
+.c-fj-filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
 .c-fj-filter-label {
   display: flex;
   align-items: center;
@@ -122,7 +130,99 @@
   font-size: 12px;
   font-weight: 600;
   color: #2d2520;
-  margin-bottom: 6px;
+}
+
+.c-fj-filter-field-off {
+  background: #fafaf7;
+  opacity: 0.75;
+}
+
+.c-fj-filter-field-off .c-fj-filter-label {
+  color: #6b6356;
+}
+
+/* Toggle switch (per-rule enable/disable) */
+.c-fj-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #6b6356;
+  user-select: none;
+}
+
+.c-fj-filter-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.c-fj-filter-toggle-track {
+  position: relative;
+  display: inline-block;
+  width: 28px;
+  height: 16px;
+  background: #ebe6dc;
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+
+.c-fj-filter-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(12, 10, 8, 0.2);
+  transition: transform 0.15s ease;
+}
+
+.c-fj-filter-toggle input:checked + .c-fj-filter-toggle-track {
+  background: #c0e6b0;
+}
+
+.c-fj-filter-toggle input:checked + .c-fj-filter-toggle-track .c-fj-filter-toggle-thumb {
+  transform: translateX(12px);
+}
+
+.c-fj-filter-toggle input:focus-visible + .c-fj-filter-toggle-track {
+  outline: 2px solid #fbe5d6;
+  outline-offset: 2px;
+}
+
+.c-fj-filter-toggle-label {
+  min-width: 18px;
+  font-weight: 600;
+  color: #2d2520;
+}
+
+.c-fj-filter-field-off .c-fj-filter-toggle-label {
+  color: #6b6356;
+  font-weight: 500;
+}
+
+.c-fj-filter-readonly {
+  margin: 0;
+  padding: 6px 10px;
+  background: #ffffff;
+  border: 1px solid #ebe6dc;
+  border-radius: 4px;
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.c-fj-filter-field-off .c-fj-filter-readonly,
+.c-fj-filter-field-off .c-fj-input {
+  background: #f4efe5;
+  color: #6b6356;
+}
+
+.c-fj-filter-dropcount-off {
+  background: #ebe6dc;
+  color: #6b6356;
 }
 
 .c-fj-filter-dropcount {

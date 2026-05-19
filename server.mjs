@@ -1422,6 +1422,20 @@ const LocationPrefSchema = z.object({
   acceptable_countries: STRS,
 });
 
+// 9 hard-filter rule IDs the user can disable without losing the value.
+// applyHardFilter() in src/career/finder/hardFilter.mjs honors this set.
+const RULE_IDS = [
+  'source_filter',
+  'company_blocklist',
+  'title_blocklist',
+  'title_allowlist',
+  'location',
+  'seniority',
+  'posted_within_days',
+  'comp_floor',
+  'jd_text_blocklist',
+];
+
 const HardFiltersSchema = z.object({
   source_filter: z.object({
     blocked_sources: STRS,
@@ -1444,6 +1458,9 @@ const HardFiltersSchema = z.object({
     currency: STR,
   }),
   jd_text_blocklist: STRS,
+  // find-jobs-redesign m1: per-rule disable without erasing the value.
+  // Empty / missing = all rules enabled (backward compatible).
+  disabled_rules: z.array(z.enum(RULE_IDS)).default([]),
 });
 
 const SoftPreferencesSchema = z.object({
@@ -1561,6 +1578,7 @@ function defaultPreferences() {
       posted_within_days: 0,
       comp_floor: { currency: 'USD' },
       jd_text_blocklist: [],
+      disabled_rules: [],
     },
     soft_preferences: {
       company_types: [],
