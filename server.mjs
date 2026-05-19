@@ -3210,6 +3210,138 @@ app.get('/api/career/finder/pipeline', async (req, res) => {
   }
 });
 
+// ─── Finder: re-filter raw-scan into pipeline.json ─────────────────────
+// find-jobs-redesign m1 follow-up: when the user changes hard_filters
+// (especially loosens them), the dedupe logic in scanRunner.mjs blocks
+// previously-seen job ids from re-entering pipeline.json — so loosened
+// filters never take effect without a manual `rm scan-history.jsonl`.
+// This endpoint solves that explicitly:
+//   1. Read data/career/raw-scan/latest.json (every job from the latest scan)
+//   2. Apply CURRENT hard_filters to all of them
+//   3. Rewrite data/career/pipeline.json with the kept set (replace)
+//   4. Truncate scan-history.jsonl so future scans don't re-dedupe these
+//      back out on the next pipeline.json write
+//
+// No ATS API calls. Synchronous, fast (~50ms for 3k jobs).
+app.post('/api/career/finder/refilter', async (_req, res) => {
+  try {
+    const { RAW_SCAN_LATEST, PIPELINE_FILE: PF, isPipelineBusy } = await import(
+      './src/career/finder/scanRunner.mjs'
+    );
+    if (typeof isPipelineBusy === 'function' && isPipelineBusy()) {
+      return res
+        .status(409)
+        .json({ error: 'A scan or enrich is currently writing pipeline.json. Try again in a few seconds.' });
+    }
+    if (!existsSync(RAW_SCAN_LATEST)) {
+      return res
+        .status(404)
+        .json({ error: 'No raw-scan/latest.json yet. Run a scan first (Find Jobs → ① Sources → Scan now).' });
+    }
+    let raw;
+    try {
+      raw = JSON.parse(await fs.readFile(RAW_SCAN_LATEST, 'utf-8'));
+    } catch (e) {
+      return res
+        .status(500)
+        .json({ error: `raw-scan/latest.json unparseable: ${String(e?.message ?? e).slice(0, 200)}` });
+    }
+    const rawJobs = Array.isArray(raw?.jobs) ? raw.jobs : [];
+    if (rawJobs.length === 0) {
+      return res.json({ ok: true, raw_count: 0, kept: 0, dropped: 0, dropped_per_rule: {} });
+    }
+
+    const prefs = await readPreferences();
+    const { applyHardFilterBatch } = await import('./src/career/finder/hardFilter.mjs');
+    const { kept, dropped } = applyHardFilterBatch(rawJobs, prefs);
+
+    const droppedPerRule = {};
+    for (const d of dropped) {
+      const r = d.rule_id || 'unknown';
+      droppedPerRule[r] = (droppedPerRule[r] || 0) + 1;
+    }
+
+    // Write pipeline.json — replace entire kept-jobs list with the
+    // refilter result. Preserve scan_summary if present so the UI keeps
+    // the "X raw jobs from N sources" header.
+    let existingSummary = [];
+    try {
+      if (existsSync(PF)) {
+        const p = JSON.parse(await fs.readFile(PF, 'utf-8'));
+        if (Array.isArray(p?.scan_summary)) existingSummary = p.scan_summary;
+      }
+    } catch {
+      /* fail-soft */
+    }
+
+    // Strip the raw-scan tagging fields before writing — pipeline.json
+    // entries should have their original shape (no _passed/_dropped_by).
+    const cleanedKept = kept.map((j) => {
+      const { _passed, _dropped_by, _dropped_detail, ...rest } = j;
+      void _passed;
+      void _dropped_by;
+      void _dropped_detail;
+      return rest;
+    });
+
+    const tmpPath = PF + `.tmp.${process.pid}`;
+    await fs.writeFile(
+      tmpPath,
+      JSON.stringify(
+        {
+          last_scan_at: raw.last_scan_at || new Date().toISOString(),
+          jobs: cleanedKept,
+          scan_summary: existingSummary,
+          totals: {
+            per_run: {
+              total_input: rawJobs.length,
+              total_kept: cleanedKept.length,
+              total_dropped: dropped.length,
+              dropped_per_rule: droppedPerRule,
+              refilter: true,
+            },
+            aggregate: {
+              total_kept: cleanedKept.length,
+              needs_manual_count: 0,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await fs.rename(tmpPath, PF);
+
+    // Truncate scan-history.jsonl so the NEXT actual scan won't dedupe
+    // these ids back out (which would overwrite our pipeline.json with
+    // an empty kept set on the next scheduler tick).
+    const { SCAN_HISTORY_FILE } = await import('./src/career/finder/dedupe.mjs');
+    let historyTruncated = false;
+    try {
+      if (existsSync(SCAN_HISTORY_FILE)) {
+        await fs.writeFile(SCAN_HISTORY_FILE, '', 'utf-8');
+        historyTruncated = true;
+      }
+    } catch (e) {
+      // Best-effort: pipeline.json is correct, the user just won't get
+      // re-evaluation on next scan. Log + continue.
+      console.warn('[refilter] failed to truncate scan-history.jsonl:', e?.message);
+    }
+
+    return res.json({
+      ok: true,
+      raw_count: rawJobs.length,
+      kept: cleanedKept.length,
+      dropped: dropped.length,
+      dropped_per_rule: droppedPerRule,
+      scan_history_truncated: historyTruncated,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message ?? e).slice(0, 300) });
+  }
+});
+
 // ─── Finder: raw-scan/latest.json read (drill-in view for Find Jobs UI) ─
 // Returns every job from the latest scan, tagged with _passed / _dropped_by /
 // _dropped_detail so the UI can show "what got filtered and why" alongside

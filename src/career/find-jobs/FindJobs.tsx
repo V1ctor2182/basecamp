@@ -75,6 +75,8 @@ export default function FindJobs() {
   const [search, setSearch] = useState('')
   const [offset, setOffset] = useState(0)
   const [scanning, setScanning] = useState(false)
+  const [refiltering, setRefiltering] = useState(false)
+  const [refilterMsg, setRefilterMsg] = useState<string | null>(null)
   const [applyMessage, setApplyMessage] = useState<string | null>(null)
 
   // ── data fetchers ────────────────────────────────────────────────────
@@ -190,6 +192,38 @@ export default function FindJobs() {
     setPrefsDirty(true)
   }
 
+  async function reapplyFilters() {
+    setRefiltering(true)
+    setRefilterMsg(null)
+    try {
+      const r = await fetch('/api/career/finder/refilter', { method: 'POST' })
+      const body = (await r.json().catch(() => ({}))) as {
+        ok?: boolean
+        raw_count?: number
+        kept?: number
+        dropped?: number
+        error?: string
+      }
+      if (!r.ok || !body.ok) {
+        setRefilterMsg(`Failed: ${body.error || `HTTP ${r.status}`}`)
+        return
+      }
+      setRefilterMsg(`✓ Re-filtered: ${body.kept}/${body.raw_count} now pass`)
+      // Refresh candidate list + sidecar counts.
+      setOffset(0)
+      fetchSidecar()
+      const url2 = `/api/career/finder/pipeline?sort=score&order=desc&limit=${PAGE_SIZE}&offset=0`
+      fetch(url2).then(async (r2) => {
+        if (!r2.ok) return
+        setPipeline(await r2.json())
+      })
+    } catch (e) {
+      setRefilterMsg(`Network error: ${e instanceof Error ? e.message : ''}`)
+    } finally {
+      setRefiltering(false)
+    }
+  }
+
   function adjustFilter(rule: string) {
     setHighlightFilter(rule)
     setFiltersOpen(true)
@@ -288,18 +322,38 @@ export default function FindJobs() {
           <span className="c-fj-section-summary">{filterSummary}</span>
           <span className="c-fj-section-spacer" />
           {rawSummary && rawSummary.total > 0 && (
-            <button
-              type="button"
-              className="c-fj-btn c-fj-btn-ghost"
-              onClick={(e) => {
-                e.stopPropagation()
-                setRawDrawerOpen(true)
-              }}
-            >
-              <Eye size={13} /> View raw {rawSummary.total}→
-            </button>
+            <>
+              <button
+                type="button"
+                className="c-fj-btn c-fj-btn-ghost"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void reapplyFilters()
+                }}
+                disabled={refiltering}
+                title="Re-apply current filters to the last scan's raw jobs without re-fetching ATS APIs. Use this after changing filters to see them take effect."
+              >
+                <RefreshCw size={13} className={refiltering ? 'c-fj-spin' : ''} />
+                {refiltering ? 'Re-filtering…' : 'Re-filter all'}
+              </button>
+              <button
+                type="button"
+                className="c-fj-btn c-fj-btn-ghost"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setRawDrawerOpen(true)
+                }}
+              >
+                <Eye size={13} /> View raw {rawSummary.total}→
+              </button>
+            </>
           )}
         </button>
+        {refilterMsg && (
+          <p className={`c-fj-refilter-msg${refilterMsg.startsWith('✓') ? ' c-fj-refilter-msg-ok' : ' c-fj-refilter-msg-bad'}`}>
+            {refilterMsg}
+          </p>
+        )}
         {filtersOpen && prefs && (
           <FilterEditor
             prefs={prefs}

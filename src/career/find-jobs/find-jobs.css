@@ -553,6 +553,25 @@
   animation: c-fj-spin 1.2s linear infinite;
 }
 
+.c-fj-refilter-msg {
+  margin: 8px 20px 0;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.c-fj-refilter-msg-ok {
+  background: #ebf6e7;
+  border: 1px solid #c0e6b0;
+  color: #1f5e10;
+}
+
+.c-fj-refilter-msg-bad {
+  background: #fde7e3;
+  border: 1px solid #f3c0b0;
+  color: #8c1f0e;
+}
+
 @keyframes c-fj-spin {
   to { transform: rotate(360deg); }
 }
