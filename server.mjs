@@ -3308,6 +3308,77 @@ app.get('/api/career/finder/raw-jobs', async (req, res) => {
   }
 });
 
+// ─── Finder: portals test endpoint ─────────────────────────────────────
+// Validates a Portals page URL by parsing → calling the matching adapter's
+// fetch with a tight timeout → sampling the first 3 titles. Returns either:
+//   { ok: true, type, config, count, sample_titles: [string], duration_ms }
+//   { ok: false, type?, config?, error }
+// Used by the new URL-input UI in Settings → Portals so the user gets
+// instant feedback whether their pasted URL actually returns jobs.
+app.get('/api/career/finder/portals/test', async (req, res) => {
+  const t0 = Date.now();
+  try {
+    const url = typeof req.query.url === 'string' ? req.query.url : '';
+    if (!url) {
+      return res.status(400).json({ ok: false, error: 'Missing ?url= param' });
+    }
+    const { parsePortalUrl } = await import('./src/career/finder/parsePortalUrl.mjs');
+    const parsed = parsePortalUrl(url);
+    if ('error' in parsed) {
+      return res.status(200).json({ ok: false, error: parsed.error });
+    }
+    const { getAdapter } = await import('./src/career/finder/scanRunner.mjs');
+    const adapter = getAdapter(parsed.type);
+    if (!adapter || typeof adapter.fetch !== 'function') {
+      return res
+        .status(200)
+        .json({ ok: false, type: parsed.type, config: parsed.config, error: `No adapter for type "${parsed.type}"` });
+    }
+    // Race the adapter fetch against a 15s wall-time cap. Some sources
+    // (github-md from China) routinely hit 60s and we don't want the UI
+    // to hang waiting for a verdict.
+    const TEST_TIMEOUT_MS = 15_000;
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Test fetch exceeded ${TEST_TIMEOUT_MS / 1000}s`)), TEST_TIMEOUT_MS);
+    });
+    let rawJobs;
+    try {
+      rawJobs = await Promise.race([adapter.fetch(parsed.config), timeout]);
+    } catch (e) {
+      clearTimeout(timer);
+      return res.status(200).json({
+        ok: false,
+        type: parsed.type,
+        config: parsed.config,
+        error: String(e?.message ?? e).slice(0, 300),
+        duration_ms: Date.now() - t0,
+      });
+    }
+    clearTimeout(timer);
+    const count = Array.isArray(rawJobs) ? rawJobs.length : 0;
+    // Pull title from whatever shape this adapter returns.
+    const sample_titles = (Array.isArray(rawJobs) ? rawJobs.slice(0, 3) : [])
+      .map((r) => {
+        if (!r || typeof r !== 'object') return null;
+        // Greenhouse: r.title  · Ashby: r.title  · Lever: r.text  · github-md: r.role
+        return r.title || r.text || r.role || r.name || null;
+      })
+      .filter(Boolean)
+      .map((s) => String(s).slice(0, 80));
+    return res.json({
+      ok: true,
+      type: parsed.type,
+      config: parsed.config,
+      count,
+      sample_titles,
+      duration_ms: Date.now() - t0,
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e?.message ?? e).slice(0, 300) });
+  }
+});
+
 // ─── Finder: portals.yml CRUD ──────────────────────────────────────────
 app.get('/api/career/finder/portals', async (_req, res) => {
   try {

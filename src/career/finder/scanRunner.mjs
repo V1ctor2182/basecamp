@@ -56,6 +56,13 @@ export function registerAdapter(adapter) {
   ADAPTERS[adapter.type] = adapter;
 }
 
+// find-jobs-redesign m1 (Portals UX): expose the adapter registry so
+// the /portals/test endpoint can fetch a source in dry-run mode without
+// touching cadence-state or pipeline.json. Returns null for unknown types.
+export function getAdapter(type) {
+  return ADAPTERS[type] || null;
+}
+
 const RATE_LIMIT_MS = 1_000;
 
 export class ScanAlreadyRunningError extends Error {
