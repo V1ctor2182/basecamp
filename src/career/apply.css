@@ -294,3 +294,40 @@
   background: #a8a29e;
   border-color: #a8a29e;
 }
+
+/* find-jobs-redesign: inline Stage B gate (Mode 1 prereq) */
+.ap-stageb-gate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 12px 0;
+  padding: 14px 16px;
+  background: #fff6dd;
+  border: 1px solid #f0e2a5;
+  border-radius: 8px;
+}
+
+.ap-stageb-gate-text strong {
+  font-size: 14px;
+  color: #2d2520;
+}
+
+.ap-stageb-gate-text p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #6b6356;
+  line-height: 1.45;
+  max-width: 560px;
+}
+
+.ap-stageb-run {
+  flex-shrink: 0;
+  background: #ebf6e7;
+  border-color: #c0e6b0;
+  color: #1f5e10;
+}
+
+.ap-stageb-run:hover:not(:disabled) {
+  background: #d8efcc;
+}

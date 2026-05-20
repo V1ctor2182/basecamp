@@ -77,6 +77,12 @@ export default function Apply() {
   const [edits, setEdits] = useState<Record<string, string>>({})
   const [submitToast, setSubmitToast] = useState<string | null>(null)
   const [copyTick, setCopyTick] = useState<string | null>(null)
+  // Mode 1 requires a Stage B report (Block E personalization seed).
+  // When the draft endpoint 404s for that reason we surface an inline
+  // "Run Stage B now" button instead of a dead-end error — the user
+  // shouldn't have to hunt for /career/pipeline.
+  const [needsStageB, setNeedsStageB] = useState(false)
+  const [runningStageB, setRunningStageB] = useState(false)
 
   // Initial load: GET existing draft, auto-POST if 404. We deliberately
   // 404→auto-generate so the user lands on a populated page after one
@@ -121,6 +127,7 @@ export default function Apply() {
     if (!jobId) return
     setGenerating(true)
     setError(null)
+    setNeedsStageB(false)
     try {
       const r = await fetch('/api/career/apply/draft', {
         method: 'POST',
@@ -128,8 +135,23 @@ export default function Apply() {
         body: JSON.stringify({ jobId, force: opts.force === true }),
       })
       if (!r.ok) {
-        const j = await r.json().catch(() => ({}))
-        throw new Error(j.hint ?? j.error ?? j.detail ?? `HTTP ${r.status}`)
+        const j = (await r.json().catch(() => ({}))) as {
+          error?: string
+          hint?: string
+          detail?: string
+        }
+        // Distinguish "needs Stage B" from a generic failure so we can
+        // offer the inline run-button instead of a dead-end message.
+        const msg = j.error ?? j.hint ?? j.detail ?? `HTTP ${r.status}`
+        if (
+          r.status === 404 &&
+          /stage b/i.test(`${j.error ?? ''} ${j.hint ?? ''}`)
+        ) {
+          setNeedsStageB(true)
+          setError(null)
+          return
+        }
+        throw new Error(msg)
       }
       const data = (await r.json()) as Draft
       setDraft(data)
@@ -141,6 +163,52 @@ export default function Apply() {
     } finally {
       setGenerating(false)
       if (opts.silent) setLoading(false)
+    }
+  }
+
+  // Run Stage B for THIS job, then re-generate the Mode 1 draft. Saves
+  // the user a trip to /career/pipeline. Stage B is synchronous server-
+  // side (~30-60s of Sonnet) so we just await the POST.
+  async function runStageBThenDraft() {
+    if (!jobId) return
+    setRunningStageB(true)
+    setError(null)
+    try {
+      const r = await fetch('/api/career/evaluate/stage-b', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobIds: [jobId] }),
+      })
+      const j = (await r.json().catch(() => ({}))) as {
+        error?: string
+        banner_message?: string
+        evaluated?: number
+        errors?: number
+      }
+      if (r.status === 402) {
+        setError(
+          `Daily budget reached — Stage B is paused. ${j.banner_message ?? ''} ` +
+            `Raise daily_budget_usd in Settings → Preferences, or wait until tomorrow.`,
+        )
+        return
+      }
+      if (!r.ok) {
+        throw new Error(j.error ?? `Stage B HTTP ${r.status}`)
+      }
+      if ((j.evaluated ?? 0) === 0) {
+        throw new Error(
+          j.errors
+            ? 'Stage B errored for this job — check the JD is enriched.'
+            : 'Stage B produced no result (job may not be in pipeline.json — try Re-filter all in Find Jobs).',
+        )
+      }
+      setNeedsStageB(false)
+      // Stage B done → regenerate the Mode 1 draft.
+      await generateDraft({ force: true })
+    } catch (e) {
+      setError((e as Error).message ?? 'Stage B run failed')
+    } finally {
+      setRunningStageB(false)
     }
   }
 
@@ -253,6 +321,32 @@ export default function Apply() {
         </div>
       )}
 
+      {needsStageB && (
+        <div className="ap-stageb-gate">
+          <div className="ap-stageb-gate-text">
+            <strong>Stage B not run for this job yet.</strong>
+            <p>
+              Mode 1 drafts copy/paste answers from Stage B's deep analysis (the
+              "personalization plan" section). Run it now — Sonnet, ~$0.05, ~30–60s.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="ap-action-btn ap-stageb-run"
+            onClick={runStageBThenDraft}
+            disabled={runningStageB || generating}
+          >
+            {runningStageB ? (
+              <>
+                <Loader2 size={12} className="ap-spin" /> Running Stage B…
+              </>
+            ) : (
+              <>Run Stage B now ($0.05)</>
+            )}
+          </button>
+        </div>
+      )}
+
       {submitToast && (
         <div className="ap-toast-ok">
           <Check size={14} /> {submitToast}
@@ -263,6 +357,10 @@ export default function Apply() {
         <div className="ap-loading">
           <Loader2 size={14} className="ap-spin" /> Loading draft… (auto-generates if none exists)
         </div>
+      ) : needsStageB ? (
+        // The Stage B gate panel above is the call-to-action; suppress the
+        // generic "no draft" empty state so the page reads cleanly.
+        null
       ) : !draft ? (
         <div className="ap-empty">
           No draft yet. Click "Generate fresh draft" above.{' '}
