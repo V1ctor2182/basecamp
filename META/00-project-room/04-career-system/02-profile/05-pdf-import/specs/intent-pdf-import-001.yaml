@@ -1,0 +1,135 @@
+spec_id: "intent-pdf-import-001"
+type: intent
+state: planning
+intent:
+  summary: "Settings → Identity 加 'Drop PDF here' 区域，让 Claude 解析简历自动填 identity.yml"
+  detail: |
+    用户第一次配 identity.yml 要手填 ~15 个字段（姓名 / 邮箱 / 电话 / LinkedIn /
+    GitHub / portfolio / location / visa 状态 / 学历 / 语言）。烦。一份简历 PDF
+    已经包含 90% 的内容，应该让 AI 帮填。
+
+    UI 落点: src/career/settings/Identity.tsx 顶上加一块 drop zone。
+
+    流程:
+      1. 用户拖 PDF 进 drop zone → POST multipart/form-data /api/career/identity/parse-pdf
+      2. 后端: pdf-parse 提取文本 → 截断到 8000 token → 发 Claude Haiku 带
+         structured output schema (zod ParsedIdentitySchema)
+      3. 返回 { parsed_fields: { name: { value, confidence }, ... }, cost_usd, model_used }
+      4. 前端弹 DiffModal:
+           - 每个字段左边 (current) | 右边 (AI extracted, confidence badge)
+           - 默认勾选规则: confidence='high' 勾上, 其他不勾
+           - 数组字段 (education / languages): radio "替换 / 合并 / 保留原"
+      5. 用户 Confirm → PUT /api/career/identity with merged payload (只更新勾选字段)
+      6. 后端 PDF 文件保留 7 天 TTL gc (debug 用)
+
+    数据流:
+      data/career/uploads/{sha256-of-pdf}.pdf  (raw, gitignored)
+      ↓ pdf-parse
+      纯文本字符串
+      ↓ Claude Haiku messages.create with response_format=json + ParsedIdentitySchema
+      { name: {value: "Victor Zhang", confidence: "high"}, ...}
+      ↓ frontend DiffModal merge
+      identity.yml (existing schema, no migration)
+
+    Identity 字段映射表:
+      Resume      → identity.yml
+      Name        → name
+      Email       → email
+      Phone       → phone
+      LinkedIn    → links.linkedin
+      GitHub      → links.github
+      Portfolio   → links.portfolio
+      Address     → location.{current_city, current_country}
+      Education[] → education[] (有 school / degree / graduation / gpa? 字段)
+      Languages   → languages[] (lang + level enum)
+      Visa hints  → legal.* (谨慎: 简历里很少明说, 默认 confidence=low)
+
+    Out of scope V1:
+      - 把简历内容塞进 narrative.md (Q6) — narrative 是"故事"维度, AI 写易走调
+      - 自动创建 data/career/resumes/{id}.json 给 CV tailor 用 — 跨 03-cv-engine
+        Room, 留 follow-up
+      - LinkedIn URL 抓 profile - 违反 ToS, pass
+      - 扫描图片型 PDF OCR - V1 直接报错请用户用文本 PDF
+
+constraints:
+  - id: "constraint-C1-no-third-party-storage"
+    severity: must
+    rule: "PDF 文件 MUST 存本地 data/career/uploads/, 不上传到 S3/blob storage. 解析过程只把 pdf-parse 提出的纯文本发 Anthropic API, 不发 PDF binary."
+  - id: "constraint-C2-diff-modal-mandatory"
+    severity: must
+    rule: "写 identity.yml 前 MUST 弹 diff modal. 每字段独立勾选. 禁止 '一键应用所有'."
+  - id: "constraint-C3-low-conf-unchecked-default"
+    severity: must
+    rule: "confidence='low' 或缺失的字段在 modal 里 DEFAULT 不勾选. 用户必须主动勾才会写入."
+  - id: "constraint-C4-budget-gate"
+    severity: must
+    rule: "parse-pdf 的 Anthropic API cost 计入 daily_budget_usd (preferences.evaluator_strategy.stage_b.daily_budget_usd). 预算用尽 → 返回 402 + 'budget exhausted'."
+  - id: "constraint-C5-7d-ttl"
+    severity: must
+    rule: "data/career/uploads/ 文件 7 天后 gc 删除 (类似 02-data-flywheel 的 archive ttl 模式)."
+
+indexing:
+  type: intent
+  priority: medium
+  layer: feature
+  domain: "04-career-system"
+  tags: [backend, frontend, identity, pdf, claude-haiku, anthropic-api]
+
+provenance:
+  source_type: user-request
+  confidence: 0.9
+  source_ref: "User asked 2026-05-19 during PR #44 Portals UX work: 'identity 那边加一个可以扔pdf进来然后ai解析'. Planning only, no implementation."
+
+relations:
+  - type: depends_on
+    target: "intent-identity-001"
+  - type: consumes
+    target: "preferences.evaluator_strategy.stage_b.daily_budget_usd (budget gate)"
+
+open_questions:
+  - id: "Q1-pdf-extract-lib"
+    question: "PDF → 文本提取用哪个库?"
+    options:
+      ["pdf-parse (node-only)", "pdfjs-dist", "Claude vision API direct on PDF binary"]
+    lock_before: "plan-milestones"
+    recommendation: "pdf-parse — 0 deps on system libs, simple text extraction. Claude vision 多用 token + 慢, 留以后."
+
+  - id: "Q2-model"
+    question: "哪个 Claude 模型?"
+    options: ["Haiku 4.5", "Sonnet 4.6"]
+    lock_before: "plan-milestones"
+    recommendation: "Haiku — 简历 parse 是 structured-extraction 任务, Haiku 够用且便宜 (~$0.001/份)"
+
+  - id: "Q3-auto-apply"
+    question: "提取后自动应用还是 modal review?"
+    options: ["auto-apply (覆盖现有)", "diff modal review"]
+    lock_before: "plan-milestones"
+    recommendation: "diff modal (C2 lock)"
+
+  - id: "Q4-array-merge"
+    question: "数组字段 (education) AI 出 3 条 现有 1 条 怎么合并?"
+    options: ["全替换", "末尾追加", "弹 radio 让用户选"]
+    lock_before: "plan-milestones"
+    recommendation: "弹 radio 'replace / merge / keep existing'; 默认 replace"
+
+  - id: "Q5-multi-resume"
+    question: "扔多份简历分别记录还是覆盖?"
+    options: ["覆盖前次", "保留多版本"]
+    lock_before: "plan-milestones"
+    recommendation: "覆盖 — 多版本简历归 03-cv-engine 管, 本 Room 只填 identity.yml"
+
+  - id: "Q6-narrative-auto-fill"
+    question: "同时填 narrative.md 吗?"
+    options: ["填", "不填"]
+    lock_before: "plan-milestones"
+    recommendation: "不填 — narrative 是 故事维度 AI 写易走调, 留手填"
+
+  - id: "Q7-scanned-pdf"
+    question: "图片扫描 PDF (无 OCR 文本层) 处理?"
+    options: ["OCR (Tesseract)", "报错请用户换文本 PDF"]
+    lock_before: "plan-milestones"
+    recommendation: "报错 — 简历用扫描件的情况罕见, OCR 引入 native dep + 不准. V2 可以加."
+
+anchors: []
+created_at: "2026-05-19"
+updated_at: "2026-05-19"

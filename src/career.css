@@ -89,6 +89,57 @@
   border-bottom-color: #0a0a0a;
 }
 
+/* find-jobs-redesign m1.e: Advanced dropdown overflow for legacy tabs */
+.c-nav-advanced-wrap {
+  position: relative;
+  display: inline-flex;
+  margin-left: auto;
+}
+
+.c-nav-advanced-toggle {
+  cursor: pointer;
+  background: transparent;
+  font: inherit;
+}
+
+.c-nav-advanced-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 200;
+  min-width: 220px;
+  margin-top: 4px;
+  background: #ffffff;
+  border: 1px solid #e8e2d2;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(12, 10, 8, 0.12);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.c-nav-advanced-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #2d2520;
+  text-decoration: none;
+  border-radius: 4px;
+}
+
+.c-nav-advanced-item:hover {
+  background: #f4efe5;
+}
+
+.c-nav-advanced-item-active {
+  background: #fbe5d6;
+  color: #bf3a06;
+  font-weight: 600;
+}
+
 /* Body */
 .c-body {
   flex: 1;

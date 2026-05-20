@@ -1422,6 +1422,20 @@ const LocationPrefSchema = z.object({
   acceptable_countries: STRS,
 });
 
+// 9 hard-filter rule IDs the user can disable without losing the value.
+// applyHardFilter() in src/career/finder/hardFilter.mjs honors this set.
+const RULE_IDS = [
+  'source_filter',
+  'company_blocklist',
+  'title_blocklist',
+  'title_allowlist',
+  'location',
+  'seniority',
+  'posted_within_days',
+  'comp_floor',
+  'jd_text_blocklist',
+];
+
 const HardFiltersSchema = z.object({
   source_filter: z.object({
     blocked_sources: STRS,
@@ -1444,6 +1458,9 @@ const HardFiltersSchema = z.object({
     currency: STR,
   }),
   jd_text_blocklist: STRS,
+  // find-jobs-redesign m1: per-rule disable without erasing the value.
+  // Empty / missing = all rules enabled (backward compatible).
+  disabled_rules: z.array(z.enum(RULE_IDS)).default([]),
 });
 
 const SoftPreferencesSchema = z.object({
@@ -1561,6 +1578,7 @@ function defaultPreferences() {
       posted_within_days: 0,
       comp_floor: { currency: 'USD' },
       jd_text_blocklist: [],
+      disabled_rules: [],
     },
     soft_preferences: {
       company_types: [],
@@ -3189,6 +3207,307 @@ app.get('/api/career/finder/pipeline', async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ error: String(e?.message ?? e).slice(0, 300) });
+  }
+});
+
+// ─── Finder: re-filter raw-scan into pipeline.json ─────────────────────
+// find-jobs-redesign m1 follow-up: when the user changes hard_filters
+// (especially loosens them), the dedupe logic in scanRunner.mjs blocks
+// previously-seen job ids from re-entering pipeline.json — so loosened
+// filters never take effect without a manual `rm scan-history.jsonl`.
+// This endpoint solves that explicitly:
+//   1. Read data/career/raw-scan/latest.json (every job from the latest scan)
+//   2. Apply CURRENT hard_filters to all of them
+//   3. Rewrite data/career/pipeline.json with the kept set (replace)
+//   4. Truncate scan-history.jsonl so future scans don't re-dedupe these
+//      back out on the next pipeline.json write
+//
+// No ATS API calls. Synchronous, fast (~50ms for 3k jobs).
+app.post('/api/career/finder/refilter', async (_req, res) => {
+  try {
+    const { RAW_SCAN_LATEST, PIPELINE_FILE: PF, isPipelineBusy } = await import(
+      './src/career/finder/scanRunner.mjs'
+    );
+    if (typeof isPipelineBusy === 'function' && isPipelineBusy()) {
+      return res
+        .status(409)
+        .json({ error: 'A scan or enrich is currently writing pipeline.json. Try again in a few seconds.' });
+    }
+    if (!existsSync(RAW_SCAN_LATEST)) {
+      return res
+        .status(404)
+        .json({ error: 'No raw-scan/latest.json yet. Run a scan first (Find Jobs → ① Sources → Scan now).' });
+    }
+    let raw;
+    try {
+      raw = JSON.parse(await fs.readFile(RAW_SCAN_LATEST, 'utf-8'));
+    } catch (e) {
+      return res
+        .status(500)
+        .json({ error: `raw-scan/latest.json unparseable: ${String(e?.message ?? e).slice(0, 200)}` });
+    }
+    const rawJobs = Array.isArray(raw?.jobs) ? raw.jobs : [];
+    if (rawJobs.length === 0) {
+      return res.json({ ok: true, raw_count: 0, kept: 0, dropped: 0, dropped_per_rule: {} });
+    }
+
+    const prefs = await readPreferences();
+    const { applyHardFilterBatch } = await import('./src/career/finder/hardFilter.mjs');
+    const { kept, dropped } = applyHardFilterBatch(rawJobs, prefs);
+
+    const droppedPerRule = {};
+    for (const d of dropped) {
+      const r = d.rule_id || 'unknown';
+      droppedPerRule[r] = (droppedPerRule[r] || 0) + 1;
+    }
+
+    // Write pipeline.json — replace entire kept-jobs list with the
+    // refilter result. Preserve scan_summary if present so the UI keeps
+    // the "X raw jobs from N sources" header.
+    let existingSummary = [];
+    try {
+      if (existsSync(PF)) {
+        const p = JSON.parse(await fs.readFile(PF, 'utf-8'));
+        if (Array.isArray(p?.scan_summary)) existingSummary = p.scan_summary;
+      }
+    } catch {
+      /* fail-soft */
+    }
+
+    // Strip the raw-scan tagging fields before writing — pipeline.json
+    // entries should have their original shape (no _passed/_dropped_by).
+    const cleanedKept = kept.map((j) => {
+      const { _passed, _dropped_by, _dropped_detail, ...rest } = j;
+      void _passed;
+      void _dropped_by;
+      void _dropped_detail;
+      return rest;
+    });
+
+    const tmpPath = PF + `.tmp.${process.pid}`;
+    await fs.writeFile(
+      tmpPath,
+      JSON.stringify(
+        {
+          last_scan_at: raw.last_scan_at || new Date().toISOString(),
+          jobs: cleanedKept,
+          scan_summary: existingSummary,
+          totals: {
+            per_run: {
+              total_input: rawJobs.length,
+              total_kept: cleanedKept.length,
+              total_dropped: dropped.length,
+              dropped_per_rule: droppedPerRule,
+              refilter: true,
+            },
+            aggregate: {
+              total_kept: cleanedKept.length,
+              needs_manual_count: 0,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await fs.rename(tmpPath, PF);
+
+    // Truncate scan-history.jsonl so the NEXT actual scan won't dedupe
+    // these ids back out (which would overwrite our pipeline.json with
+    // an empty kept set on the next scheduler tick).
+    const { SCAN_HISTORY_FILE } = await import('./src/career/finder/dedupe.mjs');
+    let historyTruncated = false;
+    try {
+      if (existsSync(SCAN_HISTORY_FILE)) {
+        await fs.writeFile(SCAN_HISTORY_FILE, '', 'utf-8');
+        historyTruncated = true;
+      }
+    } catch (e) {
+      // Best-effort: pipeline.json is correct, the user just won't get
+      // re-evaluation on next scan. Log + continue.
+      console.warn('[refilter] failed to truncate scan-history.jsonl:', e?.message);
+    }
+
+    return res.json({
+      ok: true,
+      raw_count: rawJobs.length,
+      kept: cleanedKept.length,
+      dropped: dropped.length,
+      dropped_per_rule: droppedPerRule,
+      scan_history_truncated: historyTruncated,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message ?? e).slice(0, 300) });
+  }
+});
+
+// ─── Finder: raw-scan/latest.json read (drill-in view for Find Jobs UI) ─
+// Returns every job from the latest scan, tagged with _passed / _dropped_by /
+// _dropped_detail so the UI can show "what got filtered and why" alongside
+// passing jobs. Query params:
+//   q       — case-insensitive substring filter on company / role
+//   source  — exact match on source.name (e.g. 'Anthropic')
+//   status  — 'all' | 'passed' | 'dropped' (default 'all')
+//   limit   — page size (default 60, max 300)
+//   offset  — page offset (default 0)
+app.get('/api/career/finder/raw-jobs', async (req, res) => {
+  try {
+    const { RAW_SCAN_LATEST } = await import('./src/career/finder/scanRunner.mjs');
+    if (!existsSync(RAW_SCAN_LATEST)) {
+      return res.json({
+        total: 0,
+        passed: 0,
+        dropped: 0,
+        filtered: 0,
+        jobs: [],
+        sources: [],
+        dropped_by_rule: {},
+        last_scan_at: null,
+      });
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(await fs.readFile(RAW_SCAN_LATEST, 'utf-8'));
+    } catch {
+      return res.json({
+        total: 0,
+        passed: 0,
+        dropped: 0,
+        filtered: 0,
+        jobs: [],
+        sources: [],
+        dropped_by_rule: {},
+        last_scan_at: null,
+      });
+    }
+    const allJobs = Array.isArray(parsed?.jobs) ? parsed.jobs : [];
+
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
+    const source = typeof req.query.source === 'string' ? req.query.source.trim() : '';
+    const status = ['all', 'passed', 'dropped'].includes(req.query.status)
+      ? req.query.status
+      : 'all';
+    const limit = Math.min(Math.max(1, Number(req.query.limit) || 60), 300);
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+
+    let jobs = allJobs;
+    if (status === 'passed') jobs = jobs.filter((j) => j._passed === true);
+    else if (status === 'dropped') jobs = jobs.filter((j) => j._passed === false);
+    if (source) jobs = jobs.filter((j) => j.source && j.source.name === source);
+    if (q) {
+      jobs = jobs.filter((j) => {
+        const c = String(j.company ?? '').toLowerCase();
+        const r = String(j.role ?? '').toLowerCase();
+        return c.includes(q) || r.includes(q);
+      });
+    }
+
+    const filtered = jobs.length;
+    const page = jobs.slice(offset, offset + limit);
+    const trimmed = page.map((j) => ({
+      id: j.id,
+      company: j.company,
+      role: j.role,
+      location: j.location,
+      url: j.url,
+      source: j.source ? { type: j.source.type, name: j.source.name } : null,
+      tags: j.tags,
+      comp_hint: j.comp_hint,
+      posted_at: j.posted_at,
+      scraped_at: j.scraped_at,
+      _passed: j._passed,
+      _dropped_by: j._dropped_by,
+      _dropped_detail: j._dropped_detail,
+    }));
+
+    const sources = Array.from(
+      new Set(allJobs.map((j) => j.source?.name).filter((n) => typeof n === 'string')),
+    ).sort();
+
+    res.json({
+      total: parsed?.total ?? allJobs.length,
+      passed: parsed?.passed ?? allJobs.filter((j) => j._passed).length,
+      dropped: parsed?.dropped ?? allJobs.filter((j) => !j._passed).length,
+      dropped_by_rule: parsed?.dropped_by_rule ?? {},
+      filtered,
+      jobs: trimmed,
+      sources,
+      last_scan_at: parsed?.last_scan_at ?? null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message ?? e).slice(0, 300) });
+  }
+});
+
+// ─── Finder: portals test endpoint ─────────────────────────────────────
+// Validates a Portals page URL by parsing → calling the matching adapter's
+// fetch with a tight timeout → sampling the first 3 titles. Returns either:
+//   { ok: true, type, config, count, sample_titles: [string], duration_ms }
+//   { ok: false, type?, config?, error }
+// Used by the new URL-input UI in Settings → Portals so the user gets
+// instant feedback whether their pasted URL actually returns jobs.
+app.get('/api/career/finder/portals/test', async (req, res) => {
+  const t0 = Date.now();
+  try {
+    const url = typeof req.query.url === 'string' ? req.query.url : '';
+    if (!url) {
+      return res.status(400).json({ ok: false, error: 'Missing ?url= param' });
+    }
+    const { parsePortalUrl } = await import('./src/career/finder/parsePortalUrl.mjs');
+    const parsed = parsePortalUrl(url);
+    if ('error' in parsed) {
+      return res.status(200).json({ ok: false, error: parsed.error });
+    }
+    const { getAdapter } = await import('./src/career/finder/scanRunner.mjs');
+    const adapter = getAdapter(parsed.type);
+    if (!adapter || typeof adapter.fetch !== 'function') {
+      return res
+        .status(200)
+        .json({ ok: false, type: parsed.type, config: parsed.config, error: `No adapter for type "${parsed.type}"` });
+    }
+    // Race the adapter fetch against a 15s wall-time cap. Some sources
+    // (github-md from China) routinely hit 60s and we don't want the UI
+    // to hang waiting for a verdict.
+    const TEST_TIMEOUT_MS = 15_000;
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Test fetch exceeded ${TEST_TIMEOUT_MS / 1000}s`)), TEST_TIMEOUT_MS);
+    });
+    let rawJobs;
+    try {
+      rawJobs = await Promise.race([adapter.fetch(parsed.config), timeout]);
+    } catch (e) {
+      clearTimeout(timer);
+      return res.status(200).json({
+        ok: false,
+        type: parsed.type,
+        config: parsed.config,
+        error: String(e?.message ?? e).slice(0, 300),
+        duration_ms: Date.now() - t0,
+      });
+    }
+    clearTimeout(timer);
+    const count = Array.isArray(rawJobs) ? rawJobs.length : 0;
+    // Pull title from whatever shape this adapter returns.
+    const sample_titles = (Array.isArray(rawJobs) ? rawJobs.slice(0, 3) : [])
+      .map((r) => {
+        if (!r || typeof r !== 'object') return null;
+        // Greenhouse: r.title  · Ashby: r.title  · Lever: r.text  · github-md: r.role
+        return r.title || r.text || r.role || r.name || null;
+      })
+      .filter(Boolean)
+      .map((s) => String(s).slice(0, 80));
+    return res.json({
+      ok: true,
+      type: parsed.type,
+      config: parsed.config,
+      count,
+      sample_titles,
+      duration_ms: Date.now() - t0,
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e?.message ?? e).slice(0, 300) });
   }
 });
 

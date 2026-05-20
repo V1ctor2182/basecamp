@@ -10,6 +10,7 @@ import Applied from './career/Applied'
 import Prep from './career/Prep'
 import Learning from './career/Learning'
 import Iteration from './career/Iteration'
+import FindJobs from './career/find-jobs/FindJobs'
 import Reports from './career/Reports'
 import Apply from './career/Apply'
 import SettingsLayout from './career/settings/SettingsLayout'
@@ -27,7 +28,7 @@ import ResumeEdit from './career/settings/resumes/Edit'
 import './career.css'
 
 const LAST_TAB_KEY = 'career-last-tab'
-const VALID_TABS = ['overview', 'pipeline', 'shortlist', 'applied', 'prep', 'learning', 'iteration', 'reports', 'settings']
+const VALID_TABS = ['find-jobs', 'overview', 'pipeline', 'shortlist', 'applied', 'prep', 'learning', 'iteration', 'reports', 'settings']
 
 // localStorage can throw in Safari private mode, when over quota, or when
 // disabled by extension. Don't crash the app boot for a UX nicety.
@@ -41,7 +42,10 @@ function readLastTab(): string {
 }
 
 function RootRedirect() {
-  return <Navigate to={readLastTab()} replace />
+  // find-jobs-redesign m1.e: legacy users last-tab='overview' get steered
+  // to the new Find Jobs page; otherwise honor their saved choice.
+  const last = readLastTab()
+  return <Navigate to={last === 'overview' ? 'find-jobs' : last} replace />
 }
 
 export default function CareerApp() {
@@ -73,6 +77,7 @@ export default function CareerApp() {
       <main className="c-body">
         <Routes>
           <Route index element={<RootRedirect />} />
+          <Route path="find-jobs" element={<FindJobs />} />
           <Route path="overview" element={<Overview />} />
           <Route path="pipeline" element={<Pipeline />} />
           <Route path="shortlist" element={<Shortlist />} />

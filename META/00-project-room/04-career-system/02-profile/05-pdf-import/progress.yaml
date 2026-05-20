@@ -1,0 +1,7 @@
+milestones: []
+current_sprint: null
+blockers:
+  - "Plan-milestones not yet run — 7 OQs in spec await lock. Recommend running plan-milestones skill before dev m1."
+completion: 0
+status_note: "🔄 planning. Created 2026-05-19 as follow-up to find-jobs-redesign m1. Drop-PDF → Claude Haiku parse → diff modal → write identity.yml. 3 milestones estimated, ~600 LOC. Block: identity-fields are sensitive (resume content), constraint C1 forbids 3rd-party file storage; C2 mandates per-field diff review."
+last_updated: "2026-05-19"

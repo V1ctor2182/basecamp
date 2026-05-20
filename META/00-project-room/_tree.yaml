@@ -214,6 +214,7 @@ tree:
         - "00-project-room/04-career-system/02-profile/02-preferences"
         - "00-project-room/04-career-system/02-profile/03-narrative-proof"
         - "00-project-room/04-career-system/02-profile/04-qa-bank"
+        - "00-project-room/04-career-system/02-profile/05-pdf-import"
     - id: "00-project-room/04-career-system/02-profile/01-identity"
       type: feature
       lifecycle: active
@@ -235,6 +236,12 @@ tree:
     - id: "00-project-room/04-career-system/02-profile/04-qa-bank"
       type: feature
       lifecycle: active
+      owner: fullstack
+      parent: "00-project-room/04-career-system/02-profile"
+      children: []
+    - id: "00-project-room/04-career-system/02-profile/05-pdf-import"
+      type: feature
+      lifecycle: planning
       owner: fullstack
       parent: "00-project-room/04-career-system/02-profile"
       children: []
