@@ -23,6 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 
+# Secrets — API keys, tokens (loaded by server.mjs via process.loadEnvFile)
+.env
+.env.local
+.env.*.local
+
 # App data (contains tokens)
 # NOTE: not ignoring `data/` wholesale because data/career/ has committed
 # config/knowledge files (see career-system exceptions below). Ignore only

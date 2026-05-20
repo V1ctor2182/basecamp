@@ -184,6 +184,7 @@ export default function Apply() {
         banner_message?: string
         evaluated?: number
         errors?: number
+        jobErrors?: { jobId: string; error: string }[]
       }
       if (r.status === 402) {
         setError(
@@ -196,9 +197,10 @@ export default function Apply() {
         throw new Error(j.error ?? `Stage B HTTP ${r.status}`)
       }
       if ((j.evaluated ?? 0) === 0) {
+        const realError = j.jobErrors?.[0]?.error
         throw new Error(
-          j.errors
-            ? 'Stage B errored for this job — check the JD is enriched.'
+          realError
+            ? `Stage B failed: ${realError}`
             : 'Stage B produced no result (job may not be in pipeline.json — try Re-filter all in Find Jobs).',
         )
       }

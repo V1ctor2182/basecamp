@@ -1,3 +1,11 @@
+// Load .env (ANTHROPIC_API_KEY, GITHUB_TOKEN, etc.) before anything reads
+// process.env. Silent if no .env file exists — env may be set in the shell.
+try {
+  process.loadEnvFile();
+} catch {
+  // no .env file — fine, fall back to shell-exported vars
+}
+
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs/promises';
@@ -4187,6 +4195,7 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
     const evaluatedAt = new Date().toISOString();
     const resultsById = new Map(result.results.map((r) => [r.jobId, r]));
     let totalWebSearchRequests = 0;
+    const jobErrors = [];
     for (const job of candidates) {
       const r = resultsById.get(job.id);
       if (!r) continue;
@@ -4201,7 +4210,10 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
         tool_rounds_used: r.tool_rounds_used ?? 0,
         status: r.status,
       };
-      if (r.error) stageB.error = String(r.error).slice(0, 500);
+      if (r.error) {
+        stageB.error = String(r.error).slice(0, 500);
+        jobErrors.push({ jobId: job.id, error: stageB.error });
+      }
       job.evaluation = { ...(job.evaluation ?? {}), stage_b: stageB };
       totalWebSearchRequests += stageB.web_search_requests;
     }
@@ -4216,6 +4228,7 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
       total_cost_usd: result.total_cost_usd,
       total_web_search_requests: totalWebSearchRequests,
       threshold,
+      jobErrors,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
