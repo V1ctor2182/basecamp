@@ -48,8 +48,10 @@ export const BROWSER_LAUNCH_TIMEOUT_MS = 30_000;
 
 // SMOKE=1 → headless (CI / smoke tests). Default headful per Room
 // constraint C1 (用户日常 dev/prod 必须 headful — 反 bot detection 宽容度高
-// + 失败能立刻看到).
-const HEADLESS = process.env.SMOKE === '1';
+// + 失败能立刻看到). APPLIER_HEADLESS=1 → headless for the unattended
+// self-test harness — a dedicated flag, not entangled with SMOKE.
+const HEADLESS =
+  process.env.SMOKE === '1' || process.env.APPLIER_HEADLESS === '1';
 
 // ── Module-scoped singleton state ────────────────────────────────────────
 
