@@ -20,6 +20,8 @@
 //   - writeSession lands behind withSessionLock from m1 — concurrent
 //     m4 pause endpoint can't race the step transition
 
+import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import {
   buildInitialSession,
   readSession,
@@ -27,7 +29,7 @@ import {
   withSessionLock,
 } from './applySessionsStore.mjs';
 import { snapshot as realSnapshot } from '../runtime/snapshot.mjs';
-import { classifyAndFill } from '../classifier/index.mjs';
+import { classifyAndFill, toSourceRefString } from '../classifier/index.mjs';
 // Canonical-value → form-option matcher. Used to remap a classifier's
 // canonical value ("Decline to answer") onto a dropdown's real option
 // text once the options have been captured.
@@ -86,6 +88,16 @@ function tupleSetFromTable(table) {
 function entryTuple(e) {
   return `${e.role}\u0000${e.name}\u0000${e.occurrenceIndex || 0}\u0000${e.frameIdx || 0}`;
 }
+
+// Real form-input roles. A field survives the chrome filter iff its
+// a11y role is one of these (or it is a classified file-upload button).
+// Filtering on role — not class — is correct because the snapshot's
+// role allowlist also captures page chrome (nav links, section
+// headings, logos), and that chrome can still match a HARD/LEGAL regex
+// on its text ("Race & Ethnicity Definitions" link → legal). It also
+// KEEPS real controls the classifier couldn't match — an unmatched
+// dropdown is still a field the operator must handle.
+const FORM_INPUT_ROLES = new Set(['textbox', 'checkbox', 'radio', 'combobox']);
 
 // a11y roles that present a fixed option list. For these the machine
 // opens the control during runStep and captures the real option texts,
@@ -147,6 +159,75 @@ async function captureDropdownOptions(page, table, classified) {
       // fill phase still fuzzy-matches at fill time as a fallback.
     }
   }
+}
+
+// Locate the tailored resume PDF for a job. The tailor writes
+// data/career/output/{jobId}-{resumeId}.pdf — we glob by jobId prefix
+// so the apply doesn't need the resumeId plumbed through. Returns the
+// absolute path when EXACTLY one match exists (ambiguous → null, the
+// operator then uploads manually).
+async function resolveResumePdf(jobId) {
+  if (typeof jobId !== 'string' || !jobId) return null;
+  try {
+    const dir = path.resolve('data', 'career', 'output');
+    const files = await fs.readdir(dir);
+    const matches = files.filter(
+      (f) => f.startsWith(`${jobId}-`) && f.toLowerCase().endsWith('.pdf'),
+    );
+    return matches.length === 1 ? path.join(dir, matches[0]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Detect file-upload controls and return them as synthetic file-class
+ * fields. The a11y snapshot misses <input type=file> (no accessible
+ * name), so this scans the DOM directly. Each field carries a
+ * `_fileInputIndex` so the fill loop can setInputFiles() on it without
+ * going through the refTable.
+ *
+ * Defensive — mock pages (smoke) lack page.locator and yield [].
+ */
+async function captureFileFields(page, session) {
+  if (!page || typeof page.locator !== 'function') return [];
+  let inputs;
+  let n = 0;
+  try {
+    inputs = page.locator('input[type=file]');
+    n = await inputs.count();
+  } catch {
+    return [];
+  }
+  const resumePdf = await resolveResumePdf(session?.jobId);
+  const out = [];
+  for (let i = 0; i < Math.min(n, 5); i++) {
+    // First file input → resume (the universal case); extras are generic.
+    const isResume = i === 0;
+    const label = isResume ? 'Resume / CV upload' : `File upload ${i + 1}`;
+    const subclass = isResume ? 'resume' : 'general-file';
+    const found = isResume && resumePdf;
+    const source = {
+      kind: 'file',
+      subclass,
+      status: found ? 'found' : 'generate-first',
+    };
+    out.push({
+      refId: `__file_${i}`,
+      label,
+      class: 'file',
+      subclass,
+      role: 'file',
+      suggested_value: found ? resumePdf : null,
+      confidence: found ? 'high' : 'manual',
+      source,
+      source_ref: toSourceRefString(source),
+      // Marks this as a direct-selector file field — the fill loop uses
+      // page.locator('input[type=file]').nth() instead of the refTable.
+      _fileInputIndex: i,
+    });
+  }
+  return out;
 }
 
 /**
@@ -384,16 +465,28 @@ async function runStep(session, deps, ctx) {
     _classifyAndFill,
   );
 
-  // Drop entries the classifier couldn't tie to a fillable form control.
-  // A single-page application URL (greenhouse / lever / ashby) snapshots
-  // the WHOLE page, so nav links, JD headings and logos arrive here as
-  // class 'unknown'. Filtering keeps the draft to real fields, the
-  // approval panel clean, and the per-step draft under its persist cap.
-  classified = classified.filter((c) => c && c.class !== 'unknown');
+  // Keep only real form controls. A single-page application URL
+  // (greenhouse / lever / ashby) snapshots the WHOLE page, so nav links,
+  // JD headings and logos arrive here too — and some of them match a
+  // HARD/LEGAL regex on their text, so filtering on class is wrong.
+  // Survive iff the a11y role is an actual input, or it is a classified
+  // file-upload button. This drops page chrome AND keeps real controls
+  // the classifier failed to match (an unmatched dropdown is still a
+  // field the operator must fill — it surfaces as a manual field).
+  classified = classified.filter(
+    (c) =>
+      c &&
+      (FORM_INPUT_ROLES.has(c.role) || (c.role === 'button' && c.class === 'file')),
+  );
 
   // Capture real dropdown options (open each → read → close) so the
   // approval UI shows them and the operator picks an exact option.
   await captureDropdownOptions(page, snapPre.table, classified);
+
+  // Detect file-upload controls (the a11y snapshot misses <input
+  // type=file>) and append them as synthetic file-class fields.
+  const fileFields = await captureFileFields(page, session);
+  if (fileFields.length) classified.push(...fileFields);
 
   const pendingDraft = session.per_step_draft[stepKey];
   if (
@@ -440,7 +533,16 @@ async function runStep(session, deps, ctx) {
   for (const f of classified) {
     if (f.suggested_value == null || f.suggested_value === '') continue;
     try {
-      await _fillField(page, f.refId, f, snapPre.table);
+      if (typeof f._fileInputIndex === 'number') {
+        // Synthetic file field — upload straight onto the <input
+        // type=file> by index (it isn't in the refTable).
+        await page
+          .locator('input[type=file]')
+          .nth(f._fileInputIndex)
+          .setInputFiles(f.suggested_value);
+      } else {
+        await _fillField(page, f.refId, f, snapPre.table);
+      }
       recordToMemory(session.field_memory, f, f.suggested_value);
       filled++;
     } catch (err) {

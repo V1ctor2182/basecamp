@@ -22,7 +22,7 @@ import {
   AlertTriangle,
   Loader2,
   Play,
-  Pause,
+  X,
   Check,
   RotateCcw,
   ExternalLink,
@@ -325,23 +325,22 @@ export default function Apply() {
     }
   }
 
-  async function pauseMachine() {
-    if (!jobId) return
+  // Cancel the apply: stop the server-side machine (so the browser stops
+  // filling) and leave the page. Best-effort — even if the stop call
+  // fails, the operator still gets out; the machine settles on its own.
+  async function cancelApply() {
     setBusy(true)
     setError(null)
-    try {
-      const r = await fetch(
-        api(`/applier/multi-step/${encodeURIComponent(jobId)}/pause`),
-        { method: 'POST' },
-      )
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(j.error ?? `Pause failed (HTTP ${r.status})`)
-      setTimeout(poll, 300)
-    } catch (e) {
-      setError((e as Error).message ?? 'Pause failed')
-    } finally {
-      setBusy(false)
+    if (jobId) {
+      try {
+        await fetch(api(`/applier/multi-step/${encodeURIComponent(jobId)}/pause`), {
+          method: 'POST',
+        })
+      } catch {
+        // ignore — navigating away is what matters
+      }
     }
+    navigate('/career/find-jobs')
   }
 
   async function resumeMachine() {
@@ -529,10 +528,10 @@ export default function Apply() {
               <button
                 type="button"
                 className="ap-action-btn ap-m2-inline-btn"
-                onClick={pauseMachine}
+                onClick={cancelApply}
                 disabled={busy}
               >
-                <Pause size={12} /> Pause
+                <X size={12} /> Cancel
               </button>
             </div>
           )}
@@ -544,7 +543,7 @@ export default function Apply() {
               edits={edits}
               setEdits={setEdits}
               onApprove={() => approveStep(true)}
-              onPause={pauseMachine}
+              onCancel={cancelApply}
               busy={busy}
             />
           )}
@@ -673,14 +672,14 @@ function ApprovalPanel({
   edits,
   setEdits,
   onApprove,
-  onPause,
+  onCancel,
   busy,
 }: {
   pending: Pending
   edits: Record<string, string>
   setEdits: React.Dispatch<React.SetStateAction<Record<string, string>>>
   onApprove: () => void
-  onPause: () => void
+  onCancel: () => void
   busy: boolean
 }) {
   const fields = pending.draft.fields
@@ -796,10 +795,10 @@ function ApprovalPanel({
           <button
             type="button"
             className="ap-action-btn"
-            onClick={onPause}
+            onClick={onCancel}
             disabled={busy}
           >
-            <Pause size={12} /> Pause
+            <X size={12} /> Cancel
           </button>
           <button
             type="button"

@@ -164,6 +164,7 @@
 .ap-conf-high   { color: #14532d; background: #d1fae5; }
 .ap-conf-medium { color: #92400e; background: #fef3c7; }
 .ap-conf-low    { color: #b91c1c; background: #fef2f2; }
+.ap-conf-manual { color: #9a3412; background: #ffedd5; }
 
 .ap-field-value {
   font-size: 13px;

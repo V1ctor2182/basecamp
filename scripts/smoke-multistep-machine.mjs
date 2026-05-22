@@ -247,7 +247,7 @@ await test('runMachine: 2-step happy path → completed', async () => {
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId,
+        refId: entry.refId, role: entry.role,
         label: entry.name,
         class: 'hard',
         suggested_value: entry.name === 'Email' ? 'a@b.com' : '555-1234',
@@ -309,7 +309,7 @@ await test('runMachine: field_memory reuses Step 1 value at Step 2 (no LLM call)
       _classifyAndFill: async (entry) => {
         classifyCalls++;
         return {
-          refId: entry.refId,
+          refId: entry.refId, role: entry.role,
           label: entry.name,
           class: 'open',
           suggested_value: 'Victor',
@@ -367,7 +367,7 @@ await test('runMachine: field_memory reuses identical normalized label (label-ba
       _classifyAndFill: async (entry) => {
         classifyCalls++;
         return {
-          refId: entry.refId,
+          refId: entry.refId, role: entry.role,
           label: entry.name,
           class: 'hard',
           suggested_value: 'Victor',
@@ -424,7 +424,7 @@ await test('runMachine: approve returns {approved:false} → session paused, dra
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId,
+        refId: entry.refId, role: entry.role,
         label: entry.name,
         class: 'open',
         suggested_value: 'because awesome',
@@ -477,7 +477,7 @@ await test('runMachine: dependent field after FILL → 二次 approve + 二次 f
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId,
+        refId: entry.refId, role: entry.role,
         label: entry.name,
         class: 'open', // force approve
         suggested_value: 'Yes',
@@ -534,7 +534,7 @@ await test('runMachine: pathological loop → max-steps cap fires', async () => 
     {
       _snapshot: async () => stayStuck(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId, label: entry.name, class: 'hard',
+        refId: entry.refId, role: entry.role, label: entry.name, class: 'hard',
         suggested_value: 'a@b.com', confidence: 'high',
         source: { kind: 'identity', key: 'identity.email' },
       }),
@@ -571,7 +571,7 @@ await test('runMachine: no Next button on last step → completed', async () => 
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId, label: entry.name, class: 'hard',
+        refId: entry.refId, role: entry.role, label: entry.name, class: 'hard',
         suggested_value: 'a@b.com', confidence: 'high',
         source: { kind: 'identity', key: 'identity.email' },
       }),
@@ -670,7 +670,7 @@ await test('runMachine: createIfMissing=true bootstraps from jobUrl+siteAdapter'
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId, label: entry.name, class: 'hard',
+        refId: entry.refId, role: entry.role, label: entry.name, class: 'hard',
         suggested_value: 'a@b.com', confidence: 'high',
         source: { kind: 'identity', key: 'identity.email' },
       }),
@@ -743,7 +743,7 @@ await test('runMachine: resume paused session at current_step', async () => {
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId, label: entry.name, class: 'hard',
+        refId: entry.refId, role: entry.role, label: entry.name, class: 'hard',
         suggested_value: '555-1234', confidence: 'high',
         source: { kind: 'identity', key: 'identity.phone' },
       }),
@@ -780,7 +780,7 @@ await test('runMachine: Next click throws → error outcome with diagnostic', as
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId, label: entry.name, class: 'hard',
+        refId: entry.refId, role: entry.role, label: entry.name, class: 'hard',
         suggested_value: 'a@b.com', confidence: 'high',
         source: { kind: 'identity', key: 'identity.email' },
       }),
@@ -826,7 +826,7 @@ await test('H2: dependent recheck declined → base AND dependent fields BOTH pe
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId, label: entry.name, class: 'open',
+        refId: entry.refId, role: entry.role, label: entry.name, class: 'open',
         suggested_value: 'Yes', confidence: 'medium', source: { kind: 'llm' },
       }),
       _fillField: async (page, refId) => {
@@ -869,7 +869,7 @@ await test('C4: outcome=error → session.status persisted as paused (not active
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId, label: entry.name, class: 'hard',
+        refId: entry.refId, role: entry.role, label: entry.name, class: 'hard',
         suggested_value: 'a@b.com', confidence: 'high',
         source: { kind: 'identity', key: 'identity.email' },
       }),
@@ -913,7 +913,7 @@ await test('C5: mid-step persist — crash after step 0 preserves step 0 progres
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId, label: entry.name, class: 'hard',
+        refId: entry.refId, role: entry.role, label: entry.name, class: 'hard',
         suggested_value: entry.name === 'Email' ? 'a@b.com' : '555-1234',
         confidence: 'high', source: { kind: 'identity', key: `identity.${entry.name.toLowerCase()}` },
       }),
@@ -978,7 +978,7 @@ await test('H1: resume preserves pending draft user edits', async () => {
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId, label: entry.name, class: 'hard',
+        refId: entry.refId, role: entry.role, label: entry.name, class: 'hard',
         // Classifier would return identity.yml value, but H1 fix should
         // overlay the user-edited value from the pending draft.
         suggested_value: 'classifier@default.com',
@@ -1019,7 +1019,7 @@ await test('H3: isOnSubmitStep re-checked after Next click prevents auto-submit'
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId, label: entry.name, class: 'hard',
+        refId: entry.refId, role: entry.role, label: entry.name, class: 'hard',
         suggested_value: 'value', confidence: 'high',
         source: { kind: 'identity', key: 'k' },
       }),
@@ -1060,7 +1060,7 @@ await test('H7: fill_error surfaced into persisted draft', async () => {
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId, label: entry.name, class: 'hard',
+        refId: entry.refId, role: entry.role, label: entry.name, class: 'hard',
         suggested_value: 'a@b.com', confidence: 'high',
         source: { kind: 'identity', key: 'identity.email' },
       }),
@@ -1099,7 +1099,7 @@ await test('H8: empty-entries step writes per_step_status=skipped + empty draft'
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId, label: entry.name, class: 'hard',
+        refId: entry.refId, role: entry.role, label: entry.name, class: 'hard',
         suggested_value: 'a@b.com', confidence: 'high',
         source: { kind: 'identity', key: 'identity.email' },
       }),
@@ -1140,7 +1140,7 @@ await test('H6: final writeSession ZodError trapped → outcome=error (not uncau
     {
       _snapshot: () => emul.snapshot(),
       _classifyAndFill: async (entry) => ({
-        refId: entry.refId, label: entry.name, class: 'hard',
+        refId: entry.refId, role: entry.role, label: entry.name, class: 'hard',
         suggested_value: 'a@b.com', confidence: 'high',
         source: { kind: 'identity', key: 'identity.email' },
       }),
