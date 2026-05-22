@@ -79,6 +79,10 @@ const PerStepDraftFieldSchema = z
     source_ref: z.string().max(400).optional(),
     // Real option texts captured from a live dropdown (combobox/listbox).
     options: z.array(z.string().max(400)).max(80).optional(),
+    // M1 post-fill verification: verified / mismatch / fill_error /
+    // unverifiable. Present once the field has been through FILL+VERIFY.
+    verify_status: z.string().max(40).optional(),
+    verify_detail: z.string().max(400).optional(),
   })
   .catchall(
     z.union([

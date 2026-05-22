@@ -230,6 +230,141 @@ async function captureFileFields(page, session) {
   return out;
 }
 
+// ── Verification (M1 — post-fill read-back) ─────────────────────────────
+//
+// The machine is otherwise "fire-and-forget": it fills a field and assumes
+// success if no exception was thrown. React forms routinely accept a
+// Playwright fill at the API level without the component committing the
+// value, so "filled" can be a lie. verifyStep re-reads each filled field
+// from the live DOM and assigns an HONEST status — a field only becomes
+// 'verified' via an explicit positive read-back. Core principle: no
+// silent errors. verifyStep NEVER throws — every failure is recorded.
+
+// Read a field's current value back from the live DOM, by control type.
+// Returns a string (possibly '') or null when the value can't be read.
+async function readFieldValue(page, table, f) {
+  // Synthetic file field — resolved by index, not via the refTable.
+  if (typeof f._fileInputIndex === 'number') {
+    return page
+      .locator('input[type=file]')
+      .nth(f._fileInputIndex)
+      .evaluate((el) => (el.files && el.files.length ? el.files[0].name : ''));
+  }
+  if (!table || typeof table.resolve !== 'function') return null;
+  const loc = table.resolve(f.refId, page);
+  const role = f.role;
+  if (role === 'checkbox' || role === 'radio') {
+    try {
+      return (await loc.isChecked()) ? 'checked' : 'unchecked';
+    } catch {
+      const ac = await loc.getAttribute('aria-checked').catch(() => null);
+      return ac === 'true' ? 'checked' : 'unchecked';
+    }
+  }
+  const readInput = async () => {
+    try {
+      return await loc.inputValue();
+    } catch {
+      return null;
+    }
+  };
+  const readText = async () => {
+    try {
+      const t = await loc.textContent();
+      return t == null ? null : t;
+    } catch {
+      return null;
+    }
+  };
+  // Combobox: the selected value lives in the element's text (React-Select
+  // has no backing input value). Textbox: the input value.
+  if (role === 'combobox' || role === 'listbox' || role === 'menu') {
+    return (await readText()) ?? (await readInput());
+  }
+  return (await readInput()) ?? (await readText());
+}
+
+// Does the value read back from the DOM match what we intended to fill?
+function verifyValueMatches(field, actual) {
+  const role = field.role;
+  if (role === 'radio') {
+    // A radio field represents the chosen option — it ends up checked.
+    return actual === 'checked';
+  }
+  if (role === 'checkbox') {
+    // A negative intended value means the box should end up UNchecked
+    // (defaultFillField uncheck()s on "No"/false). Derive the expectation
+    // from the value — otherwise a correctly-unchecked "No" reads as a
+    // mismatch every time.
+    const v = String(field.suggested_value ?? '').trim().toLowerCase();
+    const wantUnchecked = /^(no|false|off|unchecked|none|n|0)$/.test(v);
+    return wantUnchecked ? actual === 'unchecked' : actual === 'checked';
+  }
+  if (typeof field._fileInputIndex === 'number') {
+    // actual = the filename the <input type=file> reports. Require an
+    // exact basename match — "any non-empty name" would green-light the
+    // WRONG file (a silent error).
+    if (!actual) return false;
+    const wantName = String(field.suggested_value).split('/').pop();
+    return actual === wantName;
+  }
+  const norm = (s) =>
+    String(s ?? '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  const want = norm(field.suggested_value);
+  const got = norm(actual);
+  if (!want) return true;
+  // Empty form field + non-empty expected → the fill did NOT land. Guard
+  // here: without it `want.includes('')` is always true (every string
+  // contains '') and an empty field would falsely verify.
+  if (!got) return false;
+  // A combobox still showing its placeholder ("Select…") never committed.
+  if (/^(select|choose|pick)\b/.test(got) && got.length < 30) return false;
+  return got === want || got.includes(want) || want.includes(got);
+}
+
+// Re-read every field we attempted to fill and stamp field.verify_status:
+//   verified     — read back, value landed
+//   mismatch     — read back, value did NOT land (the silent-error catcher)
+//   fill_error   — the fill itself threw (set by the FILL loop)
+//   unverifiable — could not read the field back (stale ref / timeout)
+// Fields with no value to fill are left untouched (no false 'verified').
+// NEVER throws.
+async function verifyStep(page, table, classified) {
+  // Verification needs a real Playwright page. Smoke mock pages lack
+  // `locator` — skip wholesale so a field stays unverified rather than
+  // being falsely marked 'unverifiable' (keeps the machine smoke green).
+  if (!page || typeof page.locator !== 'function') return;
+  for (const f of classified) {
+    if (!f) continue;
+    if (f.suggested_value == null || f.suggested_value === '') continue;
+    if (f.verify_status === 'fill_error') continue; // already failed at fill
+    let actual;
+    try {
+      actual = await readFieldValue(page, table, f);
+    } catch (err) {
+      f.verify_status = 'unverifiable';
+      f.verify_detail = String(err?.message ?? err).slice(0, 200);
+      continue;
+    }
+    if (actual == null) {
+      f.verify_status = 'unverifiable';
+      f.verify_detail = 'could not read the field value back from the form';
+      continue;
+    }
+    if (verifyValueMatches(f, actual)) {
+      f.verify_status = 'verified';
+    } else {
+      f.verify_status = 'mismatch';
+      f.verify_detail =
+        `expected ${JSON.stringify(String(f.suggested_value).slice(0, 80))}, ` +
+        `form shows ${JSON.stringify(String(actual).slice(0, 80))}`;
+    }
+  }
+}
+
 /**
  * Build a per-step draft fragment from a list of classifier outputs.
  * Shape matches m1's PerStepDraftSchema (relaxed for in-progress drafts).
@@ -264,6 +399,15 @@ function buildStepDraftFragment(stepIdx, classifiedFields) {
       // fields failed to fill (vs silently dropping them from telemetry).
       if (typeof f.fill_error === 'string' && f.fill_error) {
         out.fill_error = f.fill_error.slice(0, 400);
+      }
+      // M1: post-fill verification result — verified / mismatch /
+      // fill_error / unverifiable. Surfaced so the UI never shows a
+      // comforting "done" over a field that didn't actually land.
+      if (typeof f.verify_status === 'string' && f.verify_status) {
+        out.verify_status = f.verify_status;
+      }
+      if (typeof f.verify_detail === 'string' && f.verify_detail) {
+        out.verify_detail = f.verify_detail.slice(0, 400);
       }
       return out;
     }),
@@ -548,8 +692,21 @@ async function runStep(session, deps, ctx) {
     } catch (err) {
       errors++;
       f.fill_error = String(err?.message ?? err).slice(0, 200);
+      f.verify_status = 'fill_error';
     }
   }
+
+  // 4b) VERIFY — read every filled field back from the live DOM. A field
+  // only earns 'verified' via an explicit positive read; anything else
+  // (mismatch / unverifiable / fill_error) surfaces. No silent success.
+  await verifyStep(page, snapPre.table, classified);
+  // Only a definite 'mismatch' blocks the step. 'unverifiable' (e.g. a
+  // stale ref) still surfaces in the UI summary but doesn't force the
+  // whole step to 'pending' — otherwise stale-ref churn makes 'pending'
+  // the default and erodes the signal.
+  const verifyFailures = classified.filter(
+    (f) => f && f.verify_status === 'mismatch',
+  ).length;
 
   // 5) Dependent-field check: re-snapshot, diff tuples
   const snapPost = await _snapshot(page);
@@ -616,9 +773,11 @@ async function runStep(session, deps, ctx) {
   if (!dependentsMerged) {
     session.per_step_draft[stepKey] = buildStepDraftFragment(session.current_step, classified);
   }
-  // H7-adjacent: if any fills errored, surface via 'pending' status so
-  // resume / UI can re-prompt the user; otherwise mark approved.
-  session.per_step_status[stepKey] = errors > 0 ? 'pending' : 'approved';
+  // H7-adjacent: if any fills errored OR failed post-fill verification,
+  // surface via 'pending' status so resume / UI can re-prompt the user;
+  // otherwise mark approved. A step with mismatches is NOT cleanly done.
+  session.per_step_status[stepKey] =
+    errors > 0 || verifyFailures > 0 ? 'pending' : 'approved';
 
   return { outcome: 'continue', filled, skipped: 0, errors };
 }
@@ -1005,3 +1164,5 @@ async function defaultWaitDomStable(page) {
 
 // Re-export internals that smoke + m4 need
 export { runStep, classifyEntries, tupleSetFromTable, entryTuple, stepNeedsApproval };
+// M1 verification — exported for the verify smoke.
+export { verifyStep, verifyValueMatches, readFieldValue };

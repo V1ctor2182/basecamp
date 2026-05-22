@@ -54,6 +54,10 @@ type DraftField = {
   // real option texts captured from a live dropdown — when present the
   // panel renders an actual <select> the operator picks from.
   options?: string[]
+  // M1 post-fill verification — verified / mismatch / fill_error /
+  // unverifiable. Set once the field has been through FILL+VERIFY.
+  verify_status?: string
+  verify_detail?: string
 }
 
 type Control = 'dropdown' | 'radio' | 'checkbox' | 'file' | 'text'
@@ -433,6 +437,7 @@ export default function Apply() {
     phase === 'done'
       ? outcome ?? (session?.status === 'completed' ? 'completed' : session?.status === 'paused' ? 'paused' : 'error')
       : null
+  const vsum = verifySummary(session)
 
   return (
     <div className="c-page ap-page">
@@ -556,15 +561,55 @@ export default function Apply() {
 
           {/* DONE — terminal states */}
           {phase === 'done' && terminal === 'completed' && (
-            <div className="ap-m2-panel ap-m2-panel-ok">
+            <div
+              className={`ap-m2-panel ${vsum.problems.length > 0 ? 'ap-m2-panel-err' : 'ap-m2-panel-ok'}`}
+            >
               <div className="ap-m2-panel-body">
                 <strong>
-                  <Check size={15} /> Form filled — ready for you to submit.
+                  {vsum.problems.length > 0 ? (
+                    <AlertTriangle size={15} />
+                  ) : (
+                    <Check size={15} />
+                  )}
+                  {vsum.problems.length > 0
+                    ? 'Form filled — but some fields need a look.'
+                    : 'Form filled & verified — ready to submit.'}
                 </strong>
+                {vsum.total > 0 && (
+                  <p className="ap-m2-verify-line">
+                    {vsum.counts.verified > 0 && (
+                      <span className="ap-m2-v-ok">✓ {vsum.counts.verified} verified</span>
+                    )}
+                    {vsum.counts.mismatch > 0 && (
+                      <span className="ap-m2-v-bad">✗ {vsum.counts.mismatch} didn't land</span>
+                    )}
+                    {vsum.counts.fill_error > 0 && (
+                      <span className="ap-m2-v-bad">✗ {vsum.counts.fill_error} fill error</span>
+                    )}
+                    {vsum.counts.unverifiable > 0 && (
+                      <span className="ap-m2-v-warn">
+                        ⚠ {vsum.counts.unverifiable} unverifiable
+                      </span>
+                    )}
+                  </p>
+                )}
+                {vsum.problems.length > 0 && (
+                  <ul className="ap-m2-problems">
+                    {vsum.problems.map((p, i) => (
+                      <li key={i}>
+                        <strong>{p.label}</strong> — {p.status}
+                        {p.detail ? <span className="ap-m2-problem-detail"> · {p.detail}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <p>
                   The machine filled every step up to the Submit page and stopped
-                  there. Switch to the Chromium window, review the form, and click
-                  Submit. Then mark it applied below.
+                  there.{' '}
+                  {vsum.problems.length > 0
+                    ? 'Fix the flagged fields in the Chromium window, then Submit.'
+                    : 'Review in the Chromium window and click Submit.'}{' '}
+                  Then mark it applied below.
                 </p>
                 {machine && machine.autoApprove.count > 0 && (
                   <p className="ap-m2-note">
@@ -821,6 +866,28 @@ function ApprovalPanel({
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
+
+// Scan a session's per-step drafts for M1 post-fill verification results.
+// `problems` collects every field that did NOT cleanly verify — the panel
+// shows them loudly so a failed fill is never hidden behind a green "done".
+function verifySummary(session: Session | undefined) {
+  const counts = { verified: 0, mismatch: 0, fill_error: 0, unverifiable: 0 }
+  const problems: { label: string; status: string; detail?: string }[] = []
+  for (const step of Object.values(session?.per_step_draft ?? {})) {
+    for (const f of step.fields ?? []) {
+      const st = f.verify_status
+      if (st === 'verified' || st === 'mismatch' || st === 'fill_error' || st === 'unverifiable') {
+        counts[st]++
+        if (st !== 'verified') {
+          problems.push({ label: f.label, status: st, detail: f.verify_detail })
+        }
+      }
+    }
+  }
+  const total =
+    counts.verified + counts.mismatch + counts.fill_error + counts.unverifiable
+  return { counts, problems, total }
+}
 
 // Map a Mode 2 classifier class onto the /apply/submitted 4-class enum.
 function toSubmittedClass(cls: string): 'hard' | 'legal' | 'open' | 'file' {

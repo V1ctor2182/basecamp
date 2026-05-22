@@ -517,6 +517,35 @@
   cursor: pointer;
   background: #fff;
 }
+
+/* M1 — post-fill verification summary on the completed panel. */
+.ap-m2-verify-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 8px 0 0 !important;
+  font-size: 12.5px !important;
+  font-weight: 600;
+}
+.ap-m2-v-ok   { color: #15803d; }
+.ap-m2-v-bad  { color: #b91c1c; }
+.ap-m2-v-warn { color: #b45309; }
+
+.ap-m2-problems {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #b91c1c;
+  line-height: 1.6;
+}
+.ap-m2-problems strong {
+  color: #1c1917;
+}
+.ap-m2-problem-detail {
+  color: #78716c;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+}
 .ap-m2-field-manual { background: #fffbeb; border-color: #fde68a; }
 .ap-m2-field-file { background: #f8fafc; }
 
