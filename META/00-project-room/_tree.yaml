@@ -453,6 +453,7 @@ tree:
         - "00-project-room/04-career-system/07-applier/self-iteration/01-code-calibration"
         - "00-project-room/04-career-system/07-applier/self-iteration/02-data-flywheel"
         - "00-project-room/04-career-system/07-applier/self-iteration/03-iteration-dashboard"
+        - "00-project-room/04-career-system/07-applier/self-iteration/04-flywheel-dashboard"
     - id: "00-project-room/04-career-system/07-applier/self-iteration/01-code-calibration"
       type: feature
       lifecycle: done
@@ -468,6 +469,12 @@ tree:
     - id: "00-project-room/04-career-system/07-applier/self-iteration/03-iteration-dashboard"
       type: feature
       lifecycle: done
+      owner: fullstack
+      parent: "00-project-room/04-career-system/07-applier/self-iteration"
+      children: []
+    - id: "00-project-room/04-career-system/07-applier/self-iteration/04-flywheel-dashboard"
+      type: feature
+      lifecycle: planning
       owner: fullstack
       parent: "00-project-room/04-career-system/07-applier/self-iteration"
       children: []

@@ -1,0 +1,66 @@
+spec_id: "intent-flywheel-dashboard-001"
+type: intent
+state: planning
+intent:
+  summary: "一个独立页面，把数据飞轮的全部状态集中呈现 —— 失败记录、待审提议、已应用规则、自测报告。"
+  detail: |
+    数据飞轮目前完全是后端：JSONL 记录文件 + suggested/*.json 提议文件。
+    没有一个统一的页面让操作者看到「飞轮现在转到哪了」。而且新做的验证层
+    (07-applier 验证层 M1–M4：verify-failures store + applier 自测 harness)
+    根本没有任何 UI。现有的零散呈现散落在 Learning tab 和 Iteration.tsx。
+
+    这个 Room 建一个**独立页面**，把飞轮的全貌集中到一处。
+
+    页面要呈现的 4 块（具体布局 / 分页 / 轮询留给 plan-milestones）：
+
+    1. 失败与修正记录 —— 3 个 feedback store：
+         data/career/feedback/field-edits.jsonl     (你审批时改过的值)
+         data/career/feedback/site-failures.jsonl   (申请在某网站崩了)
+         data/career/feedback/verify-failures.jsonl (自测发现填错/漏看的字段)
+       按网站聚类展示；verify-failures 区分 mismatch / not_seen / fill_error。
+
+    2. 待审提议 (pending proposals) —— suggestionStore：
+         data/career/feedback/suggested/*.json
+       每条显示 type (classifier-rule / site-adapter)、来源 group、规则内容、
+       触发它的源记录。操作者能直接 approve / reject（复用现有
+       applySuggestion / rejectSuggestion 路由）。
+
+    3. 已应用 + 已拒绝历史：
+         learned-classifier-rules.yml  (已 apply 的规则)
+         rejected-ids.json             (已拒的提议)
+       让操作者看到「飞轮到目前为止改了什么」。
+
+    4. 自测报告 + 验证统计 —— applier 自测 harness 的产出：
+         data/career/eval-fixtures/applier-selftest-report.json
+       每个岗位的 verified / mismatch / fill_error / not_seen / manual 计数 +
+       聚合总数。最好能从这个页面触发一次自测运行（或至少链接到怎么跑）。
+
+    设计原则（继承 07-applier 主线）：no silent errors —— 飞轮的每一个
+    失败、每一条待审提议都要在这个页面上看得见，不能藏在文件里。
+
+    入口：career 仪表盘的一个独立 tab / 路由（具体路由名待定，可能复用或
+    取代现有的 Learning / Iteration 入口 —— 这是一个 plan-milestones 的
+    open question）。
+
+constraints: []
+indexing:
+  type: intent
+  priority: P1
+  layer: feature
+  domain: "career-applier-flywheel"
+  tags: [flywheel, dashboard, ui, verification, self-iteration]
+provenance:
+  source_type: manual_input
+  confidence: 1.0
+  source_ref: "用户手动记录 2026-05-22 —— '数据飞轮所有的呈现都放在一个分开的页面'"
+relations:
+  - kind: depends_on
+    target: "00-project-room/04-career-system/07-applier/self-iteration/02-data-flywheel"
+  - kind: relates_to
+    target: "00-project-room/04-career-system/07-applier/self-iteration/03-iteration-dashboard"
+anchors: []
+open_questions:
+  - "新页面是复用现有的 Learning / Iteration 入口，还是新开一个独立 tab/路由？"
+  - "自测运行能否从页面里直接触发（后端跑 applier-selftest），还是只读展示报告？"
+  - "approve/reject 提议直接在这个页面做，还是只展示、跳到现有审批入口？"
+  - "失败记录的展示窗口（全部 / 近 30 天 / 可筛网站）？"
