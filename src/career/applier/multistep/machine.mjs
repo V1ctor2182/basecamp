@@ -20,6 +20,8 @@
 //   - writeSession lands behind withSessionLock from m1 — concurrent
 //     m4 pause endpoint can't race the step transition
 
+import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import {
   buildInitialSession,
   readSession,
@@ -27,7 +29,11 @@ import {
   withSessionLock,
 } from './applySessionsStore.mjs';
 import { snapshot as realSnapshot } from '../runtime/snapshot.mjs';
-import { classifyAndFill } from '../classifier/index.mjs';
+import { classifyAndFill, toSourceRefString } from '../classifier/index.mjs';
+// Canonical-value → form-option matcher. Used to remap a classifier's
+// canonical value ("Decline to answer") onto a dropdown's real option
+// text once the options have been captured.
+import { bestOption } from '../nonstandard/strategies/selectionControls.mjs';
 import {
   probeTotalSteps as realProbeTotalSteps,
   findNextButton as realFindNextButton,
@@ -83,6 +89,421 @@ function entryTuple(e) {
   return `${e.role}\u0000${e.name}\u0000${e.occurrenceIndex || 0}\u0000${e.frameIdx || 0}`;
 }
 
+// Real form-input roles. A field survives the chrome filter iff its
+// a11y role is one of these (or it is a classified file-upload button).
+// Filtering on role — not class — is correct because the snapshot's
+// role allowlist also captures page chrome (nav links, section
+// headings, logos), and that chrome can still match a HARD/LEGAL regex
+// on its text ("Race & Ethnicity Definitions" link → legal). It also
+// KEEPS real controls the classifier couldn't match — an unmatched
+// dropdown is still a field the operator must handle.
+const FORM_INPUT_ROLES = new Set(['textbox', 'checkbox', 'radio', 'combobox']);
+
+// a11y roles that present a fixed option list. For these the machine
+// opens the control during runStep and captures the real option texts,
+// so the approval UI shows them and the operator picks an exact option
+// — turning the fill into a deterministic match, not a fuzzy guess.
+const DROPDOWN_ROLES = new Set(['combobox', 'listbox', 'menu']);
+
+/**
+ * For every dropdown-role field, open the control, read its real option
+ * texts, close it, and stash them on `field.options`. Also remaps the
+ * classifier's canonical suggested_value onto the closest real option
+ * so the fill phase exact-matches instead of fuzzy-guessing.
+ *
+ * Fully defensive — never throws. Mock pages (smoke) lack getByRole and
+ * are skipped wholesale, so the machine smoke is unaffected.
+ */
+async function captureDropdownOptions(page, table, classified) {
+  if (!page || typeof page.getByRole !== 'function') return;
+  if (!table || typeof table.resolve !== 'function') return;
+  for (const f of classified) {
+    if (!f || !DROPDOWN_ROLES.has(f.role)) continue;
+    let loc;
+    try {
+      loc = table.resolve(f.refId, page);
+    } catch {
+      continue;
+    }
+    try {
+      await loc.click({ timeout: 3000 });
+      const optEls = page.getByRole('option');
+      const n = await optEls.count();
+      const opts = [];
+      for (let i = 0; i < Math.min(n, 60); i++) {
+        try {
+          const t = (await optEls.nth(i).textContent()) || '';
+          const trimmed = t.replace(/\s+/g, ' ').trim();
+          if (trimmed) opts.push(trimmed);
+        } catch {
+          /* skip a bad option node */
+        }
+      }
+      if (opts.length) {
+        f.options = opts;
+        // Remap the canonical value onto a real option — the approval
+        // UI then pre-selects it and the fill is an exact match.
+        if (f.suggested_value != null && f.suggested_value !== '') {
+          const match = bestOption(f.suggested_value, opts);
+          if (match) f.suggested_value = match;
+        }
+      }
+      // Close the listbox so the next control opens cleanly.
+      try {
+        await page.keyboard.press('Escape');
+      } catch {
+        /* best-effort */
+      }
+    } catch {
+      // Couldn't open this control — leave field.options undefined; the
+      // fill phase still fuzzy-matches at fill time as a fallback.
+    }
+  }
+}
+
+// Locate the tailored resume PDF for a job. The tailor writes
+// data/career/output/{jobId}-{resumeId}.pdf — we glob by jobId prefix
+// so the apply doesn't need the resumeId plumbed through. Returns the
+// absolute path when EXACTLY one match exists (ambiguous → null, the
+// operator then uploads manually).
+async function resolveResumePdf(jobId) {
+  if (typeof jobId !== 'string' || !jobId) return null;
+  try {
+    const dir = path.resolve('data', 'career', 'output');
+    const files = await fs.readdir(dir);
+    const matches = files.filter(
+      (f) => f.startsWith(`${jobId}-`) && f.toLowerCase().endsWith('.pdf'),
+    );
+    return matches.length === 1 ? path.join(dir, matches[0]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Detect file-upload controls and return them as synthetic file-class
+ * fields. The a11y snapshot misses <input type=file> (no accessible
+ * name), so this scans the DOM directly. Each field carries a
+ * `_fileInputIndex` so the fill loop can setInputFiles() on it without
+ * going through the refTable.
+ *
+ * Defensive — mock pages (smoke) lack page.locator and yield [].
+ */
+async function captureFileFields(page, session) {
+  if (!page || typeof page.locator !== 'function') return [];
+  let inputs;
+  let n = 0;
+  try {
+    inputs = page.locator('input[type=file]');
+    n = await inputs.count();
+  } catch {
+    return [];
+  }
+  const resumePdf = await resolveResumePdf(session?.jobId);
+  const out = [];
+  for (let i = 0; i < Math.min(n, 5); i++) {
+    // First file input → resume (the universal case); extras are generic.
+    const isResume = i === 0;
+    const label = isResume ? 'Resume / CV upload' : `File upload ${i + 1}`;
+    const subclass = isResume ? 'resume' : 'general-file';
+    const found = isResume && resumePdf;
+    const source = {
+      kind: 'file',
+      subclass,
+      status: found ? 'found' : 'generate-first',
+    };
+    out.push({
+      refId: `__file_${i}`,
+      label,
+      class: 'file',
+      subclass,
+      role: 'file',
+      suggested_value: found ? resumePdf : null,
+      confidence: found ? 'high' : 'manual',
+      source,
+      source_ref: toSourceRefString(source),
+      // Marks this as a direct-selector file field — the fill loop uses
+      // page.locator('input[type=file]').nth() instead of the refTable.
+      _fileInputIndex: i,
+    });
+  }
+  return out;
+}
+
+// ── Coverage + manual-blocker detection (M2) ────────────────────────────
+//
+// M1 verifies fields the machine touched. M2 catches the two remaining
+// silent-error classes: form controls the snapshot never saw, and things
+// only a human can do (CAPTCHA). No silent errors — a missed control
+// becomes a visible `not_seen` row, a CAPTCHA a visible `manual` item.
+
+function _normLabel(s) {
+  return String(s ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s*:]*\((?:required|optional)\)[\s*:]*$/i, '')
+    .replace(/[\s*:]+$/, '')
+    .trim();
+}
+
+// Two normalized labels refer to the same field. EXACT match only —
+// containment ("resume document" ⊂ "upload your resume document") can
+// match unrelated fields, even across roles, and would silently suppress
+// a real coverage gap. A near-miss instead surfaces as `not_seen`:
+// visible noise is acceptable, a silent miss is not.
+function _labelsSameField(a, b) {
+  return !!a && !!b && a === b;
+}
+
+// Reconcile the live DOM's 1:1 form controls (text inputs, textareas,
+// selects) against the draft. Any visible control whose label isn't in
+// the draft is returned as a synthetic `not_seen` field — the snapshot
+// missed it and the operator must fill it by hand. Radio/checkbox are
+// excluded (N inputs = 1 logical field → counting them invites noise).
+// Never throws.
+async function captureCoverageGaps(page, classified) {
+  if (!page || typeof page.evaluate !== 'function') return [];
+  let controls;
+  try {
+    controls = await page.evaluate(() => {
+      const SKIP = ['hidden', 'submit', 'button', 'reset', 'file', 'checkbox', 'radio', 'image'];
+      const out = [];
+      for (const el of document.querySelectorAll('input, textarea, select')) {
+        const tag = el.tagName.toLowerCase();
+        const type = (el.getAttribute('type') || '').toLowerCase();
+        if (tag === 'input' && SKIP.includes(type)) continue;
+        if (el.offsetParent === null && window.getComputedStyle(el).position !== 'fixed') {
+          continue; // not visible
+        }
+        let label = '';
+        const id = el.getAttribute('id');
+        if (id) {
+          const esc = window.CSS && CSS.escape ? CSS.escape(id) : id;
+          const l = document.querySelector(`label[for="${esc}"]`);
+          if (l) label = l.innerText || l.textContent || '';
+        }
+        if (!label) {
+          const l = el.closest('label');
+          if (l) label = l.innerText || '';
+        }
+        if (!label) {
+          label =
+            el.getAttribute('aria-label') ||
+            el.getAttribute('placeholder') ||
+            el.getAttribute('name') ||
+            '';
+        }
+        out.push(String(label).replace(/\s+/g, ' ').trim().slice(0, 200));
+      }
+      return out;
+    });
+  } catch {
+    return [];
+  }
+  const known = [];
+  for (const f of classified) {
+    if (f && f.label) known.push(_normLabel(f.label));
+  }
+  const gaps = [];
+  const seen = new Set();
+  for (const raw of controls) {
+    const n = _normLabel(raw);
+    const matched = n && known.some((k) => _labelsSameField(k, n));
+    if (matched) continue;
+    const key = n || `__unlabeled_${gaps.length}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    gaps.push({
+      refId: `__notseen_${gaps.length}`,
+      label: raw || '(unlabeled field)',
+      class: 'unknown',
+      role: 'textbox',
+      suggested_value: null,
+      confidence: 'manual',
+      verify_status: 'not_seen',
+      verify_detail: 'on the form but the machine did not capture it — fill it yourself',
+      source_ref: 'coverage:not-seen',
+    });
+  }
+  return gaps;
+}
+
+// Detect CAPTCHA / human-only blockers. Returns synthetic `manual`
+// fields so the operator gets an explicit "only you can do this" item.
+// CAPTCHA is never solved — just surfaced. Never throws.
+async function detectManualBlockers(page) {
+  if (!page || typeof page.locator !== 'function') return [];
+  try {
+    // Targeted CAPTCHA selectors. A bare [data-sitekey] is too broad
+    // (Stripe / analytics tags use it) — would raise a false manual
+    // blocker on a perfectly submittable form.
+    const captcha = page.locator(
+      'iframe[src*="recaptcha"], iframe[src*="hcaptcha"], ' +
+        'iframe[title*="captcha" i], .g-recaptcha, .h-captcha, .cf-turnstile',
+    );
+    if ((await captcha.count()) > 0) {
+      return [
+        {
+          refId: '__captcha',
+          label: 'CAPTCHA',
+          class: 'manual',
+          role: 'manual',
+          suggested_value: null,
+          confidence: 'manual',
+          verify_status: 'manual',
+          verify_detail: 'solve the CAPTCHA in the browser window before submitting',
+          source_ref: 'manual:captcha',
+        },
+      ];
+    }
+  } catch {
+    // detection failure is non-fatal
+  }
+  return [];
+}
+
+// ── Verification (M1 — post-fill read-back) ─────────────────────────────
+//
+// The machine is otherwise "fire-and-forget": it fills a field and assumes
+// success if no exception was thrown. React forms routinely accept a
+// Playwright fill at the API level without the component committing the
+// value, so "filled" can be a lie. verifyStep re-reads each filled field
+// from the live DOM and assigns an HONEST status — a field only becomes
+// 'verified' via an explicit positive read-back. Core principle: no
+// silent errors. verifyStep NEVER throws — every failure is recorded.
+
+// Read a field's current value back from the live DOM, by control type.
+// Returns a string (possibly '') or null when the value can't be read.
+async function readFieldValue(page, table, f) {
+  // Synthetic file field — resolved by index, not via the refTable.
+  if (typeof f._fileInputIndex === 'number') {
+    return page
+      .locator('input[type=file]')
+      .nth(f._fileInputIndex)
+      .evaluate((el) => (el.files && el.files.length ? el.files[0].name : ''));
+  }
+  if (!table || typeof table.resolve !== 'function') return null;
+  const loc = table.resolve(f.refId, page);
+  const role = f.role;
+  if (role === 'checkbox' || role === 'radio') {
+    try {
+      return (await loc.isChecked()) ? 'checked' : 'unchecked';
+    } catch {
+      const ac = await loc.getAttribute('aria-checked').catch(() => null);
+      return ac === 'true' ? 'checked' : 'unchecked';
+    }
+  }
+  const readInput = async () => {
+    try {
+      return await loc.inputValue();
+    } catch {
+      return null;
+    }
+  };
+  const readText = async () => {
+    try {
+      const t = await loc.textContent();
+      return t == null ? null : t;
+    } catch {
+      return null;
+    }
+  };
+  // Combobox: the selected value lives in the element's text (React-Select
+  // has no backing input value). Textbox: the input value.
+  if (role === 'combobox' || role === 'listbox' || role === 'menu') {
+    return (await readText()) ?? (await readInput());
+  }
+  return (await readInput()) ?? (await readText());
+}
+
+// Does the value read back from the DOM match what we intended to fill?
+function verifyValueMatches(field, actual) {
+  const role = field.role;
+  if (role === 'radio') {
+    // A radio field represents the chosen option — it ends up checked.
+    return actual === 'checked';
+  }
+  if (role === 'checkbox') {
+    // A negative intended value means the box should end up UNchecked
+    // (defaultFillField uncheck()s on "No"/false). Derive the expectation
+    // from the value — otherwise a correctly-unchecked "No" reads as a
+    // mismatch every time.
+    const v = String(field.suggested_value ?? '').trim().toLowerCase();
+    const wantUnchecked = /^(no|false|off|unchecked|none|n|0)$/.test(v);
+    return wantUnchecked ? actual === 'unchecked' : actual === 'checked';
+  }
+  if (typeof field._fileInputIndex === 'number') {
+    // actual = the filename the <input type=file> reports. Require an
+    // exact basename match — "any non-empty name" would green-light the
+    // WRONG file (a silent error).
+    if (!actual) return false;
+    const wantName = String(field.suggested_value).split('/').pop();
+    return actual === wantName;
+  }
+  const norm = (s) =>
+    String(s ?? '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  const want = norm(field.suggested_value);
+  const got = norm(actual);
+  if (!want) return true;
+  // Empty form field + non-empty expected → the fill did NOT land. Guard
+  // here: without it `want.includes('')` is always true (every string
+  // contains '') and an empty field would falsely verify.
+  if (!got) return false;
+  // A combobox still showing its placeholder ("Select…") never committed.
+  if (/^(select|choose|pick)\b/.test(got) && got.length < 30) return false;
+  return got === want || got.includes(want) || want.includes(got);
+}
+
+// Re-read every field we attempted to fill and stamp field.verify_status:
+//   verified     — read back, value landed
+//   mismatch     — read back, value did NOT land (the silent-error catcher)
+//   fill_error   — the fill itself threw (set by the FILL loop)
+//   unverifiable — could not read the field back (stale ref / timeout)
+// Fields with no value to fill are left untouched (no false 'verified').
+// NEVER throws.
+async function verifyStep(page, table, classified) {
+  // Verification needs a real Playwright page. Smoke mock pages lack
+  // `locator` — skip wholesale so a field stays unverified rather than
+  // being falsely marked 'unverifiable' (keeps the machine smoke green).
+  if (!page || typeof page.locator !== 'function') return;
+  for (const f of classified) {
+    if (!f) continue;
+    // Manual-class fields (CAPTCHA, rich text, …) are never machine-
+    // filled — tag them so the panel lists them as "only you can do".
+    if (f.class === 'manual') {
+      if (!f.verify_status) f.verify_status = 'manual';
+      continue;
+    }
+    if (f.suggested_value == null || f.suggested_value === '') continue;
+    if (f.verify_status === 'fill_error') continue; // already failed at fill
+    let actual;
+    try {
+      actual = await readFieldValue(page, table, f);
+    } catch (err) {
+      f.verify_status = 'unverifiable';
+      f.verify_detail = String(err?.message ?? err).slice(0, 200);
+      continue;
+    }
+    if (actual == null) {
+      f.verify_status = 'unverifiable';
+      f.verify_detail = 'could not read the field value back from the form';
+      continue;
+    }
+    if (verifyValueMatches(f, actual)) {
+      f.verify_status = 'verified';
+    } else {
+      f.verify_status = 'mismatch';
+      f.verify_detail =
+        `expected ${JSON.stringify(String(f.suggested_value).slice(0, 80))}, ` +
+        `form shows ${JSON.stringify(String(actual).slice(0, 80))}`;
+    }
+  }
+}
+
 /**
  * Build a per-step draft fragment from a list of classifier outputs.
  * Shape matches m1's PerStepDraftSchema (relaxed for in-progress drafts).
@@ -105,10 +526,27 @@ function buildStepDraftFragment(stepIdx, classifiedFields) {
         out.source_ref = f.source_ref.slice(0, 400);
       }
       if (f.subclass) out.subclass = f.subclass;
+      // Carry the control role through so the approval UI can show the
+      // user whether a field is a dropdown / radio / checkbox / text.
+      if (typeof f.role === 'string' && f.role) out.role = f.role;
+      // Real option texts captured from the live dropdown — lets the
+      // approval UI render an actual <select> the operator picks from.
+      if (Array.isArray(f.options) && f.options.length) {
+        out.options = f.options.slice(0, 80).map((o) => String(o).slice(0, 400));
+      }
       // H7 fix from review: surface fill_error so m4/UI can show which
       // fields failed to fill (vs silently dropping them from telemetry).
       if (typeof f.fill_error === 'string' && f.fill_error) {
         out.fill_error = f.fill_error.slice(0, 400);
+      }
+      // M1: post-fill verification result — verified / mismatch /
+      // fill_error / unverifiable. Surfaced so the UI never shows a
+      // comforting "done" over a field that didn't actually land.
+      if (typeof f.verify_status === 'string' && f.verify_status) {
+        out.verify_status = f.verify_status;
+      }
+      if (typeof f.verify_detail === 'string' && f.verify_detail) {
+        out.verify_detail = f.verify_detail.slice(0, 400);
       }
       return out;
     }),
@@ -310,6 +748,36 @@ async function runStep(session, deps, ctx) {
     _classifyAndFill,
   );
 
+  // Keep only real form controls. A single-page application URL
+  // (greenhouse / lever / ashby) snapshots the WHOLE page, so nav links,
+  // JD headings and logos arrive here too — and some of them match a
+  // HARD/LEGAL regex on their text, so filtering on class is wrong.
+  // Survive iff the a11y role is an actual input, or it is a classified
+  // file-upload button. This drops page chrome AND keeps real controls
+  // the classifier failed to match (an unmatched dropdown is still a
+  // field the operator must fill — it surfaces as a manual field).
+  classified = classified.filter(
+    (c) =>
+      c &&
+      (FORM_INPUT_ROLES.has(c.role) || (c.role === 'button' && c.class === 'file')),
+  );
+
+  // Capture real dropdown options (open each → read → close) so the
+  // approval UI shows them and the operator picks an exact option.
+  await captureDropdownOptions(page, snapPre.table, classified);
+
+  // Detect file-upload controls (the a11y snapshot misses <input
+  // type=file>) and append them as synthetic file-class fields.
+  const fileFields = await captureFileFields(page, session);
+  if (fileFields.length) classified.push(...fileFields);
+
+  // M2: coverage check — surface 1:1 form controls the snapshot missed
+  // as `not_seen` fields, and CAPTCHA / manual-only blockers.
+  const coverageGaps = await captureCoverageGaps(page, classified);
+  if (coverageGaps.length) classified.push(...coverageGaps);
+  const manualBlockers = await detectManualBlockers(page);
+  if (manualBlockers.length) classified.push(...manualBlockers);
+
   const pendingDraft = session.per_step_draft[stepKey];
   if (
     pendingDraft &&
@@ -355,14 +823,36 @@ async function runStep(session, deps, ctx) {
   for (const f of classified) {
     if (f.suggested_value == null || f.suggested_value === '') continue;
     try {
-      await _fillField(page, f.refId, f, snapPre.table);
+      if (typeof f._fileInputIndex === 'number') {
+        // Synthetic file field — upload straight onto the <input
+        // type=file> by index (it isn't in the refTable).
+        await page
+          .locator('input[type=file]')
+          .nth(f._fileInputIndex)
+          .setInputFiles(f.suggested_value);
+      } else {
+        await _fillField(page, f.refId, f, snapPre.table);
+      }
       recordToMemory(session.field_memory, f, f.suggested_value);
       filled++;
     } catch (err) {
       errors++;
       f.fill_error = String(err?.message ?? err).slice(0, 200);
+      f.verify_status = 'fill_error';
     }
   }
+
+  // 4b) VERIFY — read every filled field back from the live DOM. A field
+  // only earns 'verified' via an explicit positive read; anything else
+  // (mismatch / unverifiable / fill_error) surfaces. No silent success.
+  await verifyStep(page, snapPre.table, classified);
+  // Only a definite 'mismatch' blocks the step. 'unverifiable' (e.g. a
+  // stale ref) still surfaces in the UI summary but doesn't force the
+  // whole step to 'pending' — otherwise stale-ref churn makes 'pending'
+  // the default and erodes the signal.
+  const verifyFailures = classified.filter(
+    (f) => f && f.verify_status === 'mismatch',
+  ).length;
 
   // 5) Dependent-field check: re-snapshot, diff tuples
   const snapPost = await _snapshot(page);
@@ -376,12 +866,14 @@ async function runStep(session, deps, ctx) {
       if (!preSet.has(entryTuple(e))) dependents.push(e);
     }
     if (dependents.length) {
-      const depClassified = await classifyEntries(
-        dependents,
-        ctx.classifierCtx || {},
-        session.field_memory,
-        _classifyAndFill,
-      );
+      const depClassified = (
+        await classifyEntries(
+          dependents,
+          ctx.classifierCtx || {},
+          session.field_memory,
+          _classifyAndFill,
+        )
+      ).filter((c) => c && c.class !== 'unknown');
       if (stepNeedsApproval(depClassified)) {
         const depDraft = buildStepDraftFragment(session.current_step, depClassified);
         const approval2 = await approve({
@@ -427,9 +919,11 @@ async function runStep(session, deps, ctx) {
   if (!dependentsMerged) {
     session.per_step_draft[stepKey] = buildStepDraftFragment(session.current_step, classified);
   }
-  // H7-adjacent: if any fills errored, surface via 'pending' status so
-  // resume / UI can re-prompt the user; otherwise mark approved.
-  session.per_step_status[stepKey] = errors > 0 ? 'pending' : 'approved';
+  // H7-adjacent: if any fills errored OR failed post-fill verification,
+  // surface via 'pending' status so resume / UI can re-prompt the user;
+  // otherwise mark approved. A step with mismatches is NOT cleanly done.
+  session.per_step_status[stepKey] =
+    errors > 0 || verifyFailures > 0 ? 'pending' : 'approved';
 
   return { outcome: 'continue', filled, skipped: 0, errors };
 }
@@ -579,6 +1073,19 @@ export async function runMachine(args, deps = {}) {
   // Resume bumps status back to active (was 'paused' from prior bail)
   session.status = 'active';
 
+  // Persist the session NOW, before the STEP_LOOP. The loop otherwise
+  // only writes after each step COMPLETES — so during a long step 0
+  // (e.g. a single-page form paused at its approval gate) the status
+  // endpoint readSession()s nothing and 404s, hiding the live machine.
+  // Writing here makes the apply observable from step 0 onward.
+  try {
+    await withSessionLock(jobId, async () => {
+      await resolved._writeSession(jobId, session);
+    });
+  } catch {
+    // Non-fatal — the per-step persist below will retry.
+  }
+
   // DETECT_FLOW — probe total steps if not yet known
   if (session.total_steps == null) {
     try {
@@ -599,17 +1106,22 @@ export async function runMachine(args, deps = {}) {
 
   try {
     for (let i = 0; i < maxSteps; i++) {
-      // H3 fix from review: re-check isOnSubmitStep at the TOP of every
-      // iteration (including after click+wait from the prior iteration's
-      // tail). Workday's Review-then-Submit page may have both fillable
-      // consent checkboxes AND a Submit button — without this check we'd
-      // happily classify and fill the Review step, then findNextButton
-      // could match "Submit" as a Next-equivalent and auto-submit.
+      // Submit-button detection. A visible Submit button means different
+      // things depending on where we are:
+      //   - step > 0  → a multi-step wizard's final Review/Submit step.
+      //     Stop WITHOUT filling — the bulk was filled on prior steps and
+      //     the operator submits. (Prevents auto-submitting a Workday
+      //     Review page; preserves the original H3 review fix.)
+      //   - step 0    → a SINGLE-PAGE form (greenhouse / lever / ashby):
+      //     the whole form AND the Submit button live on one page. We
+      //     must fill it first, so DON'T break here — fall through to
+      //     runStep, then stop after filling (the isSubmit check below).
+      // The machine never clicks Submit itself in either case.
       let isSubmit = false;
       try {
         isSubmit = await resolved._isOnSubmitStep(page, session.site_adapter);
       } catch {}
-      if (isSubmit) {
+      if (isSubmit && session.current_step > 0) {
         session.status = 'completed';
         outcome = OUTCOME.COMPLETED;
         break;
@@ -635,6 +1147,14 @@ export async function runMachine(args, deps = {}) {
       // M3 fix from review: runStep returns explicit outcome enum
       if (stepRes.outcome === 'paused') {
         outcome = OUTCOME.PAUSED;
+        break;
+      }
+
+      // Single-page form: the form is now filled and the Submit button is
+      // right here → done. The operator reviews and submits in the browser.
+      if (isSubmit) {
+        session.status = 'completed';
+        outcome = OUTCOME.COMPLETED;
         break;
       }
 
@@ -790,3 +1310,6 @@ async function defaultWaitDomStable(page) {
 
 // Re-export internals that smoke + m4 need
 export { runStep, classifyEntries, tupleSetFromTable, entryTuple, stepNeedsApproval };
+// M1 + M2 verification layer — exported for the verify smoke.
+export { verifyStep, verifyValueMatches, readFieldValue };
+export { captureCoverageGaps, detectManualBlockers, _labelsSameField };

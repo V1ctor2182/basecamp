@@ -1,3 +1,11 @@
+// Load .env (ANTHROPIC_API_KEY, GITHUB_TOKEN, etc.) before anything reads
+// process.env. Silent if no .env file exists — env may be set in the shell.
+try {
+  process.loadEnvFile();
+} catch {
+  // no .env file — fine, fall back to shell-exported vars
+}
+
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs/promises';
@@ -3210,6 +3218,53 @@ app.get('/api/career/finder/pipeline', async (req, res) => {
   }
 });
 
+// ─── Finder: single job lookup ─────────────────────────────────────────
+// Returns one job from pipeline.json by id. The Mode 2 Apply page needs
+// the job's apply URL + role/company to start a multi-step machine.
+// Trims the heavy description/raw fields — only metadata is shipped.
+app.get('/api/career/finder/job/:jobId', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    if (!existsSync(PIPELINE_FILE)) {
+      return res.status(404).json({ error: 'pipeline.json does not exist' });
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(await fs.readFile(PIPELINE_FILE, 'utf-8'));
+    } catch {
+      return res.status(500).json({ error: 'pipeline.json unparseable' });
+    }
+    const jobs = Array.isArray(parsed?.jobs) ? parsed.jobs : [];
+    const j = jobs.find((x) => x && x.id === jobId);
+    if (!j) {
+      return res.status(404).json({ error: `job not found in pipeline.json: ${jobId}` });
+    }
+    res.json({
+      id: j.id,
+      company: j.company,
+      role: j.role,
+      location: j.location,
+      url: j.url,
+      source: j.source ? { type: j.source.type, name: j.source.name } : null,
+      posted_at: j.posted_at,
+      status: j.status,
+      // Full JD body — safe to ship for a single job (the list endpoint
+      // trims it because 300 × 10KB would be a heavy payload).
+      description: j.description ?? null,
+      evaluation: j.evaluation
+        ? {
+            stage_a: j.evaluation.stage_a
+              ? { score: j.evaluation.stage_a.score, verdict: j.evaluation.stage_a.verdict }
+              : null,
+            stage_b: j.evaluation.stage_b ? { score: j.evaluation.stage_b.score } : null,
+          }
+        : null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e?.message ?? e).slice(0, 300) });
+  }
+});
+
 // ─── Finder: re-filter raw-scan into pipeline.json ─────────────────────
 // find-jobs-redesign m1 follow-up: when the user changes hard_filters
 // (especially loosens them), the dedupe logic in scanRunner.mjs blocks
@@ -4187,6 +4242,7 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
     const evaluatedAt = new Date().toISOString();
     const resultsById = new Map(result.results.map((r) => [r.jobId, r]));
     let totalWebSearchRequests = 0;
+    const jobErrors = [];
     for (const job of candidates) {
       const r = resultsById.get(job.id);
       if (!r) continue;
@@ -4201,7 +4257,10 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
         tool_rounds_used: r.tool_rounds_used ?? 0,
         status: r.status,
       };
-      if (r.error) stageB.error = String(r.error).slice(0, 500);
+      if (r.error) {
+        stageB.error = String(r.error).slice(0, 500);
+        jobErrors.push({ jobId: job.id, error: stageB.error });
+      }
       job.evaluation = { ...(job.evaluation ?? {}), stage_b: stageB };
       totalWebSearchRequests += stageB.web_search_requests;
     }
@@ -4216,6 +4275,7 @@ app.post('/api/career/evaluate/stage-b', async (req, res) => {
       total_cost_usd: result.total_cost_usd,
       total_web_search_requests: totalWebSearchRequests,
       threshold,
+      jobErrors,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -5109,7 +5169,9 @@ app.post('/api/career/applier/multi-step/start', async (req, res) => {
         body = { ...body, autoApproveWhenSafe: false };
       }
     }
-    const result = await multiStepStart(body);
+    // freshStart: /start always begins a clean apply — clears any prior
+    // (completed/errored) session. /resume is the path that keeps state.
+    const result = await multiStepStart(body, { freshStart: true });
     if (result.error) {
       return res.status(result.status || 500).json({ error: result.error });
     }
@@ -5197,6 +5259,26 @@ app.post('/api/career/applier/multi-step/:jobId/resume', async (req, res) => {
       return res.status(result.status || 500).json({ error: result.error });
     }
     res.status(202).json({ sessionId: result.sessionId, started_at: result.started_at });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+// Bring the applier's headful Chromium window (the one with the filled
+// form) to the foreground — it routinely ends up hidden behind other
+// windows. Acts only on an already-open browser; never launches one.
+app.post('/api/career/applier/multi-step/:jobId/reveal', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    if (!MULTI_STEP_JOB_ID_RE.test(jobId)) {
+      return res.status(400).json({ error: 'jobId must match 12-hex' });
+    }
+    const { bringPageToFront } = await import('./src/career/applier/runtime/browser.mjs');
+    const result = await bringPageToFront(jobId);
+    if (!result.ok) {
+      return res.status(409).json({ error: result.error || 'could not reveal the browser' });
+    }
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
   }

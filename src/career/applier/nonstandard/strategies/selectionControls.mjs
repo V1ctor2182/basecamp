@@ -46,6 +46,113 @@ const _LOW_PARTIAL = (suggested, error) => ({
   error,
 });
 
+// ─── Canonical-value → form-option matching ───────────────────────────
+//
+// The classifier emits a CANONICAL value ("Decline to answer") that
+// rarely equals the form's literal <option> text ("I do not want to
+// answer"). Exact-match alone leaves EEO dropdowns (gender / race /
+// veteran / disability — all default to a decline phrasing) unfilled.
+// bestOption() fuzzy-maps the canonical value to the closest real option.
+
+function _normOpt(s) {
+  return String(s == null ? '' : s)
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// "Decline to answer" and its many ATS phrasings ("I do not wish to
+// answer", "Prefer not to say", "Decline to self-identify", …).
+const _DECLINE_RE =
+  /\b(decline|prefer not|rather not|do not wish|dont wish|not want to answer|choose not to|wish not to|opt out)\b/;
+
+/**
+ * Pick the form-option text that best matches a canonical value.
+ * Returns the matched option string, or null when nothing is close
+ * enough (caller then routes to its own fallback / MANUAL).
+ *
+ * @param {string} value      canonical value from the classifier
+ * @param {string[]} options  visible <option> texts on the open listbox
+ * @returns {string|null}
+ */
+export function bestOption(value, options) {
+  const v = _normOpt(value);
+  if (!v) return null;
+  const cand = (Array.isArray(options) ? options : [])
+    .map((o) => ({ raw: String(o == null ? '' : o).trim(), n: _normOpt(o) }))
+    .filter((o) => o.raw && o.n);
+  if (cand.length === 0) return null;
+  // 1. exact (normalized)
+  let hit = cand.find((o) => o.n === v);
+  if (hit) return hit.raw;
+  // 2. decline family — "Decline to answer" ↔ "I do not want to answer"
+  if (_DECLINE_RE.test(v)) {
+    hit = cand.find((o) => _DECLINE_RE.test(o.n));
+    if (hit) return hit.raw;
+  }
+  // 3. substring either direction ("Yes" ↔ "Yes, I have a disability")
+  hit = cand.find((o) => o.n.includes(v) || v.includes(o.n));
+  if (hit) return hit.raw;
+  // 4. yes/no — match the option whose first word is yes/no
+  if (v === 'yes' || v === 'no') {
+    hit = cand.find((o) => o.n.split(' ')[0] === v);
+    if (hit) return hit.raw;
+  }
+  // 5. token overlap — ≥60% of the value's words present in the option
+  const vt = v.split(' ').filter(Boolean);
+  if (vt.length) {
+    let best = null;
+    let bestScore = 0;
+    for (const o of cand) {
+      const ot = new Set(o.n.split(' '));
+      const score = vt.filter((t) => ot.has(t)).length / vt.length;
+      if (score > bestScore) {
+        bestScore = score;
+        best = o.raw;
+      }
+    }
+    if (bestScore >= 0.6) return best;
+  }
+  return null;
+}
+
+/**
+ * Enumerate the currently-visible listbox options and click the one
+ * that best fuzzy-matches `target`. Returns true on a successful click.
+ * Never throws — a DOM error returns false so the caller can fall back.
+ */
+async function _pickFuzzyOption(page, target) {
+  let optionEls;
+  let count = 0;
+  try {
+    optionEls = page.getByRole('option');
+    count = await optionEls.count();
+  } catch {
+    return false;
+  }
+  if (!count) return false;
+  const texts = [];
+  for (let i = 0; i < Math.min(count, 60); i++) {
+    try {
+      texts.push((await optionEls.nth(i).textContent()) || '');
+    } catch {
+      texts.push('');
+    }
+  }
+  const match = bestOption(target, texts);
+  if (!match) return false;
+  try {
+    await page
+      .getByRole('option', { name: match, exact: true })
+      .first()
+      .click({ timeout: OPTION_TIMEOUT_MS });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ─── radio_div ────────────────────────────────────────────────────────
 
 /**
@@ -191,6 +298,13 @@ async function fillCustomCombobox(page, locator, _field, value) {
       await option.first().click({ timeout: OPTION_TIMEOUT_MS });
       return { filled: true, confidence: Confidence.MEDIUM, manual: false, suggestedValue: null };
     } catch {
+      // Exact match failed — the classifier's canonical value rarely
+      // equals the option's literal text ("Decline to answer" vs the
+      // form's "I do not want to answer"). Enumerate the open listbox
+      // and fuzzy-match before resorting to the blind arrow-key pick.
+      if (await _pickFuzzyOption(page, target)) {
+        return { filled: true, confidence: Confidence.MEDIUM, manual: false, suggestedValue: null };
+      }
       // Review fix (HIGH H2): gate the arrow-key fallback behind a
       // visible-listbox check. On a closed/empty listbox, Enter can
       // SUBMIT THE FORM on some ATSs (Workday, Greenhouse) — a
@@ -241,7 +355,18 @@ async function fillSearchSelect(page, locator, _field, value) {
       await exact.first().click();
       return { filled: true, confidence: Confidence.MEDIUM, manual: false, suggestedValue: null };
     } catch {
-      // No exact match — try unanchored, but only auto-click when
+      // No exact match. The typed value filtered the listbox (maybe to
+      // zero) — clear the filter, then fuzzy-match the full option set
+      // ("Decline to answer" → the form's "I do not want to answer").
+      try {
+        await locator.fill('');
+      } catch {
+        // some pickers reject clearing the input — fuzzy-match anyway
+      }
+      if (await _pickFuzzyOption(page, target)) {
+        return { filled: true, confidence: Confidence.MEDIUM, manual: false, suggestedValue: null };
+      }
+      // No fuzzy match — try unanchored, but only auto-click when
       // exactly one option is visible. Anything else is ambiguous
       // and must route to LOW so the user verifies the picked city.
       try {
@@ -374,4 +499,5 @@ export const _testing = {
   fillSearchSelect,
   selectionDetectionRule,
   parseMultiValue,
+  bestOption,
 };

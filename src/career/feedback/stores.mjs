@@ -49,6 +49,7 @@ export const SUGGESTED_DIR = path.join(FEEDBACK_DIR, 'suggested');
 const FIELD_MISCLASSIFIED = 'field-misclassified.jsonl';
 const FIELD_EDITS = 'field-edits.jsonl';
 const SITE_FAILURES = 'site-failures.jsonl';
+const VERIFY_FAILURES = 'verify-failures.jsonl';
 
 // REVIEW C2 fix: per-file async mutex serializing in-process appends.
 // libuv's appendFile runs in the thread pool and does NOT guarantee
@@ -204,6 +205,16 @@ export function recordSiteFailure(record) {
   return appendJsonl(SITE_FAILURES, record);
 }
 
+/**
+ * Record a post-fill verification failure. Called by the self-test
+ * harness — one row per field that failed M1/M2 verification.
+ *
+ * @param {object} record — validated against VerifyFailureSchema
+ */
+export function recordVerifyFailure(record) {
+  return appendJsonl(VERIFY_FAILURES, record);
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────
 
 /**
@@ -286,4 +297,5 @@ export const _FILES = Object.freeze({
   FIELD_MISCLASSIFIED,
   FIELD_EDITS,
   SITE_FAILURES,
+  VERIFY_FAILURES,
 });

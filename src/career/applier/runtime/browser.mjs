@@ -48,8 +48,10 @@ export const BROWSER_LAUNCH_TIMEOUT_MS = 30_000;
 
 // SMOKE=1 → headless (CI / smoke tests). Default headful per Room
 // constraint C1 (用户日常 dev/prod 必须 headful — 反 bot detection 宽容度高
-// + 失败能立刻看到).
-const HEADLESS = process.env.SMOKE === '1';
+// + 失败能立刻看到). APPLIER_HEADLESS=1 → headless for the unattended
+// self-test harness — a dedicated flag, not entangled with SMOKE.
+const HEADLESS =
+  process.env.SMOKE === '1' || process.env.APPLIER_HEADLESS === '1';
 
 // ── Module-scoped singleton state ────────────────────────────────────────
 
@@ -276,4 +278,28 @@ export async function closeBrowser() {
  */
 export function _hasWarmContext() {
   return _context !== null;
+}
+
+/**
+ * Bring the applier browser's page to the foreground so the operator can
+ * find the filled form (the headful window often ends up behind other
+ * windows). Acts ONLY on an already-open browser — never launches one.
+ * When `jobId` matches a tagged page that page is raised; otherwise the
+ * most-recently-opened page.
+ *
+ * @param {string} [jobId]
+ * @returns {Promise<{ ok: boolean, error?: string }>}
+ */
+export async function bringPageToFront(jobId) {
+  if (!_context) return { ok: false, error: 'no applier browser is open' };
+  const pages = _context.pages();
+  if (!pages.length) return { ok: false, error: 'applier browser has no open page' };
+  let page = jobId ? pages.find((p) => _pageJobIds.get(p) === jobId) : null;
+  if (!page) page = pages[pages.length - 1];
+  try {
+    await page.bringToFront();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e?.message ?? e).slice(0, 200) };
+  }
 }

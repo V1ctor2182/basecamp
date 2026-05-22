@@ -271,17 +271,44 @@ export function _extraRulesSize() {
  *   confidenceHint: 'high' | 'medium' | 'low' | null,
  * }}
  */
+/**
+ * Strip the decorations ATS forms append to field labels so the regex
+ * sweep sees the bare label. This is ATS-agnostic — the "* = required"
+ * marker, "(required)"/"(optional)" suffixes and trailing colons are
+ * universal web-form conventions. Without this, anchored patterns like
+ * `^(first|given) ?name$` fail on greenhouse's "First Name*".
+ *
+ * Exported for smoke testability.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+export function normalizeLabel(name) {
+  return String(name)
+    .replace(/\s+/g, ' ')
+    .trim()
+    // "Phone (required)" / "City (Optional)" — drop the parenthetical
+    .replace(/[\s*:]*\((?:required|optional)\)[\s*:]*$/i, '')
+    // trailing required-marker / colon / whitespace: "First Name*",
+    // "Email *", "City:". The "?" of a real question is preserved.
+    .replace(/[\s*:]+$/, '')
+    .trim();
+}
+
 export function classifyField(entry) {
   const { role, name } = entry;
   if (!name || typeof name !== 'string') {
     return { class: 'unknown', confidenceHint: null };
   }
+  // Match against the de-decorated label (see normalizeLabel). The
+  // original `name` is still what the caller stores as the field label.
+  const matchName = normalizeLabel(name);
 
   // EXTRA RULES (per-adapter known_fields) — try first per OQ2 augment-prepend.
   // Insertion order across registerExtraRules batches.
   for (const batch of _EXTRA_RULES.values()) {
     for (const p of batch) {
-      if (p.labelRegex.test(name)) {
+      if (p.labelRegex.test(matchName)) {
         // FILE class is gated by role in the standard sweep — preserve
         // the same gate here so an adapter known_field claiming a
         // textbox field is file-class doesn't fire setInputFiles on a
@@ -300,7 +327,7 @@ export function classifyField(entry) {
 
   // HARD has highest priority — these are deterministic and high-confidence
   for (const p of HARD_PATTERNS) {
-    if (p.regex.test(name)) {
+    if (p.regex.test(matchName)) {
       return {
         class: 'hard',
         subclass: p.subclass,
@@ -317,7 +344,7 @@ export function classifyField(entry) {
   // LEGAL — next priority. legal.yml ships with EEO defaults already in
   // place so high-confidence by construction.
   for (const p of LEGAL_PATTERNS) {
-    if (p.regex.test(name)) {
+    if (p.regex.test(matchName)) {
       return {
         class: 'legal',
         subclass: p.subclass,
@@ -335,7 +362,7 @@ export function classifyField(entry) {
   const isFileRole = role === 'button' || role === 'link';
   if (isFileRole) {
     for (const p of FILE_PATTERNS) {
-      if (p.regex.test(name)) {
+      if (p.regex.test(matchName)) {
         return {
           class: 'file',
           subclass: p.subclass,
@@ -350,7 +377,7 @@ export function classifyField(entry) {
   // OPEN — match by name first; if textbox role with no specific match,
   // still mark as open (subclass='unknown-open') for m2 LLM fallback.
   for (const p of OPEN_PATTERNS) {
-    if (p.regex.test(name)) {
+    if (p.regex.test(matchName)) {
       return {
         class: 'open',
         subclass: p.subclass,

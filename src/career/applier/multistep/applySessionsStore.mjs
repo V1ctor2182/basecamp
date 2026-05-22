@@ -77,6 +77,12 @@ const PerStepDraftFieldSchema = z
     suggested_value: z.string().max(8000).nullable().optional(),
     confidence: z.string().optional(),
     source_ref: z.string().max(400).optional(),
+    // Real option texts captured from a live dropdown (combobox/listbox).
+    options: z.array(z.string().max(400)).max(80).optional(),
+    // M1 post-fill verification: verified / mismatch / fill_error /
+    // unverifiable. Present once the field has been through FILL+VERIFY.
+    verify_status: z.string().max(40).optional(),
+    verify_detail: z.string().max(400).optional(),
   })
   .catchall(
     z.union([
@@ -92,7 +98,10 @@ const PerStepDraftFieldSchema = z
 const PerStepDraftSchema = z
   .object({
     step_idx: z.number().int().nonnegative(),
-    fields: z.array(PerStepDraftFieldSchema).max(50),
+    // 120: a single-page ATS form (greenhouse / lever) can legitimately
+    // have well over 50 controls on one step. Still bounded so a runaway
+    // snapshot can't balloon the session JSON.
+    fields: z.array(PerStepDraftFieldSchema).max(120),
     captured_at: z.string().datetime({ offset: true }),
   })
   .strict();

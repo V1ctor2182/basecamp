@@ -1,0 +1,20 @@
+{
+  "_comment": "Self-test fixture for the Mode 2 applier harness (scripts/applier-selftest.mjs). Each entry is a real job application URL the harness drives the machine against — headless, auto-approving every step, NEVER submitting. Add or remove entries freely; jobId must be 12 lowercase hex.",
+  "jobs": [
+    {
+      "jobId": "0138ed7db46b",
+      "label": "Anthropic — Amazon GTM Partnership, Startups (greenhouse)",
+      "url": "https://job-boards.greenhouse.io/anthropic/jobs/5215052008"
+    },
+    {
+      "jobId": "5f80f91ff87d",
+      "label": "Anthropic — Commercial Counsel, Infra Security (greenhouse)",
+      "url": "https://job-boards.greenhouse.io/anthropic/jobs/5205894008"
+    },
+    {
+      "jobId": "406890c5621b",
+      "label": "OpenAI — Regional Client Partner, Ads (ashby)",
+      "url": "https://jobs.ashbyhq.com/openai/c9c7c6af-7d22-4f14-b6ef-99c7ea66a151/application"
+    }
+  ]
+}

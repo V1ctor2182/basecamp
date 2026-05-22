@@ -23,6 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 
+# Secrets — API keys, tokens (loaded by server.mjs via process.loadEnvFile)
+.env
+.env.local
+.env.*.local
+
 # App data (contains tokens)
 # NOTE: not ignoring `data/` wholesale because data/career/ has committed
 # config/knowledge files (see career-system exceptions below). Ignore only
@@ -107,3 +112,6 @@ data/career/eval-fixtures/tuner-log.json
 # 03-iteration-dashboard promote-evidence queue (operator workspace,
 # not committable — each entry tracks a pending fixture capture).
 data/career/eval-fixtures/promote-queue/
+
+# Applier self-test harness output (regenerated each run).
+data/career/eval-fixtures/applier-selftest-report.json

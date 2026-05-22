@@ -1,0 +1,18 @@
+milestones: []
+current_sprint: null
+blockers:
+  - "Plan-milestones not yet run — run the plan-milestones skill before dev m1."
+completion: 0
+status_note: >
+  🔄 planning. Created 2026-05-22. One dedicated page that surfaces the
+  whole data flywheel in one place — today it is all backend (JSONL
+  stores + suggested/*.json) with no consolidated UI, and the new
+  verification layer (07-applier M1–M4: verify-failures store + the
+  applier self-test harness) has no UI surface at all. Scope: the 3
+  feedback stores (field-edits / site-failures / verify-failures), the
+  pending induced proposals awaiting approve/reject, applied + rejected
+  rule history, and the self-test reports with verified/mismatch/
+  not_seen verification stats. Consolidates what is currently scattered
+  across the Learning tab + Iteration.tsx. Milestones to be locked by
+  plan-milestones.
+last_updated: "2026-05-22"
