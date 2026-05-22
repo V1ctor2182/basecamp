@@ -5264,6 +5264,26 @@ app.post('/api/career/applier/multi-step/:jobId/resume', async (req, res) => {
   }
 });
 
+// Bring the applier's headful Chromium window (the one with the filled
+// form) to the foreground — it routinely ends up hidden behind other
+// windows. Acts only on an already-open browser; never launches one.
+app.post('/api/career/applier/multi-step/:jobId/reveal', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    if (!MULTI_STEP_JOB_ID_RE.test(jobId)) {
+      return res.status(400).json({ error: 'jobId must match 12-hex' });
+    }
+    const { bringPageToFront } = await import('./src/career/applier/runtime/browser.mjs');
+    const result = await bringPageToFront(jobId);
+    if (!result.ok) {
+      return res.status(409).json({ error: result.error || 'could not reveal the browser' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
 // ── 07-applier/self-iteration/02-data-flywheel m3 — feedback approve/reject ──
 //
 // Routes wrap applySuggestion.mjs's approveSuggestion / rejectSuggestion +

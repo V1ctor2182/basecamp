@@ -194,7 +194,7 @@ export async function startMachine(body, deps = {}) {
   // Acquire page (production via getPage; smoke injects mock)
   let page;
   try {
-    page = await (deps._getPage ? deps._getPage() : defaultGetPage());
+    page = await (deps._getPage ? deps._getPage() : defaultGetPage(jobId));
   } catch (err) {
     _machines.delete(jobId); // release reserved slot
     return { status: 503, error: `getPage failed: ${String(err?.message ?? err).slice(0, 200)}` };
@@ -627,10 +627,12 @@ function redactSession(session) {
   return session;
 }
 
-// Lazy-imported default for production; smoke always injects _getPage
-async function defaultGetPage() {
+// Lazy-imported default for production; smoke always injects _getPage.
+// Tags the page with jobId so the "reveal browser" route can raise the
+// right tab later.
+async function defaultGetPage(jobId) {
   const { getPage } = await import('../runtime/browser.mjs');
-  return getPage();
+  return getPage(jobId);
 }
 
 // Cost-ledger appender passed to the open-ended filler as ctx.recordCost.

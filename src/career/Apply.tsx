@@ -23,6 +23,7 @@ import {
   Loader2,
   Play,
   X,
+  Monitor,
   Check,
   RotateCcw,
   ExternalLink,
@@ -334,6 +335,30 @@ export default function Apply() {
   // Start panel so the operator can re-run or read, rather than bouncing
   // back to the Find Jobs list. Best-effort: the reset happens even if
   // the stop call fails (the machine settles on its own).
+  // Bring the auto-fill Chromium window to the foreground — it routinely
+  // ends up hidden behind the dashboard / IDE.
+  async function revealBrowser() {
+    if (!jobId) return
+    try {
+      const r = await fetch(
+        api(`/applier/multi-step/${encodeURIComponent(jobId)}/reveal`),
+        { method: 'POST' },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(
+          j.error
+            ? `Couldn't show the browser: ${j.error}`
+            : "Couldn't show the browser — it may have been closed.",
+        )
+      } else {
+        setError(null)
+      }
+    } catch {
+      setError('Could not reach the server to show the browser.')
+    }
+  }
+
   async function cancelApply() {
     setBusy(true)
     setError(null)
@@ -449,13 +474,23 @@ export default function Apply() {
         >
           <ArrowLeft size={14} /> Find Jobs
         </button>
-        {job?.url && (
-          <div className="ap-actions">
+        <div className="ap-actions">
+          {(phase === 'active' || phase === 'done') && (
+            <button
+              type="button"
+              className="ap-action-btn"
+              onClick={revealBrowser}
+              title="Bring the auto-fill browser window to the front"
+            >
+              <Monitor size={12} /> Show filled form
+            </button>
+          )}
+          {job?.url && (
             <a className="ap-action-btn" href={job.url} target="_blank" rel="noreferrer">
               <ExternalLink size={12} /> Open job posting
             </a>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <header className="ap-header">
