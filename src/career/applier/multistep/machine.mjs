@@ -28,6 +28,10 @@ import {
 } from './applySessionsStore.mjs';
 import { snapshot as realSnapshot } from '../runtime/snapshot.mjs';
 import { classifyAndFill } from '../classifier/index.mjs';
+// Canonical-value → form-option matcher. Used to remap a classifier's
+// canonical value ("Decline to answer") onto a dropdown's real option
+// text once the options have been captured.
+import { bestOption } from '../nonstandard/strategies/selectionControls.mjs';
 import {
   probeTotalSteps as realProbeTotalSteps,
   findNextButton as realFindNextButton,
@@ -83,6 +87,68 @@ function entryTuple(e) {
   return `${e.role}\u0000${e.name}\u0000${e.occurrenceIndex || 0}\u0000${e.frameIdx || 0}`;
 }
 
+// a11y roles that present a fixed option list. For these the machine
+// opens the control during runStep and captures the real option texts,
+// so the approval UI shows them and the operator picks an exact option
+// — turning the fill into a deterministic match, not a fuzzy guess.
+const DROPDOWN_ROLES = new Set(['combobox', 'listbox', 'menu']);
+
+/**
+ * For every dropdown-role field, open the control, read its real option
+ * texts, close it, and stash them on `field.options`. Also remaps the
+ * classifier's canonical suggested_value onto the closest real option
+ * so the fill phase exact-matches instead of fuzzy-guessing.
+ *
+ * Fully defensive — never throws. Mock pages (smoke) lack getByRole and
+ * are skipped wholesale, so the machine smoke is unaffected.
+ */
+async function captureDropdownOptions(page, table, classified) {
+  if (!page || typeof page.getByRole !== 'function') return;
+  if (!table || typeof table.resolve !== 'function') return;
+  for (const f of classified) {
+    if (!f || !DROPDOWN_ROLES.has(f.role)) continue;
+    let loc;
+    try {
+      loc = table.resolve(f.refId, page);
+    } catch {
+      continue;
+    }
+    try {
+      await loc.click({ timeout: 3000 });
+      const optEls = page.getByRole('option');
+      const n = await optEls.count();
+      const opts = [];
+      for (let i = 0; i < Math.min(n, 60); i++) {
+        try {
+          const t = (await optEls.nth(i).textContent()) || '';
+          const trimmed = t.replace(/\s+/g, ' ').trim();
+          if (trimmed) opts.push(trimmed);
+        } catch {
+          /* skip a bad option node */
+        }
+      }
+      if (opts.length) {
+        f.options = opts;
+        // Remap the canonical value onto a real option — the approval
+        // UI then pre-selects it and the fill is an exact match.
+        if (f.suggested_value != null && f.suggested_value !== '') {
+          const match = bestOption(f.suggested_value, opts);
+          if (match) f.suggested_value = match;
+        }
+      }
+      // Close the listbox so the next control opens cleanly.
+      try {
+        await page.keyboard.press('Escape');
+      } catch {
+        /* best-effort */
+      }
+    } catch {
+      // Couldn't open this control — leave field.options undefined; the
+      // fill phase still fuzzy-matches at fill time as a fallback.
+    }
+  }
+}
+
 /**
  * Build a per-step draft fragment from a list of classifier outputs.
  * Shape matches m1's PerStepDraftSchema (relaxed for in-progress drafts).
@@ -105,6 +171,14 @@ function buildStepDraftFragment(stepIdx, classifiedFields) {
         out.source_ref = f.source_ref.slice(0, 400);
       }
       if (f.subclass) out.subclass = f.subclass;
+      // Carry the control role through so the approval UI can show the
+      // user whether a field is a dropdown / radio / checkbox / text.
+      if (typeof f.role === 'string' && f.role) out.role = f.role;
+      // Real option texts captured from the live dropdown — lets the
+      // approval UI render an actual <select> the operator picks from.
+      if (Array.isArray(f.options) && f.options.length) {
+        out.options = f.options.slice(0, 80).map((o) => String(o).slice(0, 400));
+      }
       // H7 fix from review: surface fill_error so m4/UI can show which
       // fields failed to fill (vs silently dropping them from telemetry).
       if (typeof f.fill_error === 'string' && f.fill_error) {
@@ -310,6 +384,17 @@ async function runStep(session, deps, ctx) {
     _classifyAndFill,
   );
 
+  // Drop entries the classifier couldn't tie to a fillable form control.
+  // A single-page application URL (greenhouse / lever / ashby) snapshots
+  // the WHOLE page, so nav links, JD headings and logos arrive here as
+  // class 'unknown'. Filtering keeps the draft to real fields, the
+  // approval panel clean, and the per-step draft under its persist cap.
+  classified = classified.filter((c) => c && c.class !== 'unknown');
+
+  // Capture real dropdown options (open each → read → close) so the
+  // approval UI shows them and the operator picks an exact option.
+  await captureDropdownOptions(page, snapPre.table, classified);
+
   const pendingDraft = session.per_step_draft[stepKey];
   if (
     pendingDraft &&
@@ -376,12 +461,14 @@ async function runStep(session, deps, ctx) {
       if (!preSet.has(entryTuple(e))) dependents.push(e);
     }
     if (dependents.length) {
-      const depClassified = await classifyEntries(
-        dependents,
-        ctx.classifierCtx || {},
-        session.field_memory,
-        _classifyAndFill,
-      );
+      const depClassified = (
+        await classifyEntries(
+          dependents,
+          ctx.classifierCtx || {},
+          session.field_memory,
+          _classifyAndFill,
+        )
+      ).filter((c) => c && c.class !== 'unknown');
       if (stepNeedsApproval(depClassified)) {
         const depDraft = buildStepDraftFragment(session.current_step, depClassified);
         const approval2 = await approve({
@@ -579,6 +666,19 @@ export async function runMachine(args, deps = {}) {
   // Resume bumps status back to active (was 'paused' from prior bail)
   session.status = 'active';
 
+  // Persist the session NOW, before the STEP_LOOP. The loop otherwise
+  // only writes after each step COMPLETES — so during a long step 0
+  // (e.g. a single-page form paused at its approval gate) the status
+  // endpoint readSession()s nothing and 404s, hiding the live machine.
+  // Writing here makes the apply observable from step 0 onward.
+  try {
+    await withSessionLock(jobId, async () => {
+      await resolved._writeSession(jobId, session);
+    });
+  } catch {
+    // Non-fatal — the per-step persist below will retry.
+  }
+
   // DETECT_FLOW — probe total steps if not yet known
   if (session.total_steps == null) {
     try {
@@ -599,17 +699,22 @@ export async function runMachine(args, deps = {}) {
 
   try {
     for (let i = 0; i < maxSteps; i++) {
-      // H3 fix from review: re-check isOnSubmitStep at the TOP of every
-      // iteration (including after click+wait from the prior iteration's
-      // tail). Workday's Review-then-Submit page may have both fillable
-      // consent checkboxes AND a Submit button — without this check we'd
-      // happily classify and fill the Review step, then findNextButton
-      // could match "Submit" as a Next-equivalent and auto-submit.
+      // Submit-button detection. A visible Submit button means different
+      // things depending on where we are:
+      //   - step > 0  → a multi-step wizard's final Review/Submit step.
+      //     Stop WITHOUT filling — the bulk was filled on prior steps and
+      //     the operator submits. (Prevents auto-submitting a Workday
+      //     Review page; preserves the original H3 review fix.)
+      //   - step 0    → a SINGLE-PAGE form (greenhouse / lever / ashby):
+      //     the whole form AND the Submit button live on one page. We
+      //     must fill it first, so DON'T break here — fall through to
+      //     runStep, then stop after filling (the isSubmit check below).
+      // The machine never clicks Submit itself in either case.
       let isSubmit = false;
       try {
         isSubmit = await resolved._isOnSubmitStep(page, session.site_adapter);
       } catch {}
-      if (isSubmit) {
+      if (isSubmit && session.current_step > 0) {
         session.status = 'completed';
         outcome = OUTCOME.COMPLETED;
         break;
@@ -635,6 +740,14 @@ export async function runMachine(args, deps = {}) {
       // M3 fix from review: runStep returns explicit outcome enum
       if (stepRes.outcome === 'paused') {
         outcome = OUTCOME.PAUSED;
+        break;
+      }
+
+      // Single-page form: the form is now filled and the Submit button is
+      // right here → done. The operator reviews and submits in the browser.
+      if (isSubmit) {
+        session.status = 'completed';
+        outcome = OUTCOME.COMPLETED;
         break;
       }
 

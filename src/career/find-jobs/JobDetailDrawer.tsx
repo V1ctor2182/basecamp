@@ -37,17 +37,15 @@ export default function JobDetailDrawer({
 
   useEffect(() => {
     const ctrl = new AbortController()
-    // We don't have a /:id endpoint yet — fetch the whole pipeline + find
-    // by id. With <500 jobs this is cheap; if it ever grows we'd add a
-    // dedicated /finder/pipeline/:id route.
-    fetch(`/api/career/finder/pipeline?limit=300`, { signal: ctrl.signal })
+    // Single-job endpoint — returns the full JD description (the
+    // /finder/pipeline list endpoint trims description for transport).
+    fetch(`/api/career/finder/job/${encodeURIComponent(jobId)}`, { signal: ctrl.signal })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.json()
       })
-      .then((data: { jobs: FullJob[] }) => {
-        const found = data.jobs.find((j) => j.id === jobId)
-        setJob(found ?? (fallback as FullJob))
+      .then((data: FullJob) => {
+        setJob(data ?? (fallback as FullJob))
       })
       .catch((e) => {
         if ((e as { name?: string })?.name === 'AbortError') return

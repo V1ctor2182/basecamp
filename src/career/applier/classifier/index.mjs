@@ -77,6 +77,11 @@ export async function classifyAndLookup(entry) {
     label: entry.name,
     class: cls.class,
     subclass: cls.subclass,
+    // a11y role of the control (textbox / combobox / radio / checkbox …).
+    // Carried through to the draft so the approval UI can show the user
+    // what KIND of control each field is — a dropdown must be edited
+    // differently than a free-text box.
+    role: entry.role,
   };
 
   if (cls.class === 'hard') {

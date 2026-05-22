@@ -17,13 +17,22 @@
 // own the browser lifecycle (that's 02-playwright-runtime). Smoke
 // injects _runMachine + _getPage for pure-Node tests.
 
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { z } from 'zod';
 import {
   readSession,
+  deleteSession,
   JOB_ID_RE,
   SITE_ADAPTERS,
   ABANDON_AFTER_MS,
 } from './applySessionsStore.mjs';
+// Field-classifier LLM context. The open-ended + file fillers need a
+// client / pricing / identity injected via classifierCtx — without them
+// every open question and the resume upload come back empty.
+import { getClient } from '../../lib/anthropicClient.mjs';
+import { computeCostUsd } from '../../lib/anthropicPricing.mjs';
+import { loadIdentity } from '../classifier/identityLookup.mjs';
 import { runMachine as realRunMachine, OUTCOME } from './machine.mjs';
 // 07-applier/05-non-standard-controls m4 wiring: machine.mjs's
 // PROVISIONAL defaultFillField is REPLACED by nonstandardFillField in
@@ -44,6 +53,9 @@ import '../nonstandard/strategies/specialControls.mjs';
 // returns to baseline whether the apply succeeds, errors, or is paused.
 import { detectAdapter, getCompiledAdapter } from './siteAdapter.mjs';
 import { activateAdapter } from '../siteAdapters/activate.mjs';
+// The state machine assumes the page is already on the application form.
+// startMachine drives the navigation up front via humanNavigate.
+import { humanNavigate } from '../runtime/humanize.mjs';
 // 07-applier/self-iteration/02-data-flywheel m1 — capture hooks. The
 // flywheel records two events at the multi-step endpoint boundary:
 //   ① approve-step: when user edits a draft suggested_value, append a
@@ -145,6 +157,14 @@ export async function startMachine(body, deps = {}) {
   }
   if (existing) _machines.delete(jobId);
 
+  // freshStart (set by the /start route, NOT by resume): drop any prior
+  // on-disk session so runMachine builds a clean one. Without this, a
+  // previously completed/errored session short-circuits runMachine's
+  // terminal-status guard and the apply can never be re-run.
+  if (deps.freshStart) {
+    await deleteSession(jobId).catch(() => {});
+  }
+
   // H1 fix from review: reserve the slot SYNCHRONOUSLY before any await
   // so two concurrent startMachine calls for the same jobId can't both
   // pass the duplicate check. If getPage then fails, release the slot.
@@ -178,6 +198,22 @@ export async function startMachine(body, deps = {}) {
   } catch (err) {
     _machines.delete(jobId); // release reserved slot
     return { status: 503, error: `getPage failed: ${String(err?.message ?? err).slice(0, 200)}` };
+  }
+
+  // Navigate the page to the application form BEFORE runMachine. The state
+  // machine assumes the page is already on the form — it never navigates
+  // itself. Guarded on `typeof page.goto` so smoke mock pages (which only
+  // implement getByRole/locator) skip navigation and run as before.
+  if (page && typeof page.goto === 'function') {
+    try {
+      await humanNavigate(page, jobUrl, { waitUntil: 'domcontentloaded' });
+    } catch (err) {
+      _machines.delete(jobId); // release reserved slot
+      return {
+        status: 502,
+        error: `navigation to jobUrl failed: ${String(err?.message ?? err).slice(0, 200)}`,
+      };
+    }
   }
 
   const approve = (approvalReq) => {
@@ -282,6 +318,22 @@ export async function startMachine(body, deps = {}) {
         _fillField: nonstandardFillField,
         ...(deps._machineDeps || {}),
       };
+      // Build the field-classifier context. The open-ended (LLM) and
+      // file fillers read client / computeCostUsd / recordCost / identity
+      // / jobId / resumeId off this object. Missing client → every open
+      // question + the resume upload silently return empty.
+      const classifierCtx = { jdSummary, narrativeVoice, jobId, resumeId };
+      try {
+        classifierCtx.client = getClient();
+        classifierCtx.computeCostUsd = computeCostUsd;
+        classifierCtx.recordCost = appendLlmCost;
+        classifierCtx.identity = await loadIdentity();
+      } catch (err) {
+        console.warn(
+          'startMachine: classifier LLM context unavailable — open-ended fields will fall back to manual:',
+          String(err?.message ?? err),
+        );
+      }
       const result = await runMachineFn(
         {
           jobId,
@@ -290,7 +342,7 @@ export async function startMachine(body, deps = {}) {
           resumeId,
           page,
           approve,
-          classifierCtx: { jdSummary, narrativeVoice },
+          classifierCtx,
           maxSteps,
           createIfMissing: true,
         },
@@ -579,6 +631,20 @@ function redactSession(session) {
 async function defaultGetPage() {
   const { getPage } = await import('../runtime/browser.mjs');
   return getPage();
+}
+
+// Cost-ledger appender passed to the open-ended filler as ctx.recordCost.
+// Best-effort — a failed ledger write must never break an apply.
+const LLM_COSTS_FILE = path.resolve('data', 'career', 'llm-costs.jsonl');
+async function appendLlmCost(record) {
+  try {
+    await fs.appendFile(
+      LLM_COSTS_FILE,
+      JSON.stringify({ ts: new Date().toISOString(), caller: 'applier:classify', ...record }) + '\n',
+    );
+  } catch {
+    // ledger write is best-effort
+  }
 }
 
 // m3 (06-site-adapters): the inline `detectAdapterForUrl` substring

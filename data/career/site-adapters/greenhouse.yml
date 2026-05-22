@@ -20,19 +20,19 @@ flow:
 known_fields:
   - label_pattern: "^first name"
     class: hard
-    maps_to: identity.first_name
+    maps_to: name.split[0]
   - label_pattern: "^last name"
     class: hard
-    maps_to: identity.last_name
+    maps_to: name.split[-1]
   - label_pattern: "^email"
     class: hard
-    maps_to: identity.email
+    maps_to: email
   - label_pattern: "^phone"
     class: hard
-    maps_to: identity.phone
+    maps_to: phone
   - label_pattern: "(linkedin\\s*profile|linkedin\\s*url)"
     class: hard
-    maps_to: identity.links.linkedin
+    maps_to: links.linkedin
   - label_pattern: "(resume|cv).*upload"
     class: file
     maps_to: resume

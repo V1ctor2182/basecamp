@@ -1,291 +1,433 @@
-// Mode 1 Simplify Hybrid — Apply page.
+// Mode 2 — Auto-fill Apply page.
 //
-// 07-applier/01-mode1-simplify-hybrid m5. End-to-end Mode 1 user flow:
-//   1. User clicks Apply on Shortlist → lands here at /career/apply/:jobId
-//   2. On mount: GET /apply/draft/:jobId — if 404, auto-POST /apply/draft
-//      to generate one (one-time + re-pulled via "Generate fresh draft")
-//   3. Field cards grouped by class (hard / legal / open / file):
-//      - hard: read-only label + value + [Copy] button
-//      - legal: read-only + Copy + source_ref hint
-//      - open: editable textarea + Copy (copies the EDITED value)
-//      - file: Tailored PDF link + Copy (copies the path)
-//   4. Mark Submitted: native confirm() modal then POST /apply/submitted
-//      with edited field values → status transitions Evaluated → Applied
-//      AND each field appended to qa-bank/history.jsonl (Applier
-//      flywheel ② data source).
+// Drives the multi-step state machine (src/career/applier/multistep). The
+// machine opens a real Chromium window, probes the live application form,
+// fills fields step by step, and pauses at each step for operator review.
+// It STOPS at the Submit page — it never auto-submits. The user clicks
+// Submit in the browser window, then clicks "Mark applied" here.
 //
-// Constraint #1: Mode 1 NEVER auto-Submits. Mark Submitted is the only
-// path that flips the application state.
-// Constraint #4: Mark Submitted requires native confirm() with explicit
-// "Did you click Submit in the browser?" prompt.
+// Flow:
+//   1. GET /finder/job/:jobId           → job url + role/company
+//   2. GET /multi-step/:jobId/status    → adopt an in-flight/old session
+//   3. POST /multi-step/start           → spawn the machine
+//   4. poll GET .../status every 1.5s   → render pending draft / progress
+//   5. POST .../approve-step | .../pause per operator action
+//   6. POST .../resume to continue a paused session
+//   7. POST /apply/submitted            → mark the application Applied
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import {
   ArrowLeft,
   AlertTriangle,
   Loader2,
-  Copy,
+  Play,
+  Pause,
   Check,
-  RefreshCw,
+  RotateCcw,
+  ExternalLink,
   Send,
-  FileText,
+  ShieldCheck,
 } from 'lucide-react'
 import './apply.css'
 
-type FieldClass = 'hard' | 'legal' | 'open' | 'file'
-type Confidence = 'high' | 'medium' | 'low'
+type Job = {
+  id: string
+  company?: string
+  role?: string
+  url?: string
+  location?: string[]
+  source?: { type: string; name: string } | null
+}
 
 type DraftField = {
+  refId?: string
   label: string
-  class: FieldClass
-  suggested_value: string
-  confidence: Confidence
+  class: string
+  suggested_value?: string | null
+  confidence?: string
   source_ref?: string
+  block_approve?: boolean
+  // a11y role of the underlying form control — drives the control-type
+  // badge so the operator knows a field is a dropdown vs free text.
+  role?: string
+  // real option texts captured from a live dropdown — when present the
+  // panel renders an actual <select> the operator picks from.
+  options?: string[]
 }
 
-type Draft = {
+type Control = 'dropdown' | 'radio' | 'checkbox' | 'file' | 'text'
+
+const CONTROL_META: Record<Control, { label: string; hint: string }> = {
+  dropdown: {
+    label: 'Dropdown',
+    hint: 'On the form this is a dropdown — type the answer you want; it is matched to the closest option.',
+  },
+  radio: {
+    label: 'Radio choice',
+    hint: 'On the form this is a radio choice — it is matched to the closest option.',
+  },
+  checkbox: { label: 'Checkbox', hint: 'On the form this is a checkbox.' },
+  file: { label: 'File upload', hint: '' },
+  text: { label: 'Text', hint: '' },
+}
+
+function controlOf(f: DraftField): Control {
+  if (f.class === 'file') return 'file'
+  switch (f.role) {
+    case 'combobox':
+    case 'listbox':
+    case 'menu':
+      return 'dropdown'
+    case 'radio':
+      return 'radio'
+    case 'checkbox':
+    case 'switch':
+      return 'checkbox'
+    default:
+      return 'text'
+  }
+}
+
+type Pending = {
+  stepIdx: number
+  totalSteps: number | null
+  isDependentRecheck?: boolean
+  draft: { fields: DraftField[] }
+  requested_at: string
+}
+
+type Session = {
   jobId: string
-  fields: DraftField[]
-  generated_at: string
-  model: string
-  cost_usd: number
+  site_adapter: string
+  job_url: string
+  current_step: number
+  total_steps: number | null
+  per_step_draft: Record<string, { step_idx: number; fields: DraftField[] }>
+  per_step_status: Record<string, string>
+  status: 'active' | 'paused' | 'abandoned' | 'completed'
+  started_at: string
+  last_activity_at: string
 }
 
-const CLASS_ORDER: FieldClass[] = ['hard', 'legal', 'open', 'file']
-const CLASS_LABELS: Record<FieldClass, string> = {
-  hard: 'Identity (factual)',
-  legal: 'Legal / EEO',
-  open: 'Open-ended',
-  file: 'File upload',
+type Machine = {
+  state: 'idle' | 'starting' | 'running' | 'awaiting-approval' | 'done'
+  lastOutcome: 'completed' | 'paused' | 'error' | null
+  lastError: string | null
+  pending: Pending | null
+  lastDraftInfo: Pending | null
+  autoApprove: { enabled: boolean; count: number; log: unknown[] }
 }
 
-const CONFIDENCE_LABELS: Record<Confidence, string> = {
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
+type StatusResp = { sessionId: string; session: Session; machine: Machine }
+
+type Phase = 'idle' | 'starting' | 'active' | 'done'
+
+const POLL_MS = 1500
+
+function api(path: string) {
+  return `/api/career${path}`
+}
+
+// A short scalar value renders as <input>; long or multiline as <textarea>.
+function isLongValue(v: string) {
+  return v.length > 60 || v.includes('\n')
 }
 
 export default function Apply() {
   const { jobId } = useParams<{ jobId: string }>()
   const navigate = useNavigate()
-  const [draft, setDraft] = useState<Draft | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [generating, setGenerating] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [edits, setEdits] = useState<Record<string, string>>({})
-  const [submitToast, setSubmitToast] = useState<string | null>(null)
-  const [copyTick, setCopyTick] = useState<string | null>(null)
-  // Mode 1 requires a Stage B report (Block E personalization seed).
-  // When the draft endpoint 404s for that reason we surface an inline
-  // "Run Stage B now" button instead of a dead-end error — the user
-  // shouldn't have to hunt for /career/pipeline.
-  const [needsStageB, setNeedsStageB] = useState(false)
-  const [runningStageB, setRunningStageB] = useState(false)
 
-  // Initial load: GET existing draft, auto-POST if 404. We deliberately
-  // 404→auto-generate so the user lands on a populated page after one
-  // click rather than two.
+  const [job, setJob] = useState<Job | null>(null)
+  const [loadingJob, setLoadingJob] = useState(true)
+  const [status, setStatus] = useState<StatusResp | null>(null)
+  const [phase, setPhase] = useState<Phase>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const [autoApprove, setAutoApprove] = useState(false)
+  const [edits, setEdits] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState(false)
+  const [marking, setMarking] = useState(false)
+  const [markToast, setMarkToast] = useState<string | null>(null)
+
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Identifies the currently-displayed pending draft so we re-seed `edits`
+  // only when a genuinely new approval gate arrives (not every poll tick).
+  const pendingKeyRef = useRef<string | null>(null)
+
+  // ── Initial load: job metadata + adopt any existing session ───────────
   useEffect(() => {
     if (!jobId) return
     let cancelled = false
-    setLoading(true)
-    setError(null)
     ;(async () => {
       try {
-        const r = await fetch(`/api/career/apply/draft/${encodeURIComponent(jobId)}`)
-        if (r.status === 404) {
-          // Auto-generate first draft
-          if (cancelled) return
-          await generateDraft({ silent: true })
-          return
+        const [jr, sr] = await Promise.all([
+          fetch(api(`/finder/job/${encodeURIComponent(jobId)}`)),
+          fetch(api(`/applier/multi-step/${encodeURIComponent(jobId)}/status`)),
+        ])
+        if (cancelled) return
+        if (jr.ok) {
+          setJob((await jr.json()) as Job)
+        } else {
+          const j = await jr.json().catch(() => ({}))
+          setError(j.error ?? `Could not load job ${jobId}`)
         }
-        if (!r.ok) {
-          const j = await r.json().catch(() => ({}))
-          throw new Error(j.error ?? `HTTP ${r.status}`)
+        if (sr.ok) {
+          const s = (await sr.json()) as StatusResp
+          setStatus(s)
+          adoptStatus(s)
         }
-        const data = (await r.json()) as Draft
-        if (!cancelled) {
-          setDraft(data)
-          // Seed edits with suggested_value for every field
-          const seed: Record<string, string> = {}
-          for (const f of data.fields) seed[f.label] = f.suggested_value
-          setEdits(seed)
-        }
+        // 404 from status = no session yet → phase stays 'idle'
       } catch (e) {
-        if (!cancelled) setError((e as Error).message ?? 'Failed to load draft')
+        if (!cancelled) setError((e as Error).message ?? 'Failed to load')
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setLoadingJob(false)
       }
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId])
 
-  async function generateDraft(opts: { force?: boolean; silent?: boolean } = {}) {
-    if (!jobId) return
-    setGenerating(true)
-    setError(null)
-    setNeedsStageB(false)
-    try {
-      const r = await fetch('/api/career/apply/draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId, force: opts.force === true }),
-      })
-      if (!r.ok) {
-        const j = (await r.json().catch(() => ({}))) as {
-          error?: string
-          hint?: string
-          detail?: string
-        }
-        // Distinguish "needs Stage B" from a generic failure so we can
-        // offer the inline run-button instead of a dead-end message.
-        const msg = j.error ?? j.hint ?? j.detail ?? `HTTP ${r.status}`
-        if (
-          r.status === 404 &&
-          /stage b/i.test(`${j.error ?? ''} ${j.hint ?? ''}`)
-        ) {
-          setNeedsStageB(true)
-          setError(null)
-          return
-        }
-        throw new Error(msg)
+  // ── Polling lifecycle ─────────────────────────────────────────────────
+  useEffect(() => {
+    const shouldPoll = phase === 'active' || phase === 'starting'
+    if (!shouldPoll) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
       }
-      const data = (await r.json()) as Draft
-      setDraft(data)
-      const seed: Record<string, string> = {}
-      for (const f of data.fields) seed[f.label] = f.suggested_value
-      setEdits(seed)
-    } catch (e) {
-      setError((e as Error).message ?? 'Failed to generate draft')
-    } finally {
-      setGenerating(false)
-      if (opts.silent) setLoading(false)
+      return
     }
+    if (pollRef.current) return // already polling
+    pollRef.current = setInterval(poll, POLL_MS)
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
+
+  // Decide the phase from a freshly-fetched status snapshot.
+  function adoptStatus(s: StatusResp) {
+    const m = s.machine
+    if (m.state === 'done') {
+      setPhase('done')
+    } else if (m.state === 'idle') {
+      // Session on disk but no live machine — server restarted mid-apply,
+      // or it is a previously paused/completed session. Treat as terminal;
+      // the terminal view derives Resume/Retry from session.status.
+      setPhase('done')
+    } else {
+      setPhase('active')
+    }
+    maybeSeedEdits(m.pending)
   }
 
-  // Run Stage B for THIS job, then re-generate the Mode 1 draft. Saves
-  // the user a trip to /career/pipeline. Stage B is synchronous server-
-  // side (~30-60s of Sonnet) so we just await the POST.
-  async function runStageBThenDraft() {
-    if (!jobId) return
-    setRunningStageB(true)
-    setError(null)
-    try {
-      const r = await fetch('/api/career/evaluate/stage-b', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobIds: [jobId] }),
-      })
-      const j = (await r.json().catch(() => ({}))) as {
-        error?: string
-        banner_message?: string
-        evaluated?: number
-        errors?: number
-        jobErrors?: { jobId: string; error: string }[]
-      }
-      if (r.status === 402) {
-        setError(
-          `Daily budget reached — Stage B is paused. ${j.banner_message ?? ''} ` +
-            `Raise daily_budget_usd in Settings → Preferences, or wait until tomorrow.`,
-        )
-        return
-      }
-      if (!r.ok) {
-        throw new Error(j.error ?? `Stage B HTTP ${r.status}`)
-      }
-      if ((j.evaluated ?? 0) === 0) {
-        const realError = j.jobErrors?.[0]?.error
-        throw new Error(
-          realError
-            ? `Stage B failed: ${realError}`
-            : 'Stage B produced no result (job may not be in pipeline.json — try Re-filter all in Find Jobs).',
-        )
-      }
-      setNeedsStageB(false)
-      // Stage B done → regenerate the Mode 1 draft.
-      await generateDraft({ force: true })
-    } catch (e) {
-      setError((e as Error).message ?? 'Stage B run failed')
-    } finally {
-      setRunningStageB(false)
+  // Seed the edit buffer when a NEW approval gate appears.
+  function maybeSeedEdits(pending: Pending | null) {
+    if (!pending) {
+      pendingKeyRef.current = null
+      return
     }
+    const key = `${pending.stepIdx}::${pending.requested_at}`
+    if (pendingKeyRef.current === key) return
+    pendingKeyRef.current = key
+    const seed: Record<string, string> = {}
+    for (const f of pending.draft.fields) {
+      if (f.refId) seed[f.refId] = f.suggested_value ?? ''
+    }
+    setEdits(seed)
   }
 
-  async function copyValue(label: string, value: string) {
+  async function poll() {
+    if (!jobId) return
     try {
-      await navigator.clipboard.writeText(value)
-      setCopyTick(label)
-      setTimeout(() => setCopyTick((cur) => (cur === label ? null : cur)), 1200)
+      const r = await fetch(api(`/applier/multi-step/${encodeURIComponent(jobId)}/status`))
+      if (!r.ok) return // transient — keep polling
+      const s = (await r.json()) as StatusResp
+      setStatus(s)
+      maybeSeedEdits(s.machine.pending)
+      // First successful poll graduates 'starting' → 'active'; a settled
+      // machine goes to 'done'. Without this the page would stay stuck on
+      // the "Launching browser…" spinner even after the machine reports.
+      setPhase(s.machine.state === 'done' ? 'done' : 'active')
     } catch {
-      // Older browsers / permission denied — surface inline error
-      setError('Clipboard write failed — select + copy manually.')
+      // network blip — keep polling
     }
   }
 
-  async function markSubmitted() {
-    if (!jobId || !draft) return
-    // Constraint #4: explicit confirm with the locked prompt text
+  async function startMachine() {
+    if (!jobId || !job?.url) return
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await fetch(api('/applier/multi-step/start'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobId,
+          jobUrl: job.url,
+          autoApproveWhenSafe: autoApprove,
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error ?? `Start failed (HTTP ${r.status})`)
+      pendingKeyRef.current = null
+      setPhase('starting')
+      // Kick an immediate poll so the UI updates before the first interval.
+      setTimeout(poll, 300)
+    } catch (e) {
+      setError((e as Error).message ?? 'Failed to start auto-fill')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function approveStep(approved: boolean) {
+    if (!jobId) return
+    const pending = status?.machine.pending
+    if (!pending) return
+    setBusy(true)
+    setError(null)
+    try {
+      // Only send fields the operator actually changed.
+      const editList: { refId: string; suggested_value: string | null }[] = []
+      for (const f of pending.draft.fields) {
+        if (!f.refId) continue
+        const next = edits[f.refId]
+        if (next !== undefined && next !== (f.suggested_value ?? '')) {
+          editList.push({ refId: f.refId, suggested_value: next })
+        }
+      }
+      const r = await fetch(
+        api(`/applier/multi-step/${encodeURIComponent(jobId)}/approve-step`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ approved, edits: editList }),
+        },
+      )
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error ?? `Approve failed (HTTP ${r.status})`)
+      // Optimistically clear the pending panel; the next poll reflects truth.
+      setStatus((cur) =>
+        cur ? { ...cur, machine: { ...cur.machine, pending: null } } : cur,
+      )
+      pendingKeyRef.current = null
+      setTimeout(poll, 300)
+    } catch (e) {
+      setError((e as Error).message ?? 'Approve failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function pauseMachine() {
+    if (!jobId) return
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await fetch(
+        api(`/applier/multi-step/${encodeURIComponent(jobId)}/pause`),
+        { method: 'POST' },
+      )
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error ?? `Pause failed (HTTP ${r.status})`)
+      setTimeout(poll, 300)
+    } catch (e) {
+      setError((e as Error).message ?? 'Pause failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function resumeMachine() {
+    if (!jobId) return
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await fetch(
+        api(`/applier/multi-step/${encodeURIComponent(jobId)}/resume`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobId }),
+        },
+      )
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error ?? `Resume failed (HTTP ${r.status})`)
+      pendingKeyRef.current = null
+      setPhase('starting')
+      setTimeout(poll, 300)
+    } catch (e) {
+      setError((e as Error).message ?? 'Resume failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Mark the application Applied. Flattens every filled field across all
+  // steps into the /apply/submitted contract (history.jsonl + status flip).
+  async function markApplied() {
+    if (!jobId || !status) return
     const ok = window.confirm(
-      'Did you click Submit in the browser?\n\nThis marks the application as Applied + appends ' +
-        'your final answers to qa-bank/history.jsonl. The status transition cannot be undone via Mode 1.'
+      'Did you click Submit in the Chromium window?\n\n' +
+        'This marks the application as Applied and records the filled fields. ' +
+        'It does not submit the form for you.',
     )
     if (!ok) return
-    setSubmitting(true)
+    setMarking(true)
     setError(null)
     try {
-      const fields = draft.fields.map((f) => ({
-        label: f.label,
-        final_answer: edits[f.label] ?? f.suggested_value,
-        class: f.class,
-      }))
-      const r = await fetch('/api/career/apply/submitted', {
+      const fields = flattenSessionFields(status.session)
+      const r = await fetch(api('/apply/submitted'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobId, fields }),
       })
-      const data = await r.json()
+      const j = await r.json().catch(() => ({}))
       if (!r.ok) {
-        // 400 with current_status/allowed_next surfaces actionable info
-        if (data.current_status && Array.isArray(data.allowed_next)) {
+        if (j.current_status && Array.isArray(j.allowed_next)) {
           throw new Error(
-            `${data.error}. Current status: ${data.current_status}. Next: ${data.allowed_next.join(', ')}`
+            `${j.error}. Current status: ${j.current_status}. Next: ${j.allowed_next.join(', ')}`,
           )
         }
-        throw new Error(data.error ?? `HTTP ${r.status}`)
+        throw new Error(j.error ?? `Mark applied failed (HTTP ${r.status})`)
       }
-      const partialNote = data.partial
-        ? ` (partial: ${data.history_lines_added}/${data.total_fields} fields appended)`
-        : ''
-      setSubmitToast(`Marked Applied${partialNote}. Redirecting…`)
-      // Brief pause so user reads the toast, then go to /career/applied
-      setTimeout(() => navigate('/career/applied'), 1500)
+      setMarkToast('Marked Applied. Redirecting…')
+      setTimeout(() => navigate('/career/applied'), 1400)
     } catch (e) {
-      setError((e as Error).message ?? 'Mark Submitted failed')
+      setError((e as Error).message ?? 'Mark applied failed')
     } finally {
-      setSubmitting(false)
+      setMarking(false)
     }
   }
 
-  const fieldsByClass = useMemo(() => {
-    const out: Record<FieldClass, DraftField[]> = { hard: [], legal: [], open: [], file: [] }
-    if (!draft) return out
-    for (const f of draft.fields) {
-      if (CLASS_ORDER.includes(f.class)) out[f.class].push(f)
-    }
-    return out
-  }, [draft])
-
+  // ── Render ────────────────────────────────────────────────────────────
   if (!jobId) {
     return (
-      <div className="c-page">
+      <div className="c-page ap-page">
         <h2>Apply</h2>
-        <div className="ap-error"><AlertTriangle size={14} /> Missing jobId in URL.</div>
+        <div className="ap-error">
+          <AlertTriangle size={14} /> Missing jobId in URL.
+        </div>
       </div>
     )
   }
+
+  const machine = status?.machine
+  const session = status?.session
+  const pending = machine?.pending ?? null
+  const outcome = machine?.lastOutcome ?? null
+  // Terminal display: prefer the live machine outcome; fall back to the
+  // persisted session status (server-restart / old-session case).
+  const terminal =
+    phase === 'done'
+      ? outcome ?? (session?.status === 'completed' ? 'completed' : session?.status === 'paused' ? 'paused' : 'error')
+      : null
 
   return (
     <div className="c-page ap-page">
@@ -293,27 +435,27 @@ export default function Apply() {
         <button
           type="button"
           className="ap-back"
-          onClick={() => navigate('/career/shortlist')}
+          onClick={() => navigate('/career/find-jobs')}
         >
-          <ArrowLeft size={14} /> Shortlist
+          <ArrowLeft size={14} /> Find Jobs
         </button>
-        <div className="ap-actions">
-          <button
-            type="button"
-            className="ap-action-btn"
-            onClick={() => generateDraft({ force: true })}
-            disabled={generating || submitting}
-          >
-            <RefreshCw size={12} className={generating ? 'ap-spin' : ''} />{' '}
-            {generating ? 'Generating…' : 'Generate fresh draft'}
-          </button>
-        </div>
+        {job?.url && (
+          <div className="ap-actions">
+            <a className="ap-action-btn" href={job.url} target="_blank" rel="noreferrer">
+              <ExternalLink size={12} /> Open job posting
+            </a>
+          </div>
+        )}
       </div>
 
       <header className="ap-header">
-        <h2 className="ap-title">Apply — {jobId}</h2>
+        <h2 className="ap-title">
+          Apply — {job?.role ?? jobId}
+          {job?.company ? <span className="ap-m2-company"> · {job.company}</span> : null}
+        </h2>
         <div className="ap-subhead">
-          Mode 1 Simplify Hybrid · copy/paste flow · you submit in the browser, then click Mark Submitted below.
+          Auto-fill · a real browser window fills the form step by step. It never
+          submits — you click Submit yourself, then mark it applied here.
         </div>
       </header>
 
@@ -322,133 +464,387 @@ export default function Apply() {
           <AlertTriangle size={14} /> {error}
         </div>
       )}
-
-      {needsStageB && (
-        <div className="ap-stageb-gate">
-          <div className="ap-stageb-gate-text">
-            <strong>Stage B not run for this job yet.</strong>
-            <p>
-              Mode 1 drafts copy/paste answers from Stage B's deep analysis (the
-              "personalization plan" section). Run it now — Sonnet, ~$0.05, ~30–60s.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="ap-action-btn ap-stageb-run"
-            onClick={runStageBThenDraft}
-            disabled={runningStageB || generating}
-          >
-            {runningStageB ? (
-              <>
-                <Loader2 size={12} className="ap-spin" /> Running Stage B…
-              </>
-            ) : (
-              <>Run Stage B now ($0.05)</>
-            )}
-          </button>
-        </div>
-      )}
-
-      {submitToast && (
+      {markToast && (
         <div className="ap-toast-ok">
-          <Check size={14} /> {submitToast}
+          <Check size={14} /> {markToast}
         </div>
       )}
 
-      {loading && !draft ? (
+      {loadingJob ? (
         <div className="ap-loading">
-          <Loader2 size={14} className="ap-spin" /> Loading draft… (auto-generates if none exists)
-        </div>
-      ) : needsStageB ? (
-        // The Stage B gate panel above is the call-to-action; suppress the
-        // generic "no draft" empty state so the page reads cleanly.
-        null
-      ) : !draft ? (
-        <div className="ap-empty">
-          No draft yet. Click "Generate fresh draft" above.{' '}
-          <Link to="/career/shortlist" className="ap-link">Back to Shortlist</Link>
+          <Loader2 size={14} className="ap-spin" /> Loading job…
         </div>
       ) : (
         <>
-          {CLASS_ORDER.map((cls) => {
-            const fields = fieldsByClass[cls]
-            if (fields.length === 0) return null
-            return (
-              <section key={cls} className="ap-section">
-                <h3 className="ap-section-title">{CLASS_LABELS[cls]}</h3>
-                <div className="ap-fields">
-                  {fields.map((f) => {
-                    const value = edits[f.label] ?? f.suggested_value
-                    const editable = f.class === 'open'
-                    const copyTicked = copyTick === f.label
-                    return (
-                      <div key={f.label} className={`ap-field ap-field-${f.class}`}>
-                        <div className="ap-field-head">
-                          <span className="ap-field-label">{f.label}</span>
-                          <span className={`ap-confidence ap-conf-${f.confidence}`}>
-                            {CONFIDENCE_LABELS[f.confidence]}
-                          </span>
-                        </div>
-                        {editable ? (
-                          <textarea
-                            className="ap-field-textarea"
-                            value={value}
-                            onChange={(e) =>
-                              setEdits((prev) => ({ ...prev, [f.label]: e.target.value }))
-                            }
-                            rows={4}
-                            placeholder="Edit before copy/paste…"
-                          />
-                        ) : f.class === 'file' ? (
-                          <div className="ap-field-file">
-                            <FileText size={14} />
-                            <code className="ap-field-file-path">{value}</code>
-                          </div>
-                        ) : (
-                          <div className="ap-field-value">{value || <em>(empty)</em>}</div>
-                        )}
-                        <div className="ap-field-foot">
-                          {f.source_ref && (
-                            <span className="ap-source-ref">
-                              <code>{f.source_ref}</code>
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            className={`ap-copy-btn${copyTicked ? ' ap-copy-btn-ok' : ''}`}
-                            onClick={() => copyValue(f.label, value)}
-                            disabled={!value}
-                            aria-label={`Copy ${f.label}`}
-                          >
-                            {copyTicked ? <Check size={12} /> : <Copy size={12} />}
-                            {copyTicked ? 'Copied' : 'Copy'}
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </section>
-            )
-          })}
+          {/* Progress bar — shown whenever a session exists */}
+          {session && <ProgressBar session={session} machine={machine!} />}
 
-          <div className="ap-submit-bar">
-            <div className="ap-submit-info">
-              {draft.fields.length} fields drafted by {draft.model} for ${draft.cost_usd.toFixed(4)}
-              · Mode 1 NEVER auto-Submits. Click Submit in the browser FIRST, then mark below.
+          {/* IDLE — no session: start panel */}
+          {phase === 'idle' && (
+            <div className="ap-m2-panel">
+              <div className="ap-m2-panel-body">
+                <strong>Ready to auto-fill this application.</strong>
+                <p>
+                  Clicking Start opens a Chromium window and navigates to the job's
+                  application form. The machine fills fields step by step and pauses
+                  here for your review at each step. Keep the browser window visible.
+                </p>
+                {!job?.url && (
+                  <p className="ap-m2-warn">
+                    <AlertTriangle size={13} /> This job has no application URL — cannot auto-fill.
+                  </p>
+                )}
+                <label className="ap-m2-check">
+                  <input
+                    type="checkbox"
+                    checked={autoApprove}
+                    onChange={(e) => setAutoApprove(e.target.checked)}
+                  />
+                  <ShieldCheck size={13} />
+                  Auto-approve steps where every field is high-confidence and safe
+                </label>
+              </div>
+              <button
+                type="button"
+                className="ap-submit-btn"
+                onClick={startMachine}
+                disabled={busy || !job?.url}
+              >
+                <Play size={14} /> {busy ? 'Starting…' : 'Start auto-fill'}
+              </button>
             </div>
-            <button
-              type="button"
-              className="ap-submit-btn"
-              onClick={markSubmitted}
-              disabled={submitting || generating}
-            >
-              <Send size={14} />
-              {submitting ? 'Marking…' : 'Mark submitted'}
-            </button>
+          )}
+
+          {/* STARTING */}
+          {phase === 'starting' && (
+            <div className="ap-loading">
+              <Loader2 size={14} className="ap-spin" /> Launching browser & probing the form…
+            </div>
+          )}
+
+          {/* ACTIVE — machine running */}
+          {phase === 'active' && !pending && (
+            <div className="ap-loading">
+              <Loader2 size={14} className="ap-spin" /> Machine working — filling fields / clicking Next…
+              <button
+                type="button"
+                className="ap-action-btn ap-m2-inline-btn"
+                onClick={pauseMachine}
+                disabled={busy}
+              >
+                <Pause size={12} /> Pause
+              </button>
+            </div>
+          )}
+
+          {/* ACTIVE — awaiting approval */}
+          {phase === 'active' && pending && (
+            <ApprovalPanel
+              pending={pending}
+              edits={edits}
+              setEdits={setEdits}
+              onApprove={() => approveStep(true)}
+              onPause={pauseMachine}
+              busy={busy}
+            />
+          )}
+
+          {/* DONE — terminal states */}
+          {phase === 'done' && terminal === 'completed' && (
+            <div className="ap-m2-panel ap-m2-panel-ok">
+              <div className="ap-m2-panel-body">
+                <strong>
+                  <Check size={15} /> Form filled — ready for you to submit.
+                </strong>
+                <p>
+                  The machine filled every step up to the Submit page and stopped
+                  there. Switch to the Chromium window, review the form, and click
+                  Submit. Then mark it applied below.
+                </p>
+                {machine && machine.autoApprove.count > 0 && (
+                  <p className="ap-m2-note">
+                    {machine.autoApprove.count} step(s) auto-approved.
+                  </p>
+                )}
+              </div>
+              <div className="ap-m2-panel-actions">
+                {job?.url && (
+                  <a className="ap-action-btn" href={job.url} target="_blank" rel="noreferrer">
+                    <ExternalLink size={12} /> Open posting
+                  </a>
+                )}
+                <button
+                  type="button"
+                  className="ap-submit-btn"
+                  onClick={markApplied}
+                  disabled={marking}
+                >
+                  <Send size={14} /> {marking ? 'Marking…' : 'Mark applied'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {phase === 'done' && terminal === 'paused' && (
+            <div className="ap-m2-panel">
+              <div className="ap-m2-panel-body">
+                <strong>Paused.</strong>
+                <p>
+                  The apply session is paused. Resume to reopen the browser and
+                  continue from step {(session?.current_step ?? 0) + 1}.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="ap-submit-btn"
+                onClick={resumeMachine}
+                disabled={busy}
+              >
+                <RotateCcw size={14} /> {busy ? 'Resuming…' : 'Resume'}
+              </button>
+            </div>
+          )}
+
+          {phase === 'done' && terminal === 'error' && (
+            <div className="ap-m2-panel ap-m2-panel-err">
+              <div className="ap-m2-panel-body">
+                <strong>
+                  <AlertTriangle size={15} /> Auto-fill stopped with an error.
+                </strong>
+                <p className="ap-m2-errtext">
+                  {machine?.lastError ?? 'The machine could not finish this application.'}
+                </p>
+                {machine?.lastDraftInfo && (
+                  <p className="ap-m2-note">
+                    Stopped around step {machine.lastDraftInfo.stepIdx + 1}.
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                className="ap-submit-btn"
+                onClick={startMachine}
+                disabled={busy || !job?.url}
+              >
+                <RotateCcw size={14} /> {busy ? 'Restarting…' : 'Retry from start'}
+              </button>
+            </div>
+          )}
+
+          <div className="ap-m2-foot">
+            <Link to="/career/find-jobs" className="ap-link">
+              Back to Find Jobs
+            </Link>
           </div>
         </>
       )}
     </div>
   )
+}
+
+// ── Progress bar ────────────────────────────────────────────────────────
+function ProgressBar({ session, machine }: { session: Session; machine: Machine }) {
+  const total = session.total_steps
+  const cur = session.current_step
+  const pct = total && total > 0 ? Math.min(100, Math.round((cur / total) * 100)) : null
+  return (
+    <div className="ap-m2-progress">
+      <div className="ap-m2-progress-row">
+        <span className="ap-m2-progress-label">
+          Step {cur + 1}
+          {total ? ` of ${total}` : ''}
+          {' · '}
+          {session.site_adapter}
+        </span>
+        <span className={`ap-m2-state ap-m2-state-${machine.state}`}>{machine.state}</span>
+      </div>
+      {pct !== null && (
+        <div className="ap-m2-progress-track">
+          <div className="ap-m2-progress-fill" style={{ width: `${pct}%` }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Approval panel ──────────────────────────────────────────────────────
+function ApprovalPanel({
+  pending,
+  edits,
+  setEdits,
+  onApprove,
+  onPause,
+  busy,
+}: {
+  pending: Pending
+  edits: Record<string, string>
+  setEdits: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  onApprove: () => void
+  onPause: () => void
+  busy: boolean
+}) {
+  const fields = pending.draft.fields
+  return (
+    <section className="ap-section ap-m2-approval">
+      <div className="ap-m2-approval-head">
+        <h3 className="ap-section-title">
+          Review step {pending.stepIdx + 1}
+          {pending.isDependentRecheck ? ' (re-check)' : ''} — {fields.length} field
+          {fields.length === 1 ? '' : 's'}
+        </h3>
+        <span className="ap-m2-hint">Edit any value, then Approve to let the machine continue.</span>
+      </div>
+
+      <div className="ap-fields">
+        {fields.map((f, i) => {
+          const refId = f.refId ?? `field-${i}`
+          const sv = f.suggested_value ?? ''
+          const value = edits[refId] ?? sv
+          const isManual = f.class === 'manual'
+          const isFile = f.class === 'file'
+          const ctrl = controlOf(f)
+          const meta = CONTROL_META[ctrl]
+          const opts = ctrl === 'dropdown' && Array.isArray(f.options) ? f.options : null
+          return (
+            <div key={refId} className={`ap-field ap-m2-field-${f.class}`}>
+              <div className="ap-field-head">
+                <span className="ap-field-label">{f.label}</span>
+                <span className={`ap-m2-control ap-m2-control-${ctrl}`}>{meta.label}</span>
+                <span className="ap-m2-class">{f.class}</span>
+                {f.confidence && (
+                  <span className={`ap-confidence ap-conf-${f.confidence}`}>
+                    {f.confidence}
+                  </span>
+                )}
+              </div>
+
+              {isManual ? (
+                <div className="ap-m2-manual">
+                  <AlertTriangle size={13} /> Manual field — handle this directly in
+                  the browser window (CAPTCHA, rich text, or unsupported control).
+                </div>
+              ) : isFile ? (
+                <div className="ap-field-file">
+                  <code className="ap-field-file-path">{value || '(no file)'}</code>
+                </div>
+              ) : opts && opts.length > 0 ? (
+                <select
+                  className="ap-m2-input ap-m2-select"
+                  value={value}
+                  onChange={(e) =>
+                    setEdits((prev) => ({ ...prev, [refId]: e.target.value }))
+                  }
+                >
+                  {!value && <option value="">— select —</option>}
+                  {value && !opts.includes(value) && (
+                    <option value={value}>{value} — (not a form option)</option>
+                  )}
+                  {opts.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              ) : isLongValue(value) ? (
+                <textarea
+                  className="ap-field-textarea"
+                  value={value}
+                  rows={4}
+                  onChange={(e) =>
+                    setEdits((prev) => ({ ...prev, [refId]: e.target.value }))
+                  }
+                />
+              ) : (
+                <input
+                  className="ap-m2-input"
+                  value={value}
+                  onChange={(e) =>
+                    setEdits((prev) => ({ ...prev, [refId]: e.target.value }))
+                  }
+                />
+              )}
+
+              {!isManual && !isFile && !opts && meta.hint && (
+                <div className="ap-m2-ctrl-hint">{meta.hint}</div>
+              )}
+
+              <div className="ap-field-foot">
+                {f.source_ref && (
+                  <span className="ap-source-ref">
+                    <code>{f.source_ref}</code>
+                  </span>
+                )}
+                {f.block_approve && (
+                  <span className="ap-m2-block">
+                    <AlertTriangle size={11} /> needs your review
+                  </span>
+                )}
+              </div>
+            </div>
+          )
+        })}
+        {fields.length === 0 && (
+          <div className="ap-empty">No fields to review on this step.</div>
+        )}
+      </div>
+
+      <div className="ap-submit-bar">
+        <div className="ap-submit-info">
+          Approving fills these values into the live form and advances to the next step.
+        </div>
+        <div className="ap-m2-approval-btns">
+          <button
+            type="button"
+            className="ap-action-btn"
+            onClick={onPause}
+            disabled={busy}
+          >
+            <Pause size={12} /> Pause
+          </button>
+          <button
+            type="button"
+            className="ap-submit-btn"
+            onClick={onApprove}
+            disabled={busy}
+          >
+            <Check size={14} /> {busy ? 'Approving…' : 'Approve & continue'}
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+
+// Map a Mode 2 classifier class onto the /apply/submitted 4-class enum.
+function toSubmittedClass(cls: string): 'hard' | 'legal' | 'open' | 'file' {
+  if (cls === 'legal') return 'legal'
+  if (cls === 'file') return 'file'
+  if (cls === 'hard' || cls === 'identity') return 'hard'
+  return 'open'
+}
+
+// Flatten every filled field across all steps into the /apply/submitted
+// fields contract. Deduplicates by label (last write wins), caps at 50.
+function flattenSessionFields(session: Session) {
+  const byLabel = new Map<string, { label: string; final_answer: string; class: string }>()
+  const steps = Object.values(session.per_step_draft ?? {})
+  for (const step of steps) {
+    for (const f of step.fields ?? []) {
+      const label = String(f.label ?? '').trim().slice(0, 200)
+      if (!label) continue
+      byLabel.set(label, {
+        label,
+        final_answer: String(f.suggested_value ?? '').slice(0, 2000),
+        class: toSubmittedClass(f.class),
+      })
+    }
+  }
+  const out = Array.from(byLabel.values()).slice(0, 50)
+  // /apply/submitted requires at least one field.
+  if (out.length === 0) {
+    out.push({ label: 'Auto-fill', final_answer: 'Completed via auto-fill', class: 'open' })
+  }
+  return out
 }

@@ -15,13 +15,13 @@ flow:
 known_fields:
   - label_pattern: "^name"
     class: hard
-    maps_to: identity.name
+    maps_to: name
   - label_pattern: "^email"
     class: hard
-    maps_to: identity.email
+    maps_to: email
   - label_pattern: "(linkedin)"
     class: hard
-    maps_to: identity.links.linkedin
+    maps_to: links.linkedin
   - label_pattern: "(resume|cv)"
     class: file
     maps_to: resume
