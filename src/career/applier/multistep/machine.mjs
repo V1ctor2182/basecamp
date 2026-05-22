@@ -230,6 +230,139 @@ async function captureFileFields(page, session) {
   return out;
 }
 
+// ── Coverage + manual-blocker detection (M2) ────────────────────────────
+//
+// M1 verifies fields the machine touched. M2 catches the two remaining
+// silent-error classes: form controls the snapshot never saw, and things
+// only a human can do (CAPTCHA). No silent errors — a missed control
+// becomes a visible `not_seen` row, a CAPTCHA a visible `manual` item.
+
+function _normLabel(s) {
+  return String(s ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s*:]*\((?:required|optional)\)[\s*:]*$/i, '')
+    .replace(/[\s*:]+$/, '')
+    .trim();
+}
+
+// Two normalized labels refer to the same field. EXACT match only —
+// containment ("resume document" ⊂ "upload your resume document") can
+// match unrelated fields, even across roles, and would silently suppress
+// a real coverage gap. A near-miss instead surfaces as `not_seen`:
+// visible noise is acceptable, a silent miss is not.
+function _labelsSameField(a, b) {
+  return !!a && !!b && a === b;
+}
+
+// Reconcile the live DOM's 1:1 form controls (text inputs, textareas,
+// selects) against the draft. Any visible control whose label isn't in
+// the draft is returned as a synthetic `not_seen` field — the snapshot
+// missed it and the operator must fill it by hand. Radio/checkbox are
+// excluded (N inputs = 1 logical field → counting them invites noise).
+// Never throws.
+async function captureCoverageGaps(page, classified) {
+  if (!page || typeof page.evaluate !== 'function') return [];
+  let controls;
+  try {
+    controls = await page.evaluate(() => {
+      const SKIP = ['hidden', 'submit', 'button', 'reset', 'file', 'checkbox', 'radio', 'image'];
+      const out = [];
+      for (const el of document.querySelectorAll('input, textarea, select')) {
+        const tag = el.tagName.toLowerCase();
+        const type = (el.getAttribute('type') || '').toLowerCase();
+        if (tag === 'input' && SKIP.includes(type)) continue;
+        if (el.offsetParent === null && window.getComputedStyle(el).position !== 'fixed') {
+          continue; // not visible
+        }
+        let label = '';
+        const id = el.getAttribute('id');
+        if (id) {
+          const esc = window.CSS && CSS.escape ? CSS.escape(id) : id;
+          const l = document.querySelector(`label[for="${esc}"]`);
+          if (l) label = l.innerText || l.textContent || '';
+        }
+        if (!label) {
+          const l = el.closest('label');
+          if (l) label = l.innerText || '';
+        }
+        if (!label) {
+          label =
+            el.getAttribute('aria-label') ||
+            el.getAttribute('placeholder') ||
+            el.getAttribute('name') ||
+            '';
+        }
+        out.push(String(label).replace(/\s+/g, ' ').trim().slice(0, 200));
+      }
+      return out;
+    });
+  } catch {
+    return [];
+  }
+  const known = [];
+  for (const f of classified) {
+    if (f && f.label) known.push(_normLabel(f.label));
+  }
+  const gaps = [];
+  const seen = new Set();
+  for (const raw of controls) {
+    const n = _normLabel(raw);
+    const matched = n && known.some((k) => _labelsSameField(k, n));
+    if (matched) continue;
+    const key = n || `__unlabeled_${gaps.length}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    gaps.push({
+      refId: `__notseen_${gaps.length}`,
+      label: raw || '(unlabeled field)',
+      class: 'unknown',
+      role: 'textbox',
+      suggested_value: null,
+      confidence: 'manual',
+      verify_status: 'not_seen',
+      verify_detail: 'on the form but the machine did not capture it — fill it yourself',
+      source_ref: 'coverage:not-seen',
+    });
+  }
+  return gaps;
+}
+
+// Detect CAPTCHA / human-only blockers. Returns synthetic `manual`
+// fields so the operator gets an explicit "only you can do this" item.
+// CAPTCHA is never solved — just surfaced. Never throws.
+async function detectManualBlockers(page) {
+  if (!page || typeof page.locator !== 'function') return [];
+  try {
+    // Targeted CAPTCHA selectors. A bare [data-sitekey] is too broad
+    // (Stripe / analytics tags use it) — would raise a false manual
+    // blocker on a perfectly submittable form.
+    const captcha = page.locator(
+      'iframe[src*="recaptcha"], iframe[src*="hcaptcha"], ' +
+        'iframe[title*="captcha" i], .g-recaptcha, .h-captcha, .cf-turnstile',
+    );
+    if ((await captcha.count()) > 0) {
+      return [
+        {
+          refId: '__captcha',
+          label: 'CAPTCHA',
+          class: 'manual',
+          role: 'manual',
+          suggested_value: null,
+          confidence: 'manual',
+          verify_status: 'manual',
+          verify_detail: 'solve the CAPTCHA in the browser window before submitting',
+          source_ref: 'manual:captcha',
+        },
+      ];
+    }
+  } catch {
+    // detection failure is non-fatal
+  }
+  return [];
+}
+
 // ── Verification (M1 — post-fill read-back) ─────────────────────────────
 //
 // The machine is otherwise "fire-and-forget": it fills a field and assumes
@@ -339,6 +472,12 @@ async function verifyStep(page, table, classified) {
   if (!page || typeof page.locator !== 'function') return;
   for (const f of classified) {
     if (!f) continue;
+    // Manual-class fields (CAPTCHA, rich text, …) are never machine-
+    // filled — tag them so the panel lists them as "only you can do".
+    if (f.class === 'manual') {
+      if (!f.verify_status) f.verify_status = 'manual';
+      continue;
+    }
     if (f.suggested_value == null || f.suggested_value === '') continue;
     if (f.verify_status === 'fill_error') continue; // already failed at fill
     let actual;
@@ -631,6 +770,13 @@ async function runStep(session, deps, ctx) {
   // type=file>) and append them as synthetic file-class fields.
   const fileFields = await captureFileFields(page, session);
   if (fileFields.length) classified.push(...fileFields);
+
+  // M2: coverage check — surface 1:1 form controls the snapshot missed
+  // as `not_seen` fields, and CAPTCHA / manual-only blockers.
+  const coverageGaps = await captureCoverageGaps(page, classified);
+  if (coverageGaps.length) classified.push(...coverageGaps);
+  const manualBlockers = await detectManualBlockers(page);
+  if (manualBlockers.length) classified.push(...manualBlockers);
 
   const pendingDraft = session.per_step_draft[stepKey];
   if (
@@ -1164,5 +1310,6 @@ async function defaultWaitDomStable(page) {
 
 // Re-export internals that smoke + m4 need
 export { runStep, classifyEntries, tupleSetFromTable, entryTuple, stepNeedsApproval };
-// M1 verification — exported for the verify smoke.
+// M1 + M2 verification layer — exported for the verify smoke.
 export { verifyStep, verifyValueMatches, readFieldValue };
+export { captureCoverageGaps, detectManualBlockers, _labelsSameField };

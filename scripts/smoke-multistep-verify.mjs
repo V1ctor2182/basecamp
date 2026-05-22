@@ -10,6 +10,9 @@ import assert from 'node:assert/strict';
 import {
   verifyStep,
   verifyValueMatches,
+  captureCoverageGaps,
+  detectManualBlockers,
+  _labelsSameField,
 } from '../src/career/applier/multistep/machine.mjs';
 
 let passed = 0;
@@ -216,6 +219,80 @@ await test('verifyStep: mock page without locator → no-op (smoke guard)', asyn
     fields,
   );
   assert.equal(fields[0].verify_status, undefined);
+});
+
+// ── M2: coverage check + manual detection ──────────────────────────────
+
+await test('_labelsSameField: exact normalized match', () => {
+  assert.equal(_labelsSameField('first name', 'first name'), true);
+});
+
+await test('_labelsSameField: short substring does NOT match (Name vs First Name)', () => {
+  // "name" (4 chars) must not be considered the same field as "first name"
+  assert.equal(_labelsSameField('name', 'first name'), false);
+});
+
+await test('_labelsSameField: containment does NOT match (surface over silent miss)', () => {
+  // A near-miss must surface as not_seen, not be silently assumed covered.
+  assert.equal(
+    _labelsSameField('pronounce your name', 'how do you pronounce your name'),
+    false,
+  );
+});
+
+await test('captureCoverageGaps: control not in draft → not_seen field', async () => {
+  const page = {
+    evaluate: async () => ['First Name', 'How do you pronounce your name?', 'Email'],
+  };
+  const classified = [
+    { label: 'First Name', class: 'hard' },
+    { label: 'Email', class: 'hard' },
+  ];
+  const gaps = await captureCoverageGaps(page, classified);
+  assert.equal(gaps.length, 1);
+  assert.equal(gaps[0].verify_status, 'not_seen');
+  assert.match(gaps[0].label, /pronounce/i);
+});
+
+await test('captureCoverageGaps: all controls covered → no gaps', async () => {
+  const page = { evaluate: async () => ['First Name', 'Email'] };
+  const classified = [
+    { label: 'First Name *', class: 'hard' },
+    { label: 'Email', class: 'hard' },
+  ];
+  assert.deepEqual(await captureCoverageGaps(page, classified), []);
+});
+
+await test('captureCoverageGaps: unlabeled control still surfaced', async () => {
+  const page = { evaluate: async () => [''] };
+  const gaps = await captureCoverageGaps(page, []);
+  assert.equal(gaps.length, 1);
+  assert.equal(gaps[0].verify_status, 'not_seen');
+});
+
+await test('captureCoverageGaps: mock page without evaluate → [] (no crash)', async () => {
+  assert.deepEqual(await captureCoverageGaps({}, []), []);
+});
+
+await test('detectManualBlockers: CAPTCHA present → manual field', async () => {
+  const page = { locator: () => ({ count: async () => 1 }) };
+  const blockers = await detectManualBlockers(page);
+  assert.equal(blockers.length, 1);
+  assert.equal(blockers[0].class, 'manual');
+  assert.equal(blockers[0].verify_status, 'manual');
+  assert.match(blockers[0].label, /captcha/i);
+});
+
+await test('detectManualBlockers: no CAPTCHA → []', async () => {
+  const page = { locator: () => ({ count: async () => 0 }) };
+  assert.deepEqual(await detectManualBlockers(page), []);
+});
+
+await test('verifyStep: class=manual field tagged verify_status=manual', async () => {
+  const fields = [{ refId: '__captcha', class: 'manual', suggested_value: null }];
+  // a page with locator so verifyStep runs (not the smoke-guard no-op)
+  await verifyStep({ locator: () => ({}) }, { resolve: () => ({}) }, fields);
+  assert.equal(fields[0].verify_status, 'manual');
 });
 
 console.log(`\n✅ All ${passed} verify smoke tests passed.`);

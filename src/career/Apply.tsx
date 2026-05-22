@@ -562,18 +562,26 @@ export default function Apply() {
           {/* DONE — terminal states */}
           {phase === 'done' && terminal === 'completed' && (
             <div
-              className={`ap-m2-panel ${vsum.problems.length > 0 ? 'ap-m2-panel-err' : 'ap-m2-panel-ok'}`}
+              className={`ap-m2-panel ${
+                vsum.problems.length > 0
+                  ? 'ap-m2-panel-err'
+                  : vsum.todos.length > 0
+                    ? 'ap-m2-panel-warn'
+                    : 'ap-m2-panel-ok'
+              }`}
             >
               <div className="ap-m2-panel-body">
                 <strong>
-                  {vsum.problems.length > 0 ? (
+                  {vsum.problems.length > 0 || vsum.todos.length > 0 ? (
                     <AlertTriangle size={15} />
                   ) : (
                     <Check size={15} />
                   )}
                   {vsum.problems.length > 0
                     ? 'Form filled — but some fields need a look.'
-                    : 'Form filled & verified — ready to submit.'}
+                    : vsum.todos.length > 0
+                      ? `Form filled — ${vsum.todos.length} thing${vsum.todos.length === 1 ? '' : 's'} need you before Submit.`
+                      : 'Form filled & verified — ready to submit.'}
                 </strong>
                 {vsum.total > 0 && (
                   <p className="ap-m2-verify-line">
@@ -603,12 +611,32 @@ export default function Apply() {
                     ))}
                   </ul>
                 )}
+                {vsum.todos.length > 0 && (
+                  <div className="ap-m2-todos">
+                    <span className="ap-m2-todos-head">
+                      Before you submit, do these yourself:
+                    </span>
+                    <ul>
+                      {vsum.todos.map((t, i) => (
+                        <li key={i}>
+                          <strong>{t.label}</strong>
+                          {t.status === 'manual' ? ' — manual' : ' — not captured'}
+                          {t.detail ? (
+                            <span className="ap-m2-problem-detail"> · {t.detail}</span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <p>
                   The machine filled every step up to the Submit page and stopped
                   there.{' '}
                   {vsum.problems.length > 0
                     ? 'Fix the flagged fields in the Chromium window, then Submit.'
-                    : 'Review in the Chromium window and click Submit.'}{' '}
+                    : vsum.todos.length > 0
+                      ? 'Handle the items above in the Chromium window, then Submit.'
+                      : 'Review in the Chromium window and click Submit.'}{' '}
                   Then mark it applied below.
                 </p>
                 {machine && machine.autoApprove.count > 0 && (
@@ -871,22 +899,33 @@ function ApprovalPanel({
 // `problems` collects every field that did NOT cleanly verify — the panel
 // shows them loudly so a failed fill is never hidden behind a green "done".
 function verifySummary(session: Session | undefined) {
-  const counts = { verified: 0, mismatch: 0, fill_error: 0, unverifiable: 0 }
+  const counts = {
+    verified: 0,
+    mismatch: 0,
+    fill_error: 0,
+    unverifiable: 0,
+    not_seen: 0,
+    manual: 0,
+  }
+  // problems = the machine tried and failed / couldn't confirm.
+  // todos    = only the operator can do these (CAPTCHA, missed fields).
   const problems: { label: string; status: string; detail?: string }[] = []
+  const todos: { label: string; status: string; detail?: string }[] = []
   for (const step of Object.values(session?.per_step_draft ?? {})) {
     for (const f of step.fields ?? []) {
       const st = f.verify_status
-      if (st === 'verified' || st === 'mismatch' || st === 'fill_error' || st === 'unverifiable') {
-        counts[st]++
-        if (st !== 'verified') {
-          problems.push({ label: f.label, status: st, detail: f.verify_detail })
-        }
+      if (st == null || !(st in counts)) continue
+      counts[st as keyof typeof counts]++
+      if (st === 'mismatch' || st === 'fill_error' || st === 'unverifiable') {
+        problems.push({ label: f.label, status: st, detail: f.verify_detail })
+      } else if (st === 'not_seen' || st === 'manual') {
+        todos.push({ label: f.label, status: st, detail: f.verify_detail })
       }
     }
   }
   const total =
     counts.verified + counts.mismatch + counts.fill_error + counts.unverifiable
-  return { counts, problems, total }
+  return { counts, problems, todos, total }
 }
 
 // Map a Mode 2 classifier class onto the /apply/submitted 4-class enum.
