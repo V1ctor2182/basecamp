@@ -1,18 +1,83 @@
-milestones: []
-current_sprint: null
-blockers:
-  - "Plan-milestones not yet run — run the plan-milestones skill before dev m1."
-completion: 0
+milestones:
+  - id: "m1-backend-endpoints"
+    name: "Backend — verify-failures + 自测报告端点"
+    status: completed
+    estimated_files: ["server.mjs"]
+    estimated_lines: 120
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    description: |
+      新增两个端点:GET /api/career/feedback/verify-failures(读
+      verify-failures.jsonl,按 site + verify_status 聚合,默认近 30 天)
+      和 GET /api/career/feedback/selftest-report(读最新的
+      applier-selftest-report.json)。复用 feedback/stores.mjs 的
+      readJsonl / countByGroup。M4 的这两块数据目前完全没有端点。
+
+  - id: "m2-page-records-proposals"
+    name: "Flywheel 页 — 失败记录 + 待审提议"
+    status: pending
+    estimated_files:
+      - "src/career/Flywheel.tsx"
+      - "src/career/flywheel.css"
+      - "src/CareerApp.tsx"
+      - "src/career/CareerNav.tsx"
+    estimated_lines: 180
+    depends_on: ["m1-backend-endpoints"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      新建 Flywheel.tsx + 路由 /career/flywheel + nav 主入口。
+      ① 失败记录块:3 个 feedback store(field-edits / site-failures /
+      verify-failures),按 site 分组,近 30 天窗口。
+      ② 待审提议块:列 suggested/*.json,本页内联 approve / reject
+      (复用现有 /feedback/suggestions + :id/approve|reject 端点)。
+      参考模式:Learning.tsx(已有同类卡片 + inline approve/reject)。
+
+  - id: "m3-page-history-selftest"
+    name: "Flywheel 页 — 规则历史 + 自测报告"
+    status: pending
+    estimated_files:
+      - "src/career/Flywheel.tsx"
+      - "src/career/flywheel.css"
+    estimated_lines: 150
+    depends_on: ["m2-page-records-proposals"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      给 Flywheel 页补后两块。
+      ③ 已应用 / 已拒规则历史(learned-classifier-rules.yml +
+      rejected-ids.json)—— 让操作者看到飞轮到目前为止改了什么。
+      ④ 自测报告块:读 m1 的 selftest-report 端点,展示每个岗位 +
+      总计的 verified / mismatch / fill_error / not_seen / manual 统计。
+      只读展示(从页面触发自测运行 → 见 spec.md Deferred)。
+
+  - id: "m4-retire-old-tabs"
+    name: "收编旧 Learning / Iteration debug tab"
+    status: pending
+    estimated_files:
+      - "src/career/CareerNav.tsx"
+      - "src/CareerApp.tsx"
+    estimated_lines: 60
+    depends_on: ["m3-page-history-selftest"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      把 Advanced 下拉里的 "Learning (debug)" / "Iteration (debug)"
+      两个 tab 退役;路由 /career/learning 和 /career/iteration 重定向
+      到 /career/flywheel。Learning.tsx / Iteration.tsx 文件暂留(不删,
+      便于回看历史实现),只摘 nav 入口 + 加重定向。
+
+current_sprint: "Flywheel Dashboard — m1 done, m2 next"
+blockers: []
+completion: 25
+commits:
+  - milestone: "m1-backend-endpoints"
+    message: "m1: verify-failures + selftest-report endpoints (smoke 19/19)"
 status_note: >
-  🔄 planning. Created 2026-05-22. One dedicated page that surfaces the
-  whole data flywheel in one place — today it is all backend (JSONL
-  stores + suggested/*.json) with no consolidated UI, and the new
-  verification layer (07-applier M1–M4: verify-failures store + the
-  applier self-test harness) has no UI surface at all. Scope: the 3
-  feedback stores (field-edits / site-failures / verify-failures), the
-  pending induced proposals awaiting approve/reject, applied + rejected
-  rule history, and the self-test reports with verified/mismatch/
-  not_seen verification stats. Consolidates what is currently scattered
-  across the Learning tab + Iteration.tsx. Milestones to be locked by
-  plan-milestones.
+  🔄 m1 done (1/4). 两个只读端点上线:GET /feedback/verify-failures
+  (按 status + site 聚合,默认 30 天窗口) 和 GET /feedback/selftest-report
+  (读 applier-selftest-report.json,缺失→空壳,损坏→显式 error)。
+  smoke-feedback-stats-endpoint.mjs 加 7 个用例,19/19 全过。
+  下一步 m2:建 /career/flywheel 页面(失败记录 + 待审提议)。
 last_updated: "2026-05-22"

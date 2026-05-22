@@ -17,6 +17,7 @@ import {
   recordFieldMisclassified,
   recordFieldEdit,
   recordSiteFailure,
+  recordVerifyFailure,
 } from '../src/career/feedback/stores.mjs';
 import { savePending } from '../src/career/feedback/suggestionStore.mjs';
 
@@ -38,12 +39,20 @@ async function test(name, fn) {
 
 const FEEDBACK_BACKUP = FEEDBACK_DIR + `.smoke-m4-backup.${process.pid}`;
 
+// The flywheel-dashboard m1 selftest-report endpoint reads this file.
+// Back it up so the missing/corrupt-path tests can swap it freely.
+const SELFTEST_REPORT = path.resolve('data', 'career', 'eval-fixtures', 'applier-selftest-report.json');
+const SELFTEST_REPORT_BACKUP = SELFTEST_REPORT + `.smoke-m4-backup.${process.pid}`;
+
 function setupFixtures() {
   if (existsSync(FEEDBACK_DIR)) renameSync(FEEDBACK_DIR, FEEDBACK_BACKUP);
+  if (existsSync(SELFTEST_REPORT)) renameSync(SELFTEST_REPORT, SELFTEST_REPORT_BACKUP);
 }
 function restoreFixtures() {
   if (existsSync(FEEDBACK_DIR)) rmSync(FEEDBACK_DIR, { recursive: true, force: true });
   if (existsSync(FEEDBACK_BACKUP)) renameSync(FEEDBACK_BACKUP, FEEDBACK_DIR);
+  if (existsSync(SELFTEST_REPORT)) rmSync(SELFTEST_REPORT, { force: true });
+  if (existsSync(SELFTEST_REPORT_BACKUP)) renameSync(SELFTEST_REPORT_BACKUP, SELFTEST_REPORT);
 }
 setupFixtures();
 
@@ -167,6 +176,30 @@ async function seedRecords() {
       error_message: 'STALE_REF e2',
     });
   }
+  // 5 verify-failures in the 30d window: greenhouse (2 not_seen + 1
+  // mismatch), ashby (1 fill_error + 1 not_seen). Plus 1 old record
+  // (60d ago) that the default 30d window must exclude.
+  const vf = (site, refId, verify_status) => ({
+    ts: new Date().toISOString(),
+    jobId: '0123456789ab',
+    site,
+    field_label: `VF ${refId}`,
+    refId,
+    role: 'textbox',
+    verify_status,
+    suggested_value: 'x',
+    detail: 'd',
+  });
+  await recordVerifyFailure(vf('greenhouse', 'v1', 'not_seen'));
+  await recordVerifyFailure(vf('greenhouse', 'v2', 'not_seen'));
+  await recordVerifyFailure(vf('greenhouse', 'v3', 'mismatch'));
+  await recordVerifyFailure(vf('ashby', 'v4', 'fill_error'));
+  await recordVerifyFailure(vf('ashby', 'v5', 'not_seen'));
+  await recordVerifyFailure({
+    ...vf('lever', 'vOld', 'unverifiable'),
+    ts: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
+  });
+
   // One pending proposal so suggestions stats has a non-zero pending.
   await savePending({
     type: 'classifier-rule',
@@ -294,6 +327,78 @@ await test('GET /suggestions?status=pending: returns the seeded proposal', async
 await test('GET /suggestions: bad status query → 400', async () => {
   const { status } = await get('/api/career/feedback/suggestions?status=bogus');
   assert.equal(status, 400);
+});
+
+// ── flywheel-dashboard m1: verify-failures + selftest-report ──────────
+
+await test('GET /verify-failures: shape — since + total + by_status + by_site', async () => {
+  const { status, body } = await get('/api/career/feedback/verify-failures');
+  assert.equal(status, 200);
+  assert.match(body.since, /^\d{4}-\d{2}-\d{2}T/, 'since is an ISO string');
+  // 5 in the 30d window; the 60d-old record is excluded.
+  assert.equal(body.total, 5);
+  assert.ok(body.by_status, 'by_status object present');
+  assert.ok(body.by_site, 'by_site object present');
+});
+
+await test('GET /verify-failures: by_status aggregation', async () => {
+  const { body } = await get('/api/career/feedback/verify-failures');
+  assert.equal(body.by_status.not_seen, 3);
+  assert.equal(body.by_status.mismatch, 1);
+  assert.equal(body.by_status.fill_error, 1);
+  assert.equal(body.by_status.unverifiable, 0, '60d-old unverifiable excluded by 30d window');
+});
+
+await test('GET /verify-failures: by_site groups per status', async () => {
+  const { body } = await get('/api/career/feedback/verify-failures');
+  assert.deepEqual(body.by_site.greenhouse, {
+    mismatch: 1,
+    fill_error: 0,
+    not_seen: 2,
+    unverifiable: 0,
+  });
+  assert.deepEqual(body.by_site.ashby, {
+    mismatch: 0,
+    fill_error: 1,
+    not_seen: 1,
+    unverifiable: 0,
+  });
+  assert.ok(!body.by_site.lever, 'old lever record excluded');
+});
+
+await test('GET /verify-failures?since= widens the window to include old records', async () => {
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const { body } = await get(`/api/career/feedback/verify-failures?since=${encodeURIComponent(since)}`);
+  assert.equal(body.total, 6, '90d window includes the 60d-old record');
+  assert.equal(body.by_status.unverifiable, 1);
+});
+
+await test('GET /selftest-report: missing file → empty shell (no run yet)', async () => {
+  // setupFixtures() moved the real report aside; nothing on disk now.
+  const { status, body } = await get('/api/career/feedback/selftest-report');
+  assert.equal(status, 200);
+  assert.equal(body.ran_at, null);
+  assert.deepEqual(body.jobs, []);
+});
+
+await test('GET /selftest-report: present file is returned verbatim', async () => {
+  await fs.writeFile(
+    SELFTEST_REPORT,
+    JSON.stringify({ ran_at: '2026-05-22T00:00:00.000Z', fixture: 'fx', jobs: [{ jobId: 'j' }], totals: { verified: 9 }, by_outcome: {} }),
+  );
+  const { status, body } = await get('/api/career/feedback/selftest-report');
+  assert.equal(status, 200);
+  assert.equal(body.ran_at, '2026-05-22T00:00:00.000Z');
+  assert.equal(body.totals.verified, 9);
+  assert.equal(body.jobs.length, 1);
+});
+
+await test('GET /selftest-report: corrupt file surfaces an error (no silent empty)', async () => {
+  await fs.writeFile(SELFTEST_REPORT, '{not json');
+  const { status, body } = await get('/api/career/feedback/selftest-report');
+  assert.equal(status, 200);
+  assert.equal(body.error, 'self-test report file is unparseable');
+  assert.equal(body.ran_at, null);
 });
 
 // ── Cleanup ───────────────────────────────────────────────────────────

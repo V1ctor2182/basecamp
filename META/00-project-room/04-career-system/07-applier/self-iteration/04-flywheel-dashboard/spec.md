@@ -24,19 +24,46 @@ UI 入口。现有零散呈现散落在 Learning tab 和 Iteration.tsx。
 
 ## Decisions
 
-_(待 plan-milestones 锁定)_
+_(plan-milestones 锁定 2026-05-22)_
+
+- **D1** — 新开一个独立页面 `/career/flywheel`，**不**复用现有的 Learning /
+  Iteration 入口。m4 把旧的两个 "(debug)" tab 退役、路由重定向到新页面。
+- **D2** — 自测报告**只读展示**最近一次（读 `applier-selftest-report.json`）。
+  "从页面点按钮触发一次自测运行" → Deferred。
+- **D3** — 待审提议在飞轮页内联 approve / reject，复用现有
+  `/api/career/feedback/suggestions/:id/approve|reject` 端点。
+- **D4** — 失败记录默认**近 30 天**窗口、**按 site 分组**（与 `feedback/stats`
+  的 30 天窗口一致）。"看全部 / 不限窗口" → Deferred。
 
 ## Constraints
 
 _(继承父 Room；本 Room 暂无新增)_
 
+## Deferred
+
+以后想要再单独排 milestone，不在本轮 4 个 milestone 内：
+
+- **从飞轮页面触发一次自测运行** — 自测是 ~15 分钟无头批处理，网页触发需
+  后台任务 + 进度轮询,是一块独立的活(D2)。
+- **失败记录"看全部 / 不限时间窗口"视图** — 本轮只做近 30 天(D4)。
+
 ## 当前进度
 
-🔄 **planning** — Room 结构已建，milestones 待 `plan-milestones` 拆分。
+🔄 **in dev** — 1/4 milestones 完成（2026-05-22）。
 
-intent spec 里有 4 个 open question（页面入口是否复用 Learning/Iteration、
-能否从页面触发自测、approve/reject 是否就地做、记录展示窗口），需在
-plan-milestones 阶段锁定。
+| # | milestone | 估 | 状态 |
+|---|-----------|-----|------|
+| m1 | Backend — verify-failures + 自测报告端点 | ~120 行 | ✅ done |
+| m2 | Flywheel 页 — 失败记录 + 待审提议 | ~180 行 | pending |
+| m3 | Flywheel 页 — 规则历史 + 自测报告 | ~150 行 | pending |
+| m4 | 收编旧 Learning / Iteration debug tab | ~60 行 | pending |
+
+m1 上线两个只读端点:`GET /api/career/feedback/verify-failures`
+(按 status + site 聚合,默认 30 天窗口) 与
+`GET /api/career/feedback/selftest-report`(读
+`applier-selftest-report.json`;缺失→空壳,损坏→显式 `error`)。
+
+下一步：`dev 04-flywheel-dashboard/m2`。
 
 ## Contracts
 
