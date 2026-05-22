@@ -326,8 +326,10 @@ export default function Apply() {
   }
 
   // Cancel the apply: stop the server-side machine (so the browser stops
-  // filling) and leave the page. Best-effort — even if the stop call
-  // fails, the operator still gets out; the machine settles on its own.
+  // filling), then stay on THIS job's apply page — reset to the idle
+  // Start panel so the operator can re-run or read, rather than bouncing
+  // back to the Find Jobs list. Best-effort: the reset happens even if
+  // the stop call fails (the machine settles on its own).
   async function cancelApply() {
     setBusy(true)
     setError(null)
@@ -337,10 +339,14 @@ export default function Apply() {
           method: 'POST',
         })
       } catch {
-        // ignore — navigating away is what matters
+        // ignore — resetting the page is what matters
       }
     }
-    navigate('/career/find-jobs')
+    setStatus(null)
+    setEdits({})
+    pendingKeyRef.current = null
+    setPhase('idle')
+    setBusy(false)
   }
 
   async function resumeMachine() {
