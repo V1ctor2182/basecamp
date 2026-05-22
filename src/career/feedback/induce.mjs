@@ -26,6 +26,7 @@ import {
 } from './suggestionStore.mjs';
 import { induce as induceClassifierRule } from './induceClassifierRule.mjs';
 import { induce as induceSiteAdapter } from './induceSiteAdapter.mjs';
+import { induce as induceVerifyFix } from './induceVerifyFix.mjs';
 
 export const INDUCTION_THRESHOLD = 5;
 
@@ -45,6 +46,16 @@ const PIPELINES = Object.freeze({
     groupKey: (r) => r.domain || null,
     proposalType: 'site-adapter',
     runInduce: induceSiteAdapter,
+  },
+  // Verification-failure flywheel (M4 / Layer 3). The self-test harness
+  // feeds verify-failures.jsonl; induceVerifyFix proposes a classifier
+  // rule from the `not_seen` cluster (mismatch/fill_error rows are
+  // recorded but ignored by the inducer — fill-mechanics, not rules).
+  'verify-failure': {
+    file: _FILES.VERIFY_FAILURES,
+    groupKey: (r) => r.site || null,
+    proposalType: 'classifier-rule',
+    runInduce: induceVerifyFix,
   },
 });
 

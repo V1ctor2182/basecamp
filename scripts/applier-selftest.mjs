@@ -31,6 +31,8 @@ import {
   pauseMachine,
 } from '../src/career/applier/multistep/endpoint.mjs';
 import { readSession, deleteSession } from '../src/career/applier/multistep/applySessionsStore.mjs';
+import { recordVerifyFailure } from '../src/career/feedback/stores.mjs';
+import { maybeInduce } from '../src/career/feedback/induce.mjs';
 
 const DEFAULT_FIXTURE = path.resolve('data', 'career', 'eval-fixtures', 'applier-selftest.json');
 const REPORT_PATH = path.resolve('data', 'career', 'eval-fixtures', 'applier-selftest-report.json');
@@ -50,6 +52,39 @@ function tallySession(session) {
     }
   }
   return counts;
+}
+
+const FAILURE_STATUSES = new Set(['mismatch', 'fill_error', 'not_seen', 'unverifiable']);
+
+// Record every verification failure in a job's session into the
+// verify-failures flywheel store (Layer 3 feed). Per-record errors are
+// swallowed with a warning — one bad row must not abort the harness.
+async function recordFailures(jobId, session) {
+  if (!session || !session.per_step_draft) return 0;
+  const site = session.site_adapter || 'generic';
+  let n = 0;
+  for (const step of Object.values(session.per_step_draft)) {
+    for (const f of step.fields || []) {
+      if (!f || !FAILURE_STATUSES.has(f.verify_status)) continue;
+      try {
+        await recordVerifyFailure({
+          ts: new Date().toISOString(),
+          jobId,
+          site,
+          field_label: String(f.label || '(unlabeled)').slice(0, 400),
+          refId: String(f.refId || 'unknown').slice(0, 64),
+          role: String(f.role || '').slice(0, 40),
+          verify_status: f.verify_status,
+          suggested_value: String(f.suggested_value ?? '').slice(0, 2000),
+          detail: String(f.verify_detail ?? '').slice(0, 400),
+        });
+        n += 1;
+      } catch (e) {
+        console.warn(`  (skipped a verify-failure record: ${e.message})`);
+      }
+    }
+  }
+  return n;
 }
 
 function fmtCounts(c) {
@@ -207,6 +242,8 @@ async function main() {
     r.counts = tallySession(r.session);
     results.push(r);
     console.log(`  outcome=${r.outcome}  ${fmtCounts(r.counts)}${r.error ? `  err=${r.error}` : ''}`);
+    const recorded = await recordFailures(r.jobId, r.session);
+    if (recorded) console.log(`  recorded ${recorded} verify-failure(s) → flywheel`);
   }
 
   // ── Aggregate report ────────────────────────────────────────────────
@@ -247,6 +284,27 @@ async function main() {
   } catch (e) {
     console.error(`  report write failed: ${e.message}`);
   }
+
+  // ── Layer 3 — feed the recorded failures into the flywheel ──────────
+  console.log(`\n─── Flywheel induction ───`);
+  try {
+    const proposals = await maybeInduce('verify-failure');
+    if (proposals.length > 0) {
+      console.log(`  ${proposals.length} fix proposal(s) → data/career/feedback/suggested/  (review before applying)`);
+      for (const p of proposals) {
+        const pr = p.proposal || {};
+        console.log(`    [${p.group_key}] class=${pr.class || '?'}  regex=/${pr.regex || ''}/`);
+      }
+    } else {
+      console.log(
+        '  no proposals — needs ≥5 verify-failures + ≥2 not_seen on a site ' +
+          '(or the threshold was already inducted; or the model returned nothing)',
+      );
+    }
+  } catch (e) {
+    console.warn(`  induction failed: ${e.message}`);
+  }
+
   // Chromium singleton stays open — exit hard so the harness terminates.
   process.exit(0);
 }

@@ -112,9 +112,42 @@ export const SiteFailureSchema = z
   })
   .strict();
 
+/** Post-fill verification statuses that count as a failure. */
+export const VERIFY_FAILURE_STATUSES = Object.freeze([
+  'mismatch',
+  'fill_error',
+  'not_seen',
+  'unverifiable',
+]);
+
+/**
+ * verify-failures.jsonl record.
+ *
+ * Written by the self-test harness (scripts/applier-selftest.mjs) — one
+ * row per field that failed M1/M2 post-fill verification.
+ *   - `not_seen`  — the classifier missed the field → feeds the
+ *     classifier-rule induction (induceVerifyFix).
+ *   - `mismatch` / `fill_error` / `unverifiable` — fill-mechanics
+ *     issues; recorded for visibility, NOT rule-inducible.
+ */
+export const VerifyFailureSchema = z
+  .object({
+    ts: tsSchema,
+    jobId: jobIdSchema,
+    site: z.string().min(1).max(64), // site-adapter id
+    field_label: z.string().min(1).max(400),
+    refId: z.string().min(1).max(64),
+    role: z.string().max(40), // a11y role ('' tolerated)
+    verify_status: z.enum(VERIFY_FAILURE_STATUSES),
+    suggested_value: z.string().max(2000), // what the machine intended ('' if none)
+    detail: z.string().max(400), // verify_detail — the why ('' tolerated)
+  })
+  .strict();
+
 /** Mapping from filename → schema; used by appendJsonl for validation. */
 export const SCHEMAS_BY_FILE = Object.freeze({
   'field-misclassified.jsonl': FieldMisclassifiedSchema,
   'field-edits.jsonl': FieldEditSchema,
   'site-failures.jsonl': SiteFailureSchema,
+  'verify-failures.jsonl': VerifyFailureSchema,
 });

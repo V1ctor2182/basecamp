@@ -518,7 +518,10 @@ await test('readMarkers / writeMarkers roundtrip + malformed file → empty', as
 // ── 7. KNOWN_FEEDBACK_TYPES constant ──────────────────────────────────
 
 await test('KNOWN_FEEDBACK_TYPES + INDUCTION_THRESHOLD constants', () => {
-  assert.deepEqual([...KNOWN_FEEDBACK_TYPES].sort(), ['field-misclassified', 'site-failures']);
+  assert.deepEqual(
+    [...KNOWN_FEEDBACK_TYPES].sort(),
+    ['field-misclassified', 'site-failures', 'verify-failure'],
+  );
   assert.equal(INDUCTION_THRESHOLD, 5);
 });
 
