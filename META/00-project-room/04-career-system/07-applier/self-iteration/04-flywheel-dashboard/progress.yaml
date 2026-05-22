@@ -73,6 +73,7 @@ blockers: []
 completion: 25
 commits:
   - milestone: "m1-backend-endpoints"
+    hash: "5c5e04e"
     message: "m1: verify-failures + selftest-report endpoints (smoke 19/19)"
 status_note: >
   🔄 m1 done (1/4). 两个只读端点上线:GET /feedback/verify-failures
