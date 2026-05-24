@@ -165,6 +165,18 @@ async function atomicWriteFile(file, content) {
 }
 async function writeJSON(file, data) { await atomicWriteFile(file, JSON.stringify(data, null, 2)); }
 
+// 09-integrations-credentials m1: mask a secret for safe GET display.
+// Keep last 4 chars visible (helps the operator confirm they edited the
+// right key); everything else becomes a fixed-width dot run so the masked
+// length doesn't leak the true length of short keys. Strings under 8
+// chars fall back to a fully-opaque ●●●● — no characters revealed —
+// because revealing any of a short key gives away too much.
+function maskSecret(value, lastN = 4) {
+  if (typeof value !== 'string' || value.length === 0) return undefined;
+  if (value.length < 8) return '●●●●';
+  return '●●●●●●●●' + value.slice(-lastN);
+}
+
 // Deep-merge: defaults provide structure for any keys missing in `loaded`.
 // Plain-object values are merged recursively; arrays and primitives in `loaded`
 // replace defaults wholesale (so an explicit empty array from yaml stays empty).
@@ -296,29 +308,452 @@ async function githubFetch(endpoint) {
 }
 
 // --- Config ---
+//
+// 09-integrations-credentials m1 extends this endpoint:
+//   - GET response keeps the original {githubUsername, hasToken} for the
+//     TrackerApp's existing useConfig hook (don't break that) and adds
+//     nested {anthropic, google, github} shapes with masked values for
+//     the new /career/settings/integrations page.
+//   - PUT accepts anthropicApiKey / googleClientId / googleClientSecret
+//     in addition to the original github fields. Field semantics:
+//       undefined  → skip (no change)
+//       empty ''   → clear (delete from config.json)
+//       string     → set
+//     Non-string values for new credentials → 400 reject. The new "empty
+//     = clear" rule doesn't break TrackerApp because TrackerApp's existing
+//     form omits an empty token entirely (TrackerApp.tsx:874).
+//   - On anthropicApiKey change, invalidate the cached Anthropic client
+//     so the new key takes effect without restarting the server.
 app.get('/api/config', async (_req, res) => {
   try {
     const config = await readJSON(CONFIG_FILE);
     const envToken = process.env.GITHUB_TOKEN;
     res.json({
+      // Existing top-level fields (TrackerApp consumer). Don't change shape.
       githubUsername: config.githubUsername || '',
       hasToken: !!(envToken || config.githubToken),
+      // New Integrations-page shape. Each leaf is {set, masked?} — never
+      // ships the raw value to the client.
+      anthropic: maskedState(process.env.ANTHROPIC_API_KEY || config.anthropicApiKey),
+      google: {
+        clientId: maskedState(process.env.GOOGLE_CLIENT_ID || config.googleClientId),
+        clientSecret: maskedState(process.env.GOOGLE_CLIENT_SECRET || config.googleClientSecret),
+      },
+      github: {
+        username: config.githubUsername || '',
+        token: maskedState(envToken || config.githubToken),
+      },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Helper local to the config endpoint — wraps a possibly-undefined secret
+// into the {set, masked?} shape the GET response uses.
+function maskedState(value) {
+  if (typeof value !== 'string' || value.length === 0) return { set: false };
+  return { set: true, masked: maskSecret(value) };
+}
+
+// Field whitelist for PUT — anything else in req.body is silently ignored.
+// Each value must be a string (empty string means "clear"; whitespace is
+// trimmed and treated as empty after trim).
+const CONFIG_PUT_FIELDS = Object.freeze([
+  'githubUsername',
+  'githubToken',
+  'anthropicApiKey',
+  'googleClientId',
+  'googleClientSecret',
+]);
+
+// REVIEW H2 (security): cap any single credential field. The default
+// express.json() limit upstream of this route is 10MB; a misbehaving or
+// malicious PUT of a 10MB string would persist into data/config.json
+// and force a hundreds-of-ms JSON.parse on every subsequent read.
+// 2KB is comfortably above the longest real credential (Google OAuth
+// secrets are ~24 chars, GitHub fine-grained tokens ~93, Anthropic keys
+// ~108) and well below the parse-cost cliff.
+const MAX_CREDENTIAL_LEN = 2048;
+
+// REVIEW H5 (Plan): the read-modify-write pattern in PUT isn't atomic
+// across concurrent requests — atomicWriteFile is per-file but two
+// PUTs that interleave (read, mutate, write) can lose one update.
+// Serialize all config writes through a single promise chain so a
+// burst from two clients (TrackerApp + Integrations page) can't drop
+// fields. Per-process only (the dashboard is single-process).
+let _configWriteChain = Promise.resolve();
+function serializeConfigWrite(task) {
+  const next = _configWriteChain.then(task, task);
+  _configWriteChain = next.catch(() => {});
+  return next;
+}
+
+// REVIEW H1 (security): the credentials write path is the new attack
+// surface this Room adds. The server still binds to 0.0.0.0 (broader
+// scope to change) and `cors()` is wide-open, so a malicious page in
+// the operator's browser could PUT a key the attacker controls and
+// the next getClient() would call Anthropic on the attacker's account.
+// Guard PUT specifically with an Origin/Host same-origin check. Direct
+// tools (curl, the smoke harness) don't send Origin and fall through
+// untouched; browsers always send it on cross-origin fetches.
+function isSameOriginConfigWrite(req) {
+  const origin = req.get('origin');
+  if (!origin) return true; // non-browser caller (curl, smoke, fetch from node)
+  let parsed;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return false;
+  }
+  const host = req.get('host') || '';
+  // Strip the port from Host for comparison if present in Origin.
+  const originHostPort = parsed.host;
+  return originHostPort === host;
+}
+
 app.put('/api/config', async (req, res) => {
   try {
-    const existing = await readJSON(CONFIG_FILE);
-    const { githubUsername, githubToken } = req.body;
-    if (githubUsername !== undefined) existing.githubUsername = githubUsername;
-    if (githubToken) existing.githubToken = githubToken;
-    await writeJSON(CONFIG_FILE, existing);
+    if (!isSameOriginConfigWrite(req)) {
+      return res.status(403).json({
+        error: 'cross-origin config write rejected (same-origin policy)',
+      });
+    }
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+      ? req.body
+      : {};
+    // Type-check + length-cap up front so we never write garbage to
+    // config.json — a misconfigured client sending `{anthropicApiKey:
+    // 12345}` or a 10MB string shouldn't silently coerce/persist.
+    // REVIEW H3 (Plan): trim leading/trailing whitespace before
+    // empty-check so `'   '` clears the field instead of writing
+    // whitespace that then breaks Anthropic SDK auth with a confusing
+    // 401 from a "set" key.
+    const normalized = {};
+    for (const field of CONFIG_PUT_FIELDS) {
+      if (body[field] === undefined) continue;
+      if (typeof body[field] !== 'string') {
+        return res.status(400).json({
+          error: `field ${field} must be a string ('' to clear); got ${typeof body[field]}`,
+        });
+      }
+      if (body[field].length > MAX_CREDENTIAL_LEN) {
+        return res.status(400).json({
+          error: `field ${field} exceeds ${MAX_CREDENTIAL_LEN} chars`,
+        });
+      }
+      normalized[field] = body[field].trim();
+    }
+    let anthropicChanged = false;
+    await serializeConfigWrite(async () => {
+      const existing = await readJSON(CONFIG_FILE);
+      const beforeAnthropic = existing.anthropicApiKey;
+      for (const field of CONFIG_PUT_FIELDS) {
+        if (!(field in normalized)) continue;
+        if (normalized[field] === '') delete existing[field];
+        else existing[field] = normalized[field];
+      }
+      await writeJSON(CONFIG_FILE, existing);
+      anthropicChanged = existing.anthropicApiKey !== beforeAnthropic;
+    });
     cache.clear();
     scheduleCacheWrite();
+    // If the Anthropic key materially changed, drop the cached client so
+    // the next getClient() rebuilds from the new env→config.json chain.
+    // Dynamic import so a server boot without anthropicClient on the hot
+    // path still works (the module pulls the SDK + spawn helpers).
+    // REVIEW H1 (edge): don't swallow the import error — log it. A
+    // silently-failed invalidation leaves the stale client in cache and
+    // the operator's new key won't take effect, with no log trail.
+    if (anthropicChanged) {
+      try {
+        const { _resetClientForTesting } = await import('./src/career/lib/anthropicClient.mjs');
+        _resetClientForTesting();
+      } catch (e) {
+        console.warn(
+          `[config] anthropic client cache invalidate failed; new key may not take effect until restart: ${e?.message ?? e}`,
+        );
+      }
+    }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// --- 09-integrations-credentials m3: POST /api/career/config/:service/test ---
+//
+// Lightweight reachability test per service so the operator can verify
+// a saved credential actually works without leaving the Integrations
+// page. Each service uses the cheapest meaningful test:
+//
+//   anthropic — send 1-output-token to claude-haiku-4-5 (~$0.0001).
+//               Classifies AuthenticationError vs RateLimitError vs
+//               APIConnectionError vs other.
+//   google    — format-only check (clientId / clientSecret regex). The
+//               real OAuth handshake lives in Resumes → Sync; testing it
+//               here would require user interaction. No network call.
+//   github    — GET https://api.github.com/user with the token. Returns
+//               the authenticated login + scope list on success.
+//
+// Read credentials from env then config.json (same precedence as
+// elsewhere). NEVER echo the raw secret in the response — only metadata
+// (model, login, scopes, error class).
+
+const SERVICE_TEST_HANDLERS = Object.freeze({
+  anthropic: testAnthropic,
+  google: testGoogle,
+  github: testGithub,
+});
+
+app.post('/api/career/config/:service/test', async (req, res) => {
+  const { service } = req.params;
+  const handler = SERVICE_TEST_HANDLERS[service];
+  if (!handler) {
+    return res.status(404).json({ error: `unknown service '${service}'` });
+  }
+  try {
+    // Read fresh config each call — testing the value currently on disk,
+    // not whatever a cached SDK client was built with at boot.
+    const config = await readJSON(CONFIG_FILE).catch(() => ({}));
+    const result = await handler(config, req);
+    res.json(result);
+  } catch (e) {
+    // The handlers swallow their own service-specific errors and return
+    // {ok:false, reason}. A reach-here is an internal bug — surface it
+    // as 500 + message, never swallow.
+    res.status(500).json({ error: String(e?.message ?? e).slice(0, 300) });
+  }
+});
+
+const ANTHROPIC_TEST_TIMEOUT_MS = 20_000;
+const ANTHROPIC_TEST_MODEL = 'claude-haiku-4-5-20251001';
+
+async function testAnthropic(config, _req) {
+  // Route through anthropicClient.getClient() so the MOCK_ANTHROPIC=1
+  // and CAREER_LLM_BACKEND=cli envs work the same way they do in the
+  // rest of the system. We reset the cache first so a stale client
+  // (e.g. built from a since-replaced key) doesn't shadow the value
+  // currently on disk. The PUT path already does this, but a smoke /
+  // direct config edit wouldn't have.
+  let getClient, _resetClientForTesting, AuthenticationError, RateLimitError, APIConnectionError, ConfigError;
+  try {
+    ({
+      getClient,
+      _resetClientForTesting,
+      AuthenticationError,
+      RateLimitError,
+      APIConnectionError,
+      ConfigError,
+    } = await import('./src/career/lib/anthropicClient.mjs'));
+  } catch (e) {
+    return { ok: false, reason: 'other', detail: `anthropicClient import failed: ${e?.message ?? e}` };
+  }
+  // Short-circuit "unset" before touching the SDK so the operator gets a
+  // clear message instead of the generic ConfigError text.
+  if (
+    process.env.MOCK_ANTHROPIC !== '1'
+    && process.env.CAREER_LLM_BACKEND !== 'cli'
+    && !process.env.ANTHROPIC_API_KEY
+    && !config.anthropicApiKey
+  ) {
+    return { ok: false, reason: 'unset', detail: 'No Anthropic API key configured.' };
+  }
+  _resetClientForTesting();
+  let client;
+  try {
+    client = getClient();
+  } catch (e) {
+    if (ConfigError && e instanceof ConfigError) {
+      return { ok: false, reason: 'unset', detail: e.message };
+    }
+    return { ok: false, reason: 'other', detail: String(e?.message ?? e).slice(0, 200) };
+  }
+  const started = Date.now();
+  // REVIEW H2: clear the race timer when the ping wins, otherwise the
+  // setTimeout fires later and creates a detached rejected promise
+  // (Node 18+ surfaces these as unhandled rejections).
+  let timeoutId;
+  try {
+    const ping = client.messages.create({
+      model: ANTHROPIC_TEST_MODEL,
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'ok' }],
+    });
+    const timeout = new Promise((_, rej) => {
+      timeoutId = setTimeout(
+        () => rej(new Error('Anthropic ping timed out')),
+        ANTHROPIC_TEST_TIMEOUT_MS,
+      );
+    });
+    const resp = await Promise.race([ping, timeout]);
+    clearTimeout(timeoutId);
+    return {
+      ok: true,
+      model: ANTHROPIC_TEST_MODEL,
+      elapsed_ms: Date.now() - started,
+      stop_reason: resp?.stop_reason,
+    };
+  } catch (e) {
+    clearTimeout(timeoutId);
+    const elapsed_ms = Date.now() - started;
+    if (AuthenticationError && e instanceof AuthenticationError) {
+      return { ok: false, reason: 'auth', detail: 'API key was rejected (401).', elapsed_ms };
+    }
+    if (RateLimitError && e instanceof RateLimitError) {
+      return { ok: false, reason: 'rate_limit', detail: 'Rate limited by Anthropic (429).', elapsed_ms };
+    }
+    if (APIConnectionError && e instanceof APIConnectionError) {
+      return { ok: false, reason: 'network', detail: `Network error: ${e.message}`, elapsed_ms };
+    }
+    if (/timed out/i.test(e?.message ?? '')) {
+      return { ok: false, reason: 'network', detail: 'Ping timed out.', elapsed_ms };
+    }
+    return {
+      ok: false,
+      reason: 'other',
+      detail: String(e?.message ?? e).slice(0, 200),
+      elapsed_ms,
+    };
+  }
+}
+
+// Format-only validation — the real OAuth flow happens elsewhere. The
+// patterns mirror Google's documented client-credential shapes; a
+// mistype here will fail OAuth at the real-call site (Resumes → Sync)
+// with a less helpful error, so catching the format mismatch up front
+// is the operator-visible value.
+const GOOGLE_CLIENT_ID_RE = /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/;
+const GOOGLE_CLIENT_SECRET_RE = /^GOCSPX-[A-Za-z0-9_-]{15,}$/;
+
+async function testGoogle(config, _req) {
+  const clientId = process.env.GOOGLE_CLIENT_ID || config.googleClientId;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || config.googleClientSecret;
+  if (!clientId && !clientSecret) {
+    return { ok: false, reason: 'unset', detail: 'No Google OAuth credentials configured.' };
+  }
+  // REVIEW H4: distinguish "set + valid", "set + invalid", and "unset".
+  // The UI's Test button enables on OR (either field present), so
+  // returning ok:false just because the other half is unset would
+  // mislead the operator who only filled in one. Compute ok over the
+  // SET-and-VALID fields only; report unset fields as informational.
+  const checkId = !clientId
+    ? { valid: null, reason: 'Not set' }
+    : GOOGLE_CLIENT_ID_RE.test(clientId)
+      ? { valid: true }
+      : { valid: false, reason: 'Must end in .apps.googleusercontent.com' };
+  const checkSecret = !clientSecret
+    ? { valid: null, reason: 'Not set' }
+    : GOOGLE_CLIENT_SECRET_RE.test(clientSecret)
+      ? { valid: true }
+      : { valid: false, reason: 'Must start with GOCSPX- (≥15 chars after)' };
+  // ok is true iff no set field is invalid (treating unset as neutral).
+  const ok = checkId.valid !== false && checkSecret.valid !== false;
+  return {
+    ok,
+    clientId: checkId,
+    clientSecret: checkSecret,
+    note: 'Format-only check; the real OAuth handshake runs from Resumes → Sync.',
+  };
+}
+
+const GITHUB_TEST_TIMEOUT_MS = 10_000;
+
+async function testGithub(config, _req) {
+  const token = process.env.GITHUB_TOKEN || config.githubToken;
+  if (!token) {
+    return { ok: false, reason: 'unset', detail: 'No GitHub token configured.' };
+  }
+  // Smoke uses MOCK_GITHUB_TEST to bypass the live network call. Token
+  // shape determines the canned response so we exercise both happy and
+  // auth-fail paths without touching api.github.com.
+  // REVIEW M5: gate on NODE_ENV !== 'production' so an accidentally-
+  // inherited env in a prod deployment can't silently mock real test
+  // results (violating "no silent errors").
+  if (process.env.MOCK_GITHUB_TEST === '1' && process.env.NODE_ENV !== 'production') {
+    if (token.startsWith('bad_')) {
+      return { ok: false, reason: 'auth', detail: 'Mocked 401 from api.github.com.' };
+    }
+    return { ok: true, login: 'mock-user', scopes: ['repo', 'read:user'] };
+  }
+  const started = Date.now();
+  // REVIEW M6: keep the AbortController alive through the body read so
+  // a slow / hung body stream can't outlive the timeout. Clear the
+  // timeout only after the JSON parse completes (or fails).
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), GITHUB_TEST_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch('https://api.github.com/user', {
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        Authorization: `Bearer ${token}`,
+        'User-Agent': 'work-tracker',
+      },
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(to);
+    return {
+      ok: false,
+      reason: 'network',
+      detail: `Network error: ${e?.message ?? e}`,
+      elapsed_ms: Date.now() - started,
+    };
+  }
+  const elapsed_ms = Date.now() - started;
+  if (res.status === 401) {
+    clearTimeout(to);
+    return { ok: false, reason: 'auth', detail: 'Token rejected (401).', elapsed_ms };
+  }
+  if (res.status === 403) {
+    // 403 from GitHub is usually rate-limit; the message body says which.
+    const text = await res.text().catch(() => '');
+    clearTimeout(to);
+    const isRateLimit = /rate limit/i.test(text);
+    return {
+      ok: false,
+      reason: isRateLimit ? 'rate_limit' : 'forbidden',
+      detail: text.slice(0, 200) || 'Forbidden (403).',
+      elapsed_ms,
+    };
+  }
+  if (!res.ok) {
+    clearTimeout(to);
+    return {
+      ok: false,
+      reason: 'other',
+      detail: `HTTP ${res.status}`,
+      elapsed_ms,
+    };
+  }
+  // REVIEW M7: a 200 response that fails to JSON-parse (e.g. GitHub
+  // serving an HTML maintenance page) must NOT silently look like a
+  // success with empty data. Surface as reason:'other'.
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    clearTimeout(to);
+    return {
+      ok: false,
+      reason: 'other',
+      detail: `200 OK but response body was not valid JSON: ${e?.message ?? e}`,
+      elapsed_ms,
+    };
+  }
+  clearTimeout(to);
+  // X-OAuth-Scopes header lists the granted scopes — useful diagnostic
+  // for an operator wondering why a specific endpoint works in Tracker
+  // but not in (say) a private-repo path.
+  const scopesHeader = res.headers.get('x-oauth-scopes') || '';
+  const scopes = scopesHeader
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return {
+    ok: true,
+    login: data.login || null,
+    scopes,
+    elapsed_ms,
+  };
+}
 
 // --- Repos ---
 app.get('/api/repos', async (_req, res) => {

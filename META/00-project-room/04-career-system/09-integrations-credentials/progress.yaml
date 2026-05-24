@@ -1,0 +1,96 @@
+milestones:
+  - id: "m1-backend-config"
+    name: "Backend — /api/config 扩字段 + anthropic client config.json 兜底 + smoke"
+    status: completed
+    estimated_files:
+      - "server.mjs"
+      - "src/career/lib/anthropicClient.mjs"
+      - "scripts/smoke-config-endpoint.mjs"
+    estimated_lines: 150
+    depends_on: []
+    complexity_flags: []
+    open_questions: []
+    description: |
+      扩现有 GET /api/config 让它一并返回 anthropic + google OAuth 的 masked
+      状态(沿用现有 endpoint,不开新路由);扩 PUT 接 anthropicApiKey /
+      googleClientId / googleClientSecret 的 partial update(空串 = 清除)。
+      anthropicClient.mjs 的 getClient() 加 env → data/config.json 兜底
+      (平行 server.mjs:2562 的 GOOGLE_CLIENT_ID 模式)。PUT 后立即调
+      _resetClientForTesting() 让 cache 失效,新 key 不重启即生效。
+      maskSecret(value, lastN=4) helper 加在 server.mjs(短串 <8 全屏蔽)。
+      新增 smoke-config-endpoint.mjs:GET masked 形状、PUT round-trip、
+      空串清除、anthropic cache invalidation 验证。
+
+  - id: "m2-frontend-integrations-page"
+    name: "Frontend — Settings → Integrations 页 + nav + UX"
+    status: completed
+    estimated_files:
+      - "src/career/settings/Integrations.tsx"
+      - "src/career/settings/integrations.css"
+      - "src/career/settings/SettingsLayout.tsx"
+      - "src/CareerApp.tsx"
+    estimated_lines: 180
+    depends_on: ["m1-backend-config"]
+    complexity_flags: []
+    open_questions: []
+    description: |
+      新建 Integrations.tsx — 3 张卡片(Anthropic / Google OAuth / GitHub)
+      并列。每张卡片有:status pill(set/unset)、masked value(set 时显示
+      末 4 位)、Edit / Save / Clear 三种动作、保存成功/失败 toast。
+      SettingsLayout 加 "Integrations" NavLink 放最后;CareerApp.tsx 加
+      Route<integrations>。CSS 沿用 c-resumes-* / Identity.tsx 视觉。
+      错误一律 inline 显示(no silent errors)。本 milestone 不含
+      Test Connection — 那是 m3。
+
+  - id: "m3-test-connection"
+    name: "Test Connection — 后端 /test 端点 + 前端 Test 按钮 + smoke"
+    status: completed
+    estimated_files:
+      - "server.mjs"
+      - "src/career/settings/Integrations.tsx"
+      - "scripts/smoke-config-endpoint.mjs"
+    estimated_lines: 170
+    depends_on: ["m2-frontend-integrations-page"]
+    complexity_flags:
+      - "external_api"
+    open_questions: []
+    description: |
+      新增 POST /api/career/config/:service/test(service ∈
+      anthropic|google|github):
+        - anthropic: 真发 1-output-token 的 claude-haiku-4-5 ping
+          (约 $0.0001/次), catch AuthenticationError → 区分 auth /
+          rate_limit / network / other 错误;
+        - google: 不跑真 OAuth(那是 Resumes Sync 的活),只校验格式
+          (clientId 匹配 *.apps.googleusercontent.com、clientSecret
+          匹配 GOCSPX-*);
+        - github: 带 token 调 GitHub GET /user, 返 login 验真。
+      前端每张卡片加 Test 按钮 → loading state → ✅/❌ pill + 错误 detail
+      inline。smoke 覆盖 3 个 service 各 1 个 happy + 1 个 fail path
+      (mock anthropic, fake github fetch)。
+
+current_sprint: "Integrations & Credentials — 完成 (3/3)"
+blockers: []
+completion: 100
+commits:
+  - milestone: "m1-backend-config"
+    hash: "b465646"
+    message: "m1: /api/config extended for anthropic/google/github + masked GET + anthropicClient config.json fallback"
+  - milestone: "m2-frontend-integrations-page"
+    hash: "9ce889a"
+    message: "m2: Settings → Integrations page (3 cards) + nav + UX"
+  - milestone: "m3-test-connection"
+    hash: "892ea44"
+    message: "m3: Test Connection — per-service /test endpoints + Test buttons + smoke"
+status_note: >
+  ✅ 全部 3 个 milestone 完成(2026-05-24)。Settings → Integrations
+  tab 上线 + 后端管道齐全。Test Connection 三种策略各就位:anthropic
+  通过 getClient() 真发 1-token haiku ping(~$0.0001),区分 auth/
+  rate_limit/network/other;google 纯格式校验(*.apps.googleusercontent.com
+  + GOCSPX-*),只 set 一半也能返 ok(neutral);github 调
+  /user 取 login + scopes,MOCK_GITHUB_TEST 仅 NODE_ENV != production
+  生效。Code review 修了 8 项:Promise.race timer leak、stale testResults
+  on edit invalidation、Google ok 与 OR-testable 对齐(null=neutral)、
+  跨卡片错误 cast 防 crash、同卡 Save+Test 互斥、NODE_ENV gate for
+  MOCK_GITHUB_TEST、github body-read 保活、200+非 JSON 报错(no silent
+  empty)、aria-live polite。smoke 29/29(原 17 + m3 加 12)。
+last_updated: "2026-05-24"

@@ -1,0 +1,246 @@
+/* Integrations Settings — 04-career-system/09-integrations-credentials m2.
+ * Layers on top of ats-form.css's af-* tokens; introduces a c-int-* prefix
+ * for the card / status-pill / secret-row primitives this page needs. */
+
+.c-int-card {
+  background: #ffffff;
+  border: 1px solid #e8e2d2;
+  border-radius: 8px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+
+.c-int-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: #2d2520;
+}
+
+.c-int-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.c-int-card-desc {
+  margin: 4px 0 14px;
+  color: #6b6356;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.c-int-card-desc code {
+  background: #fbf7ed;
+  border: 1px solid #f0ead9;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.c-int-card-desc a {
+  color: #bf6705;
+  text-decoration: underline;
+}
+
+/* Status pill — sits to the right of the card title. */
+
+.c-int-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.c-int-status-ok {
+  background: #d8f3dc;
+  color: #16723e;
+}
+
+.c-int-status-unset {
+  background: #fbe5d6;
+  color: #bf3a06;
+}
+
+.c-int-status-partial {
+  background: #fef3c7;
+  color: #92580c;
+}
+
+/* Field rows */
+
+.c-int-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.c-int-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b6356;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.c-int-field {
+  display: flex;
+  gap: 6px;
+}
+
+.c-int-input {
+  flex: 1 1 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+
+.c-int-input::placeholder {
+  color: #a89e8b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.c-int-hint {
+  margin-top: 4px;
+  color: #8a8275;
+  font-size: 11px;
+  font-style: italic;
+}
+
+.c-int-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e8e2d2;
+  background: #fff;
+  border-radius: 5px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: #6b6356;
+  cursor: pointer;
+}
+
+.c-int-btn:hover:not(:disabled) {
+  background: #fbf7ed;
+}
+
+.c-int-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.c-int-btn-clear {
+  color: #bf3a06;
+  border-color: #f0c7b3;
+}
+
+.c-int-btn-clear:hover:not(:disabled) {
+  background: #fbe5d6;
+}
+
+/* Save row + toast */
+
+.c-int-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.c-int-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.c-int-toast-saved,
+.c-int-toast-cleared {
+  color: #16723e;
+}
+
+.c-int-toast-error {
+  color: #bf3a06;
+}
+
+.c-int-error {
+  color: #bf3a06;
+  font-size: 13px;
+  padding: 10px 12px;
+  background: #fef0ea;
+  border: 1px solid #f0c7b3;
+  border-radius: 6px;
+}
+
+/* Test Connection (m3) */
+
+.c-int-btn-test {
+  border-color: #d4cab5;
+  color: #2d2520;
+}
+
+.c-int-btn-test:hover:not(:disabled) {
+  background: #fbf7ed;
+}
+
+.c-int-test-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.c-int-test-ok {
+  background: #eaf7ee;
+  border: 1px solid #b7e0c4;
+  color: #16723e;
+}
+
+.c-int-test-bad {
+  background: #fef0ea;
+  border: 1px solid #f0c7b3;
+  color: #bf3a06;
+}
+
+.c-int-test-body {
+  flex: 1 1 auto;
+}
+
+.c-int-test-body code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0 4px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.c-int-test-detail {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.c-int-test-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  font-size: 12px;
+}
+
+.c-int-test-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
