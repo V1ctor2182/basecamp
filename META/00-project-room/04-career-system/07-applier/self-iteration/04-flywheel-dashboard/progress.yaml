@@ -54,7 +54,7 @@ milestones:
 
   - id: "m4-retire-old-tabs"
     name: "收编旧 Learning / Iteration debug tab"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/CareerNav.tsx"
       - "src/CareerApp.tsx"
@@ -68,9 +68,9 @@ milestones:
       到 /career/flywheel。Learning.tsx / Iteration.tsx 文件暂留(不删,
       便于回看历史实现),只摘 nav 入口 + 加重定向。
 
-current_sprint: "Flywheel Dashboard — m3 done, m4 next"
+current_sprint: "Flywheel Dashboard — 完成 (4/4)"
 blockers: []
-completion: 75
+completion: 100
 commits:
   - milestone: "m1-backend-endpoints"
     hash: "5c5e04e"
@@ -81,12 +81,13 @@ commits:
   - milestone: "m3-page-history-selftest"
     hash: "b6ca773"
     message: "m3: Flywheel page — rule history + self-test report"
+  - milestone: "m4-retire-old-tabs"
+    message: "m4: retire Learning/Iteration debug tabs, redirect to /career/flywheel"
 status_note: >
-  🔄 m3 done (3/4). 页面补齐后两块卡片:③ 规则历史 — 复用现有
-  /feedback/suggestions?status=approved|rejected 端点,applied/rejected
-  两列并排展示 type + group_key + 一行预览(regex/maps_to or adapter id)。
-  ④ 自测报告 — 读 m1 的 /feedback/selftest-report,展示 ran_at + fixture
-  + by_outcome 标签 + totals strip + 每岗位 verified/mismatch/fill_error/
-  unverifiable/not_seen/manual 表。从页面触发自测运行 → 见 spec.md Deferred。
-  下一步 m4:退役 Learning/Iteration debug tab,把路由重定向到 /career/flywheel。
+  ✅ 全部 4 个 milestone 完成。/career/flywheel 上线四块卡片(失败记录 /
+  待审提议 / 规则历史 / 自测报告)。m4 把 Advanced 下拉里的 Learning +
+  Iteration 入口摘掉,/career/learning 和 /career/iteration 改为
+  Navigate 重定向到 /career/flywheel(旧书签 + 持久化的 last-tab 还能
+  落到合理位置)。Learning.tsx / Iteration.tsx 文件留在 disk 上(spec 里
+  约定不删,便于回看历史实现),bundle 因 tree-shake 缩 ~25 KB。
 last_updated: "2026-05-24"

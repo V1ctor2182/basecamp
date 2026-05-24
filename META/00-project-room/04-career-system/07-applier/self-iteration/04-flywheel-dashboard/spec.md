@@ -49,14 +49,14 @@ _(继承父 Room；本 Room 暂无新增)_
 
 ## 当前进度
 
-🔄 **in dev** — 3/4 milestones 完成（2026-05-24）。
+✅ **complete** — 4/4 milestones 完成（2026-05-24）。
 
 | # | milestone | 估 | 状态 |
 |---|-----------|-----|------|
 | m1 | Backend — verify-failures + 自测报告端点 | ~120 行 | ✅ done |
 | m2 | Flywheel 页 — 失败记录 + 待审提议 | ~180 行 | ✅ done |
 | m3 | Flywheel 页 — 规则历史 + 自测报告 | ~150 行 | ✅ done |
-| m4 | 收编旧 Learning / Iteration debug tab | ~60 行 | pending |
+| m4 | 收编旧 Learning / Iteration debug tab | ~60 行 | ✅ done |
 
 m1 上线两个只读端点:`GET /api/career/feedback/verify-failures`
 (按 status + site 聚合,默认 30 天窗口) 与
@@ -78,7 +78,12 @@ approved|rejected` 端点,applied/rejected 两列并排展示 type + group_key
 报告缺失 → 空状态指 `node scripts/applier-selftest.mjs` 命令;损坏 →
 inline `selftestError` (沿用 m1 endpoint 的 `error` 字段)。
 
-下一步：`dev 04-flywheel-dashboard/m4`。
+m4 把 Advanced 下拉里的 Learning + Iteration 两个 "(debug)" 入口摘掉,
+`/career/learning` 与 `/career/iteration` 路由改为 `Navigate` 重定向到
+`/career/flywheel`(旧书签 + 持久化的 last-tab 还能落到合理位置)。
+`Learning.tsx` / `Iteration.tsx` 文件保留在 disk 上(便于回看历史实现);
+import 摘掉之后 bundle 因 tree-shake 缩 ~25 KB。Room 进入 lifecycle:
+shipped。
 
 ## Contracts
 

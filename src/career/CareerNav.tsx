@@ -10,8 +10,6 @@ import {
   ListChecks,
   Star,
   MessagesSquare,
-  TrendingDown,
-  Activity,
   Repeat,
 } from 'lucide-react'
 
@@ -26,13 +24,14 @@ const PRIMARY_TABS: Array<{ to: string; label: string; Icon: typeof LayoutDashbo
   { to: '/career/settings', label: 'Profile', Icon: User },
 ]
 
+// 04-flywheel-dashboard m4: the two "(debug)" tabs (Learning + Iteration)
+// were retired in favor of the unified /career/flywheel page. Old routes
+// still redirect to flywheel in CareerApp.tsx for bookmark continuity.
 const ADVANCED_TABS: Array<{ to: string; label: string; Icon: typeof LayoutDashboard }> = [
   { to: '/career/overview', label: 'Overview (legacy)', Icon: LayoutDashboard },
   { to: '/career/pipeline', label: 'Pipeline (legacy)', Icon: ListChecks },
   { to: '/career/shortlist', label: 'Shortlist (legacy)', Icon: Star },
   { to: '/career/prep', label: 'Interview Prep', Icon: MessagesSquare },
-  { to: '/career/learning', label: 'Learning (debug)', Icon: TrendingDown },
-  { to: '/career/iteration', label: 'Iteration (debug)', Icon: Activity },
 ]
 
 export default function CareerNav() {
