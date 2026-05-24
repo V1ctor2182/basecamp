@@ -563,11 +563,11 @@ function SuggestionHeader({ envelope }: { envelope: ProposalEnvelope }) {
 // rendering. React escapes HTML; this addresses the social-engineering
 // layer where an LLM-emitted regex/rationale could use RTL overrides or
 // zero-width chars to spoof what the user sees vs. what they're approving.
+// Kept on one line so the eslint-disable-next-line directive actually
+// covers the RegExp argument (multi-line split makes the suppression
+// land on the wrong line and CI's no-control-regex re-fires).
 // eslint-disable-next-line no-control-regex
-const _UNSAFE_DISPLAY_RE = new RegExp(
-  '[\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u202a-\\u202e\\u2066-\\u2069]',
-  'g',
-)
+const _UNSAFE_DISPLAY_RE = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u202a-\\u202e\\u2066-\\u2069]', 'g')
 function sanitizeForDisplay(s: unknown): string {
   return String(s ?? '').replace(_UNSAFE_DISPLAY_RE, (ch) =>
     `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`,
