@@ -5298,7 +5298,17 @@ const FEEDBACK_STATUS_VALUES = Object.freeze(['pending', 'approved', 'rejected',
 // insensitive macOS FS vs case-sensitive Linux prod. The optional
 // `.json` group was also useless — readSuggestion adds it.
 // Max length matches ProposalEnvelopeSchema.id cap (120).
-const SUGGESTION_ID_RE = /^[a-z0-9_-]{1,120}$/;
+//
+// 04-flywheel-dashboard followup: whitelist `T` and `Z` in addition to
+// lowercase. savePending in suggestionStore.mjs builds ids from an ISO
+// timestamp via `.replace(/[^0-9TZ]/g, '')`, so every legitimate id
+// contains literal `T`/`Z` characters (e.g. classifier-rule-
+// 20260522T064645630Z-<uuid8>). Pre-fix the regex rejected every real
+// id with a 400 "invalid suggestion id format" — approve/reject from
+// the Flywheel + Learning pages were both DOA. T/Z are the only two
+// uppercase chars the generator emits, so allowing exactly those keeps
+// the macOS-vs-Linux FS case-split concern addressed.
+const SUGGESTION_ID_RE = /^[a-zTZ0-9_-]{1,120}$/;
 
 app.get('/api/career/feedback/suggestions', async (req, res) => {
   try {

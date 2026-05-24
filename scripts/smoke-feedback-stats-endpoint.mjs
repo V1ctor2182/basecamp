@@ -329,6 +329,39 @@ await test('GET /suggestions: bad status query → 400', async () => {
   assert.equal(status, 400);
 });
 
+// REGRESSION (04-flywheel-dashboard followup): SUGGESTION_ID_RE used to
+// be /^[a-z0-9_-]{1,120}$/ — no uppercase. But savePending() builds ids
+// from an ISO timestamp via .replace(/[^0-9TZ]/g, ''), so every real
+// proposal id contains literal `T` and `Z`. Pre-fix the endpoint
+// rejected every approve/reject with 400 "invalid suggestion id
+// format"; the Flywheel + Learning approve buttons were DOA. Lock the
+// shape so this can't regress.
+await test('REGRESSION: POST /suggestions/:id/approve accepts ids with T/Z (savePending shape)', async () => {
+  const { body: pend } = await get('/api/career/feedback/suggestions?status=pending');
+  assert.ok(pend.suggestions.length >= 1, 'seed proposal must be present');
+  const id = pend.suggestions[0].id;
+  // Guard the assumption — if savePending ever drops T/Z, the regression
+  // shape changes and this test needs reconsidering.
+  assert.match(id, /T.*Z/, 'savePending must emit T and Z in the id');
+  const r = await fetch(
+    `${BASE}/api/career/feedback/suggestions/${encodeURIComponent(id)}/approve`,
+    { method: 'POST' },
+  );
+  const body = await r.json().catch(() => ({}));
+  assert.notEqual(
+    r.status,
+    400,
+    `approve must not 400 on a real id; got ${JSON.stringify(body)}`,
+  );
+  assert.equal(r.status, 200, `approve should 200; got ${r.status} ${JSON.stringify(body)}`);
+  // Sanity: proposal should now show as approved.
+  const { body: appr } = await get('/api/career/feedback/suggestions?status=approved');
+  assert.ok(
+    appr.suggestions.some((s) => s.id === id),
+    'proposal must move to approved bucket',
+  );
+});
+
 // ── flywheel-dashboard m1: verify-failures + selftest-report ──────────
 
 await test('GET /verify-failures: shape — since + total + by_status + by_site', async () => {
