@@ -21,6 +21,7 @@ import {
   Trash2,
   AlertCircle,
   RotateCcw,
+  Zap,
 } from 'lucide-react'
 import './ats-form.css'
 import './integrations.css'
@@ -60,6 +61,32 @@ const BLANK_EDIT: EditState = {
 type CardKey = 'anthropic' | 'google' | 'github'
 type CardFeedback = { kind: 'saved' | 'cleared' | 'error'; message: string } | null
 
+// m3 test-connection response shapes (mirrors server.mjs's
+// testAnthropic / testGoogle / testGithub).
+type AnthropicTest =
+  | { ok: true; model: string; elapsed_ms: number; stop_reason?: string }
+  | { ok: false; reason: 'unset' | 'auth' | 'rate_limit' | 'network' | 'other'; detail: string; elapsed_ms?: number }
+// REVIEW M4 server-side: valid can be true (set+valid), false (set+invalid),
+// or null (not set; treated as neutral by `ok`).
+type GoogleFieldCheck = { valid: boolean | null; reason?: string }
+type GoogleTest =
+  | { ok: boolean; clientId: GoogleFieldCheck; clientSecret: GoogleFieldCheck; note?: string }
+  | { ok: false; reason: 'unset'; detail: string }
+  // REVIEW #8: runTest can synthesize a generic error result (e.g. network
+  // failure from the browser before reaching the handler) that doesn't
+  // match the per-field shape — keep a fallback variant so the renderer
+  // doesn't crash trying to read clientId off undefined.
+  | { ok: false; reason: string; detail: string }
+type GithubTest =
+  | { ok: true; login: string | null; scopes: string[]; elapsed_ms?: number }
+  | { ok: false; reason: 'unset' | 'auth' | 'rate_limit' | 'forbidden' | 'network' | 'other'; detail: string; elapsed_ms?: number }
+
+type TestResults = {
+  anthropic: AnthropicTest | null
+  google: GoogleTest | null
+  github: GithubTest | null
+}
+
 export default function Integrations() {
   const [config, setConfig] = useState<ConfigGetResp | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -67,6 +94,14 @@ export default function Integrations() {
   const [edit, setEdit] = useState<EditState>(BLANK_EDIT)
   const [busyCard, setBusyCard] = useState<CardKey | null>(null)
   const [feedback, setFeedback] = useState<Record<CardKey, CardFeedback>>({
+    anthropic: null,
+    google: null,
+    github: null,
+  })
+  // m3: test connection state. testingCard tracks which card is currently
+  // pinging upstream; testResults stores the most-recent result per card.
+  const [testingCard, setTestingCard] = useState<CardKey | null>(null)
+  const [testResults, setTestResults] = useState<TestResults>({
     anthropic: null,
     google: null,
     github: null,
@@ -194,6 +229,55 @@ export default function Integrations() {
       }
       setEdit((prev) => ({ ...prev, ...cleared }))
       setFeedback((f) => ({ ...f, [card]: { kind: 'saved', message: 'Saved' } }))
+      // The saved key may differ from what was just tested; stale result
+      // would mislead. Force operator to re-test against the new value.
+      setTestResults((cur) => ({ ...cur, [card]: null }))
+    }
+  }
+
+  // REVIEW #3: invalidate any displayed test result for a card when
+  // the operator starts editing that card's inputs. A stale "reachable"
+  // panel sitting next to a freshly-typed key is actively misleading —
+  // the operator hasn't tested THIS value yet.
+  function onCardEdit(card: CardKey, fieldUpdate: Partial<EditState>) {
+    setEdit((p) => ({ ...p, ...fieldUpdate }))
+    setTestResults((cur) => (cur[card] ? { ...cur, [card]: null } : cur))
+  }
+
+  // m3: ping the backend's per-service test endpoint. The result lives
+  // in testResults until the next test or save/edit on this card.
+  async function runTest(card: CardKey) {
+    setTestingCard(card)
+    setTestResults((r) => ({ ...r, [card]: null }))
+    try {
+      const r = await fetch(`/api/career/config/${card}/test`, { method: 'POST' })
+      const body = await r.json().catch(() => ({}))
+      if (!mountedRef.current) return
+      if (!r.ok) {
+        // 4xx/5xx surfaces as an error-shaped result (no silent empty).
+        setTestResults((cur) => ({
+          ...cur,
+          [card]: {
+            ok: false,
+            reason: 'other',
+            detail: body?.error || `HTTP ${r.status}`,
+          } as AnthropicTest,
+        }))
+        return
+      }
+      setTestResults((cur) => ({ ...cur, [card]: body }))
+    } catch (e) {
+      if (!mountedRef.current) return
+      setTestResults((cur) => ({
+        ...cur,
+        [card]: {
+          ok: false,
+          reason: 'network',
+          detail: e instanceof Error ? e.message : String(e),
+        } as AnthropicTest,
+      }))
+    } finally {
+      if (mountedRef.current) setTestingCard(null)
     }
   }
 
@@ -213,6 +297,7 @@ export default function Integrations() {
         [field]: field === 'githubUsername' ? refreshed.github.username || '' : '',
       }))
       setFeedback((f) => ({ ...f, [card]: { kind: 'cleared', message: 'Cleared' } }))
+      setTestResults((cur) => ({ ...cur, [card]: null }))
     }
   }
 
@@ -268,15 +353,28 @@ export default function Integrations() {
           placeholder="sk-ant-api03-..."
           current={config.anthropic}
           value={edit.anthropicApiKey}
-          onChange={(v) => setEdit((p) => ({ ...p, anthropicApiKey: v }))}
+          onChange={(v) => onCardEdit('anthropic', { anthropicApiKey: v })}
           onClear={() => clearField('anthropic', 'anthropicApiKey', 'Anthropic API key')}
-          inputsDisabled={busyCard === 'anthropic'}
-          buttonsDisabled={busyCard !== null}
+          inputsDisabled={busyCard === 'anthropic' || testingCard === 'anthropic'}
+          buttonsDisabled={busyCard !== null || testingCard !== null}
         />
         <CardActions
           saving={busyCard === 'anthropic'}
           feedback={feedback.anthropic}
-          disabled={busyCard !== null && busyCard !== 'anthropic'}
+          // REVIEW #10: Save disabled while ANY test is in flight (same
+          // card → race; other card → cross-card lock) or another card
+          // is saving.
+          disabled={
+            (busyCard !== null && busyCard !== 'anthropic') || testingCard !== null
+          }
+          testable={config.anthropic.set}
+          testing={testingCard === 'anthropic'}
+          onTest={() => runTest('anthropic')}
+          testDisabledByOther={
+            (busyCard !== null && busyCard !== 'anthropic')
+            || (testingCard !== null && testingCard !== 'anthropic')
+          }
+          testResult={testResults.anthropic && <AnthropicTestResult result={testResults.anthropic} />}
         />
       </CredentialsForm>
 
@@ -301,25 +399,35 @@ export default function Integrations() {
           placeholder="123456-xxxxx.apps.googleusercontent.com"
           current={config.google.clientId}
           value={edit.googleClientId}
-          onChange={(v) => setEdit((p) => ({ ...p, googleClientId: v }))}
+          onChange={(v) => onCardEdit('google', { googleClientId: v })}
           onClear={() => clearField('google', 'googleClientId', 'Google OAuth client ID')}
-          inputsDisabled={busyCard === 'google'}
-          buttonsDisabled={busyCard !== null}
+          inputsDisabled={busyCard === 'google' || testingCard === 'google'}
+          buttonsDisabled={busyCard !== null || testingCard !== null}
         />
         <SecretField
           label="Client secret"
           placeholder="GOCSPX-..."
           current={config.google.clientSecret}
           value={edit.googleClientSecret}
-          onChange={(v) => setEdit((p) => ({ ...p, googleClientSecret: v }))}
+          onChange={(v) => onCardEdit('google', { googleClientSecret: v })}
           onClear={() => clearField('google', 'googleClientSecret', 'Google OAuth client secret')}
-          inputsDisabled={busyCard === 'google'}
-          buttonsDisabled={busyCard !== null}
+          inputsDisabled={busyCard === 'google' || testingCard === 'google'}
+          buttonsDisabled={busyCard !== null || testingCard !== null}
         />
         <CardActions
           saving={busyCard === 'google'}
           feedback={feedback.google}
-          disabled={busyCard !== null && busyCard !== 'google'}
+          disabled={
+            (busyCard !== null && busyCard !== 'google') || testingCard !== null
+          }
+          testable={config.google.clientId.set || config.google.clientSecret.set}
+          testing={testingCard === 'google'}
+          onTest={() => runTest('google')}
+          testDisabledByOther={
+            (busyCard !== null && busyCard !== 'google')
+            || (testingCard !== null && testingCard !== 'google')
+          }
+          testResult={testResults.google && <GoogleTestResult result={testResults.google} />}
         />
       </CredentialsForm>
 
@@ -341,23 +449,33 @@ export default function Integrations() {
           label="Username"
           placeholder="your-github-handle"
           value={edit.githubUsername}
-          onChange={(v) => setEdit((p) => ({ ...p, githubUsername: v }))}
-          disabled={busyCard === 'github'}
+          onChange={(v) => onCardEdit('github', { githubUsername: v })}
+          disabled={busyCard === 'github' || testingCard === 'github'}
         />
         <SecretField
           label="Personal access token"
           placeholder="ghp_... or github_pat_..."
           current={config.github.token}
           value={edit.githubToken}
-          onChange={(v) => setEdit((p) => ({ ...p, githubToken: v }))}
+          onChange={(v) => onCardEdit('github', { githubToken: v })}
           onClear={() => clearField('github', 'githubToken', 'GitHub personal access token')}
-          inputsDisabled={busyCard === 'github'}
-          buttonsDisabled={busyCard !== null}
+          inputsDisabled={busyCard === 'github' || testingCard === 'github'}
+          buttonsDisabled={busyCard !== null || testingCard !== null}
         />
         <CardActions
           saving={busyCard === 'github'}
           feedback={feedback.github}
-          disabled={busyCard !== null && busyCard !== 'github'}
+          disabled={
+            (busyCard !== null && busyCard !== 'github') || testingCard !== null
+          }
+          testable={config.github.token.set}
+          testing={testingCard === 'github'}
+          onTest={() => runTest('github')}
+          testDisabledByOther={
+            (busyCard !== null && busyCard !== 'github')
+            || (testingCard !== null && testingCard !== 'github')
+          }
+          testResult={testResults.github && <GithubTestResult result={testResults.github} />}
         />
       </CredentialsForm>
     </div>
@@ -517,29 +635,190 @@ function CardActions({
   saving,
   feedback,
   disabled,
+  testable,
+  testing,
+  onTest,
+  testDisabledByOther,
+  testResult,
 }: {
   saving: boolean
   feedback: CardFeedback
   disabled: boolean
+  testable: boolean
+  testing: boolean
+  onTest: () => void
+  testDisabledByOther: boolean
+  testResult: React.ReactNode
 }) {
   return (
-    <div className="c-int-actions">
-      <button
-        type="submit"
-        className="af-btn-primary"
-        disabled={saving || disabled}
-      >
-        {saving ? 'Saving…' : 'Save'}
-      </button>
-      {feedback && (
-        <span
-          className={`c-int-toast c-int-toast-${feedback.kind}`}
-          role={feedback.kind === 'error' ? 'alert' : 'status'}
+    <>
+      <div className="c-int-actions">
+        <button type="submit" className="af-btn-primary" disabled={saving || disabled}>
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          className="c-int-btn c-int-btn-test"
+          onClick={onTest}
+          // REVIEW #10: test disabled while THIS card is saving/testing
+          // AND while ANY other card is busy (existing cross-card rule).
+          // testable gates on "credential is actually set on disk".
+          disabled={testing || saving || testDisabledByOther || !testable}
+          title={
+            testable
+              ? 'Verify the saved credential actually works'
+              : 'Set the credential first, then save, then test'
+          }
         >
-          {feedback.kind === 'error' ? <XCircle size={12} /> : <CheckCircle2 size={12} />}{' '}
-          {feedback.message}
-        </span>
-      )}
+          <Zap size={13} /> {testing ? 'Testing…' : 'Test'}
+        </button>
+        {feedback && (
+          <span
+            className={`c-int-toast c-int-toast-${feedback.kind}`}
+            role={feedback.kind === 'error' ? 'alert' : 'status'}
+          >
+            {feedback.kind === 'error' ? <XCircle size={12} /> : <CheckCircle2 size={12} />}{' '}
+            {feedback.message}
+          </span>
+        )}
+      </div>
+      {testResult}
+    </>
+  )
+}
+
+// ─── Test-result components ───────────────────────────────────────────
+
+function TestPanel({
+  ok,
+  children,
+}: {
+  ok: boolean
+  children: React.ReactNode
+}) {
+  // REVIEW #11: explicit aria-live + aria-atomic. role="status" implies
+  // polite live region per ARIA but screen-reader support is inconsistent
+  // (esp. JAWS); declaring both gets reliable announcement.
+  return (
+    <div
+      className={`c-int-test-result ${ok ? 'c-int-test-ok' : 'c-int-test-bad'}`}
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {ok ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
+      <div className="c-int-test-body">{children}</div>
     </div>
+  )
+}
+
+function AnthropicTestResult({ result }: { result: AnthropicTest }) {
+  if (result.ok) {
+    return (
+      <TestPanel ok>
+        <strong>Anthropic API reachable</strong> — pinged {result.model} in {result.elapsed_ms}ms.
+      </TestPanel>
+    )
+  }
+  const reasonLabel: Record<typeof result.reason, string> = {
+    unset: 'No API key configured.',
+    auth: 'Authentication failed — the saved key was rejected.',
+    rate_limit: 'Rate-limited by Anthropic — try again in a moment.',
+    network: 'Network error reaching api.anthropic.com.',
+    other: 'Ping failed.',
+  }
+  return (
+    <TestPanel ok={false}>
+      <strong>{reasonLabel[result.reason]}</strong>
+      {result.detail && result.reason !== 'unset' ? <div className="c-int-test-detail">{result.detail}</div> : null}
+    </TestPanel>
+  )
+}
+
+function GoogleTestResult({ result }: { result: GoogleTest }) {
+  // Narrow defensively — only the per-field shape has clientId/Secret;
+  // 'unset' and synthesized errors fall through to a plain message.
+  // REVIEW #8: without this guard the cross-card error path (runTest
+  // synthesizing reason:'other') would crash trying to read undefined
+  // .valid off the missing clientId field.
+  const r = result as Partial<{
+    ok: boolean
+    clientId: GoogleFieldCheck
+    clientSecret: GoogleFieldCheck
+    note: string
+    reason: string
+    detail: string
+  }>
+  const isPerField = r.clientId !== undefined && r.clientSecret !== undefined
+  if (!isPerField) {
+    return (
+      <TestPanel ok={Boolean(r.ok)}>
+        <strong>{r.detail || r.reason || 'Test failed.'}</strong>
+      </TestPanel>
+    )
+  }
+  return (
+    <TestPanel ok={Boolean(r.ok)}>
+      <div>
+        <strong>{r.ok ? 'Format looks correct.' : 'Format issue.'}</strong>
+        {r.note ? <div className="c-int-test-detail">{r.note}</div> : null}
+      </div>
+      <ul className="c-int-test-list">
+        <FieldRow label="Client ID" check={r.clientId} />
+        <FieldRow label="Client secret" check={r.clientSecret} />
+      </ul>
+    </TestPanel>
+  )
+}
+
+function FieldRow({ label, check }: { label: string; check: GoogleFieldCheck | undefined }) {
+  // valid: true → green check + "valid format"
+  // valid: false → red X + reason
+  // valid: null (unset) → muted dot + "Not set" (neutral, not failing)
+  if (!check) return null
+  const isValid = check.valid === true
+  const isInvalid = check.valid === false
+  return (
+    <li>
+      {isValid ? (
+        <CheckCircle2 size={12} />
+      ) : isInvalid ? (
+        <XCircle size={12} />
+      ) : (
+        <AlertCircle size={12} />
+      )}{' '}
+      <strong>{label}:</strong>{' '}
+      {isValid ? 'valid format' : check.reason || 'unknown'}
+    </li>
+  )
+}
+
+function GithubTestResult({ result }: { result: GithubTest }) {
+  if (result.ok) {
+    return (
+      <TestPanel ok>
+        <strong>GitHub reachable</strong> as <code>@{result.login || '?'}</code>
+        {' '}({result.elapsed_ms}ms).
+        {result.scopes.length > 0 ? (
+          <div className="c-int-test-detail">scopes: {result.scopes.join(', ')}</div>
+        ) : (
+          <div className="c-int-test-detail">no scopes reported (likely a fine-grained PAT).</div>
+        )}
+      </TestPanel>
+    )
+  }
+  const reasonLabel: Record<typeof result.reason, string> = {
+    unset: 'No GitHub token configured.',
+    auth: 'Token rejected (401).',
+    rate_limit: 'Rate-limited by GitHub.',
+    forbidden: 'Forbidden (403).',
+    network: 'Network error reaching api.github.com.',
+    other: 'GitHub call failed.',
+  }
+  return (
+    <TestPanel ok={false}>
+      <strong>{reasonLabel[result.reason]}</strong>
+      {result.detail && result.reason !== 'unset' ? <div className="c-int-test-detail">{result.detail}</div> : null}
+    </TestPanel>
   )
 }

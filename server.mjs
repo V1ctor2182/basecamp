@@ -477,6 +477,284 @@ app.put('/api/config', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- 09-integrations-credentials m3: POST /api/career/config/:service/test ---
+//
+// Lightweight reachability test per service so the operator can verify
+// a saved credential actually works without leaving the Integrations
+// page. Each service uses the cheapest meaningful test:
+//
+//   anthropic — send 1-output-token to claude-haiku-4-5 (~$0.0001).
+//               Classifies AuthenticationError vs RateLimitError vs
+//               APIConnectionError vs other.
+//   google    — format-only check (clientId / clientSecret regex). The
+//               real OAuth handshake lives in Resumes → Sync; testing it
+//               here would require user interaction. No network call.
+//   github    — GET https://api.github.com/user with the token. Returns
+//               the authenticated login + scope list on success.
+//
+// Read credentials from env then config.json (same precedence as
+// elsewhere). NEVER echo the raw secret in the response — only metadata
+// (model, login, scopes, error class).
+
+const SERVICE_TEST_HANDLERS = Object.freeze({
+  anthropic: testAnthropic,
+  google: testGoogle,
+  github: testGithub,
+});
+
+app.post('/api/career/config/:service/test', async (req, res) => {
+  const { service } = req.params;
+  const handler = SERVICE_TEST_HANDLERS[service];
+  if (!handler) {
+    return res.status(404).json({ error: `unknown service '${service}'` });
+  }
+  try {
+    // Read fresh config each call — testing the value currently on disk,
+    // not whatever a cached SDK client was built with at boot.
+    const config = await readJSON(CONFIG_FILE).catch(() => ({}));
+    const result = await handler(config, req);
+    res.json(result);
+  } catch (e) {
+    // The handlers swallow their own service-specific errors and return
+    // {ok:false, reason}. A reach-here is an internal bug — surface it
+    // as 500 + message, never swallow.
+    res.status(500).json({ error: String(e?.message ?? e).slice(0, 300) });
+  }
+});
+
+const ANTHROPIC_TEST_TIMEOUT_MS = 20_000;
+const ANTHROPIC_TEST_MODEL = 'claude-haiku-4-5-20251001';
+
+async function testAnthropic(config, _req) {
+  // Route through anthropicClient.getClient() so the MOCK_ANTHROPIC=1
+  // and CAREER_LLM_BACKEND=cli envs work the same way they do in the
+  // rest of the system. We reset the cache first so a stale client
+  // (e.g. built from a since-replaced key) doesn't shadow the value
+  // currently on disk. The PUT path already does this, but a smoke /
+  // direct config edit wouldn't have.
+  let getClient, _resetClientForTesting, AuthenticationError, RateLimitError, APIConnectionError, ConfigError;
+  try {
+    ({
+      getClient,
+      _resetClientForTesting,
+      AuthenticationError,
+      RateLimitError,
+      APIConnectionError,
+      ConfigError,
+    } = await import('./src/career/lib/anthropicClient.mjs'));
+  } catch (e) {
+    return { ok: false, reason: 'other', detail: `anthropicClient import failed: ${e?.message ?? e}` };
+  }
+  // Short-circuit "unset" before touching the SDK so the operator gets a
+  // clear message instead of the generic ConfigError text.
+  if (
+    process.env.MOCK_ANTHROPIC !== '1'
+    && process.env.CAREER_LLM_BACKEND !== 'cli'
+    && !process.env.ANTHROPIC_API_KEY
+    && !config.anthropicApiKey
+  ) {
+    return { ok: false, reason: 'unset', detail: 'No Anthropic API key configured.' };
+  }
+  _resetClientForTesting();
+  let client;
+  try {
+    client = getClient();
+  } catch (e) {
+    if (ConfigError && e instanceof ConfigError) {
+      return { ok: false, reason: 'unset', detail: e.message };
+    }
+    return { ok: false, reason: 'other', detail: String(e?.message ?? e).slice(0, 200) };
+  }
+  const started = Date.now();
+  // REVIEW H2: clear the race timer when the ping wins, otherwise the
+  // setTimeout fires later and creates a detached rejected promise
+  // (Node 18+ surfaces these as unhandled rejections).
+  let timeoutId;
+  try {
+    const ping = client.messages.create({
+      model: ANTHROPIC_TEST_MODEL,
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'ok' }],
+    });
+    const timeout = new Promise((_, rej) => {
+      timeoutId = setTimeout(
+        () => rej(new Error('Anthropic ping timed out')),
+        ANTHROPIC_TEST_TIMEOUT_MS,
+      );
+    });
+    const resp = await Promise.race([ping, timeout]);
+    clearTimeout(timeoutId);
+    return {
+      ok: true,
+      model: ANTHROPIC_TEST_MODEL,
+      elapsed_ms: Date.now() - started,
+      stop_reason: resp?.stop_reason,
+    };
+  } catch (e) {
+    clearTimeout(timeoutId);
+    const elapsed_ms = Date.now() - started;
+    if (AuthenticationError && e instanceof AuthenticationError) {
+      return { ok: false, reason: 'auth', detail: 'API key was rejected (401).', elapsed_ms };
+    }
+    if (RateLimitError && e instanceof RateLimitError) {
+      return { ok: false, reason: 'rate_limit', detail: 'Rate limited by Anthropic (429).', elapsed_ms };
+    }
+    if (APIConnectionError && e instanceof APIConnectionError) {
+      return { ok: false, reason: 'network', detail: `Network error: ${e.message}`, elapsed_ms };
+    }
+    if (/timed out/i.test(e?.message ?? '')) {
+      return { ok: false, reason: 'network', detail: 'Ping timed out.', elapsed_ms };
+    }
+    return {
+      ok: false,
+      reason: 'other',
+      detail: String(e?.message ?? e).slice(0, 200),
+      elapsed_ms,
+    };
+  }
+}
+
+// Format-only validation — the real OAuth flow happens elsewhere. The
+// patterns mirror Google's documented client-credential shapes; a
+// mistype here will fail OAuth at the real-call site (Resumes → Sync)
+// with a less helpful error, so catching the format mismatch up front
+// is the operator-visible value.
+const GOOGLE_CLIENT_ID_RE = /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/;
+const GOOGLE_CLIENT_SECRET_RE = /^GOCSPX-[A-Za-z0-9_-]{15,}$/;
+
+async function testGoogle(config, _req) {
+  const clientId = process.env.GOOGLE_CLIENT_ID || config.googleClientId;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || config.googleClientSecret;
+  if (!clientId && !clientSecret) {
+    return { ok: false, reason: 'unset', detail: 'No Google OAuth credentials configured.' };
+  }
+  // REVIEW H4: distinguish "set + valid", "set + invalid", and "unset".
+  // The UI's Test button enables on OR (either field present), so
+  // returning ok:false just because the other half is unset would
+  // mislead the operator who only filled in one. Compute ok over the
+  // SET-and-VALID fields only; report unset fields as informational.
+  const checkId = !clientId
+    ? { valid: null, reason: 'Not set' }
+    : GOOGLE_CLIENT_ID_RE.test(clientId)
+      ? { valid: true }
+      : { valid: false, reason: 'Must end in .apps.googleusercontent.com' };
+  const checkSecret = !clientSecret
+    ? { valid: null, reason: 'Not set' }
+    : GOOGLE_CLIENT_SECRET_RE.test(clientSecret)
+      ? { valid: true }
+      : { valid: false, reason: 'Must start with GOCSPX- (≥15 chars after)' };
+  // ok is true iff no set field is invalid (treating unset as neutral).
+  const ok = checkId.valid !== false && checkSecret.valid !== false;
+  return {
+    ok,
+    clientId: checkId,
+    clientSecret: checkSecret,
+    note: 'Format-only check; the real OAuth handshake runs from Resumes → Sync.',
+  };
+}
+
+const GITHUB_TEST_TIMEOUT_MS = 10_000;
+
+async function testGithub(config, _req) {
+  const token = process.env.GITHUB_TOKEN || config.githubToken;
+  if (!token) {
+    return { ok: false, reason: 'unset', detail: 'No GitHub token configured.' };
+  }
+  // Smoke uses MOCK_GITHUB_TEST to bypass the live network call. Token
+  // shape determines the canned response so we exercise both happy and
+  // auth-fail paths without touching api.github.com.
+  // REVIEW M5: gate on NODE_ENV !== 'production' so an accidentally-
+  // inherited env in a prod deployment can't silently mock real test
+  // results (violating "no silent errors").
+  if (process.env.MOCK_GITHUB_TEST === '1' && process.env.NODE_ENV !== 'production') {
+    if (token.startsWith('bad_')) {
+      return { ok: false, reason: 'auth', detail: 'Mocked 401 from api.github.com.' };
+    }
+    return { ok: true, login: 'mock-user', scopes: ['repo', 'read:user'] };
+  }
+  const started = Date.now();
+  // REVIEW M6: keep the AbortController alive through the body read so
+  // a slow / hung body stream can't outlive the timeout. Clear the
+  // timeout only after the JSON parse completes (or fails).
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), GITHUB_TEST_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch('https://api.github.com/user', {
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        Authorization: `Bearer ${token}`,
+        'User-Agent': 'work-tracker',
+      },
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(to);
+    return {
+      ok: false,
+      reason: 'network',
+      detail: `Network error: ${e?.message ?? e}`,
+      elapsed_ms: Date.now() - started,
+    };
+  }
+  const elapsed_ms = Date.now() - started;
+  if (res.status === 401) {
+    clearTimeout(to);
+    return { ok: false, reason: 'auth', detail: 'Token rejected (401).', elapsed_ms };
+  }
+  if (res.status === 403) {
+    // 403 from GitHub is usually rate-limit; the message body says which.
+    const text = await res.text().catch(() => '');
+    clearTimeout(to);
+    const isRateLimit = /rate limit/i.test(text);
+    return {
+      ok: false,
+      reason: isRateLimit ? 'rate_limit' : 'forbidden',
+      detail: text.slice(0, 200) || 'Forbidden (403).',
+      elapsed_ms,
+    };
+  }
+  if (!res.ok) {
+    clearTimeout(to);
+    return {
+      ok: false,
+      reason: 'other',
+      detail: `HTTP ${res.status}`,
+      elapsed_ms,
+    };
+  }
+  // REVIEW M7: a 200 response that fails to JSON-parse (e.g. GitHub
+  // serving an HTML maintenance page) must NOT silently look like a
+  // success with empty data. Surface as reason:'other'.
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    clearTimeout(to);
+    return {
+      ok: false,
+      reason: 'other',
+      detail: `200 OK but response body was not valid JSON: ${e?.message ?? e}`,
+      elapsed_ms,
+    };
+  }
+  clearTimeout(to);
+  // X-OAuth-Scopes header lists the granted scopes — useful diagnostic
+  // for an operator wondering why a specific endpoint works in Tracker
+  // but not in (say) a private-repo path.
+  const scopesHeader = res.headers.get('x-oauth-scopes') || '';
+  const scopes = scopesHeader
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return {
+    ok: true,
+    login: data.login || null,
+    scopes,
+    elapsed_ms,
+  };
+}
+
 // --- Repos ---
 app.get('/api/repos', async (_req, res) => {
   try { res.json(await readJSON(REPOS_FILE)); }

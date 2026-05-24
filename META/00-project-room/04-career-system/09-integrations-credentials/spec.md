@@ -74,13 +74,13 @@ _(继承父 Room；本 Room 暂无新增)_
 
 ## 当前进度
 
-🔄 **in dev** — 2/3 milestones 完成(2026-05-24)。
+✅ **complete** — 3/3 milestones 完成(2026-05-24)。
 
 | # | milestone | 估 | 状态 |
 |---|-----------|-----|------|
 | m1 | Backend — `/api/config` 扩字段 + anthropic 兜底 + smoke | ~150 行 | ✅ done |
 | m2 | Frontend — Settings → Integrations 页 + nav + UX | ~180 行 | ✅ done |
-| m3 | Test Connection — 后端 `/test` 端点 + 前端 Test 按钮 + smoke | ~170 行 | pending |
+| m3 | Test Connection — 后端 `/test` 端点 + 前端 Test 按钮 + smoke | ~170 行 | ✅ done |
 
 m1 上线后端管道:GET `/api/config` 同时给 TrackerApp 旧 shape +
 Integrations 页新 shape({anthropic, google, github} 各带 `set` + `masked`)。
@@ -102,7 +102,28 @@ auto-dismiss toast、Retry 按钮、form-per-card 提交、跨卡片输入解锁
 AlertCircle 区分 partial 与 unset、加 "Leave blank to keep current"
 hint 防误清除。
 
-下一步:`dev 09-integrations-credentials/m3`。
+m3 上线 Test Connection 后端 `POST /api/career/config/:service/test`
++ 前端每张卡片的 Test 按钮。三种策略:
+- **anthropic** — 走 `anthropicClient.getClient()`(先 reset cache 拿
+  最新 key),真发 1-output-token `claude-haiku-4-5-20251001` ping
+  (~$0.0001 / 次),分类 `AuthenticationError` / `RateLimitError` /
+  `APIConnectionError` / 超时 / 其他;
+- **google** — 纯格式校验(`*.apps.googleusercontent.com` +
+  `GOCSPX-*` regex),不跑真 OAuth(那是 Resumes Sync 的活)。只 set
+  半边也能返 `ok:true`,unset 字段 `valid:null` 中性显示。
+- **github** — 调 `GET /user` 取 `login` + `X-OAuth-Scopes`,401/403
+  区分 auth vs rate_limit。`MOCK_GITHUB_TEST=1` 仅 NODE_ENV != production
+  下生效(防 prod env 漏配静默 mock)。
+
+Code review 8 项 must-fix 已修:Promise.race timer leak (clearTimeout)、
+stale testResults on edit invalidation(改字段自动失效之前的测试结果)、
+Google `ok` 与 OR-testable 对齐(`valid: true | false | null`,null 中性)、
+跨卡片 error cast 防 GoogleTestResult crash、同卡 Save+Test 互斥(防
+测旧 key/写新 key race)、NODE_ENV gate for MOCK_GITHUB_TEST、github
+body-read 保活(AbortController 不在 body 读完前 clear)、200 + 非 JSON
+显式 error(no silent empty success)、aria-live polite 明示。smoke 29/29。
+
+Room 进入 lifecycle: shipped。
 
 ## Contracts
 

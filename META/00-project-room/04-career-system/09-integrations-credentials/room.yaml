@@ -3,7 +3,7 @@ room:
   name: "Integrations & Credentials (Settings → 凭证统一管理)"
   parent: "00-project-room/04-career-system"
   type: feature
-  lifecycle: planning
+  lifecycle: shipped
   created_at: "2026-05-24"
   updated_at: "2026-05-24"
   owner: fullstack

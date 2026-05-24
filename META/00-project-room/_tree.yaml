@@ -515,7 +515,7 @@ tree:
       children: []
     - id: "00-project-room/04-career-system/09-integrations-credentials"
       type: feature
-      lifecycle: planning
+      lifecycle: shipped
       owner: fullstack
       parent: "00-project-room/04-career-system"
       children: []
