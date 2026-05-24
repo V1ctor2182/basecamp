@@ -79,6 +79,7 @@ commits:
     hash: "9ce889a"
     message: "m2: Settings → Integrations page (3 cards) + nav + UX"
   - milestone: "m3-test-connection"
+    hash: "892ea44"
     message: "m3: Test Connection — per-service /test endpoints + Test buttons + smoke"
 status_note: >
   ✅ 全部 3 个 milestone 完成(2026-05-24)。Settings → Integrations
