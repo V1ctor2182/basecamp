@@ -36,7 +36,7 @@ milestones:
 
   - id: "m3-page-history-selftest"
     name: "Flywheel 页 — 规则历史 + 自测报告"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/Flywheel.tsx"
       - "src/career/flywheel.css"
@@ -68,9 +68,9 @@ milestones:
       到 /career/flywheel。Learning.tsx / Iteration.tsx 文件暂留(不删,
       便于回看历史实现),只摘 nav 入口 + 加重定向。
 
-current_sprint: "Flywheel Dashboard — m2 done, m3 next"
+current_sprint: "Flywheel Dashboard — m3 done, m4 next"
 blockers: []
-completion: 50
+completion: 75
 commits:
   - milestone: "m1-backend-endpoints"
     hash: "5c5e04e"
@@ -78,11 +78,14 @@ commits:
   - milestone: "m2-page-records-proposals"
     hash: "dafdd18"
     message: "m2: Flywheel page — failure records + pending proposals"
+  - milestone: "m3-page-history-selftest"
+    message: "m3: Flywheel page — rule history + self-test report"
 status_note: >
-  🔄 m2 done (2/4). /career/flywheel 页面上线 + 主 nav 入口。两块卡片:
-  ① 失败记录(30d, by site) — verify-failures 表 + site-failures 表 +
-  field-edits/misclassified 计数。② 待审提议 — 复用
-  /feedback/suggestions + :id/approve|reject。Learning.tsx 的全部
-  review 修复(C3 + C4 + H4)都端口过来。下一步 m3:补 规则历史 +
-  自测报告卡片。
+  🔄 m3 done (3/4). 页面补齐后两块卡片:③ 规则历史 — 复用现有
+  /feedback/suggestions?status=approved|rejected 端点,applied/rejected
+  两列并排展示 type + group_key + 一行预览(regex/maps_to or adapter id)。
+  ④ 自测报告 — 读 m1 的 /feedback/selftest-report,展示 ran_at + fixture
+  + by_outcome 标签 + totals strip + 每岗位 verified/mismatch/fill_error/
+  unverifiable/not_seen/manual 表。从页面触发自测运行 → 见 spec.md Deferred。
+  下一步 m4:退役 Learning/Iteration debug tab,把路由重定向到 /career/flywheel。
 last_updated: "2026-05-24"

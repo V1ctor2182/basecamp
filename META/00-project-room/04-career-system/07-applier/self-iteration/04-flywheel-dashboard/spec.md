@@ -49,13 +49,13 @@ _(继承父 Room；本 Room 暂无新增)_
 
 ## 当前进度
 
-🔄 **in dev** — 2/4 milestones 完成（2026-05-24）。
+🔄 **in dev** — 3/4 milestones 完成（2026-05-24）。
 
 | # | milestone | 估 | 状态 |
 |---|-----------|-----|------|
 | m1 | Backend — verify-failures + 自测报告端点 | ~120 行 | ✅ done |
 | m2 | Flywheel 页 — 失败记录 + 待审提议 | ~180 行 | ✅ done |
-| m3 | Flywheel 页 — 规则历史 + 自测报告 | ~150 行 | pending |
+| m3 | Flywheel 页 — 规则历史 + 自测报告 | ~150 行 | ✅ done |
 | m4 | 收编旧 Learning / Iteration debug tab | ~60 行 | pending |
 
 m1 上线两个只读端点:`GET /api/career/feedback/verify-failures`
@@ -69,7 +69,16 @@ m2 上线 `/career/flywheel` 页面 + nav 主入口。两块卡片:① 失败记
 Learning.tsx 的全部 review 修复都端口过来(per-section error gate / mid-
 flight refresh skip / mountedRef / sanitize-for-display)。
 
-下一步：`dev 04-flywheel-dashboard/m3`。
+m3 补齐后两块:③ 规则历史 — 复用现有 `/feedback/suggestions?status=
+approved|rejected` 端点,applied/rejected 两列并排展示 type + group_key
++ 一行预览(`/regex/i → class (maps_to)` 或 `adapter_id · flow=type`)。
+④ 自测报告 — 读 m1 的 `/feedback/selftest-report`,展示 `ran_at` + fixture
+名 + `by_outcome` 标签 + totals strip + 每岗位
+`verified/mismatch/fill_error/unverifiable/not_seen/manual` 表。
+报告缺失 → 空状态指 `node scripts/applier-selftest.mjs` 命令;损坏 →
+inline `selftestError` (沿用 m1 endpoint 的 `error` 字段)。
+
+下一步：`dev 04-flywheel-dashboard/m4`。
 
 ## Contracts
 
