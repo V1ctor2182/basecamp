@@ -25,6 +25,7 @@ import Templates from './career/settings/qa-bank/Templates'
 import History from './career/settings/qa-bank/History'
 import Resumes from './career/settings/Resumes'
 import ResumeEdit from './career/settings/resumes/Edit'
+import Integrations from './career/settings/Integrations'
 import './career.css'
 
 const LAST_TAB_KEY = 'career-last-tab'
@@ -105,6 +106,7 @@ export default function CareerApp() {
             <Route path="narrative" element={<Narrative />} />
             <Route path="proof-points" element={<ProofPoints />} />
             <Route path="resumes" element={<Resumes />} />
+            <Route path="integrations" element={<Integrations />} />
             <Route path="*" element={<Navigate to="identity" replace />} />
           </Route>
           <Route path="settings/resumes/:id/edit" element={<ResumeEdit />} />

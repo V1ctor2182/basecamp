@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { User, SlidersHorizontal, Globe, FileQuestion, BookText, BadgeCheck, FileText } from 'lucide-react'
+import { User, SlidersHorizontal, Globe, FileQuestion, BookText, BadgeCheck, FileText, KeyRound } from 'lucide-react'
 
 const SUB_TABS: Array<{ to: string; label: string; Icon: typeof User }> = [
   { to: 'identity', label: 'Identity', Icon: User },
@@ -9,6 +9,7 @@ const SUB_TABS: Array<{ to: string; label: string; Icon: typeof User }> = [
   { to: 'narrative', label: 'Narrative', Icon: BookText },
   { to: 'proof-points', label: 'Proof Points', Icon: BadgeCheck },
   { to: 'resumes', label: 'Resumes', Icon: FileText },
+  { to: 'integrations', label: 'Integrations', Icon: KeyRound },
 ]
 
 export default function SettingsLayout() {

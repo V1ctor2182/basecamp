@@ -74,12 +74,12 @@ _(继承父 Room；本 Room 暂无新增)_
 
 ## 当前进度
 
-🔄 **in dev** — 1/3 milestones 完成(2026-05-24)。
+🔄 **in dev** — 2/3 milestones 完成(2026-05-24)。
 
 | # | milestone | 估 | 状态 |
 |---|-----------|-----|------|
 | m1 | Backend — `/api/config` 扩字段 + anthropic 兜底 + smoke | ~150 行 | ✅ done |
-| m2 | Frontend — Settings → Integrations 页 + nav + UX | ~180 行 | pending |
+| m2 | Frontend — Settings → Integrations 页 + nav + UX | ~180 行 | ✅ done |
 | m3 | Test Connection — 后端 `/test` 端点 + 前端 Test 按钮 + smoke | ~170 行 | pending |
 
 m1 上线后端管道:GET `/api/config` 同时给 TrackerApp 旧 shape +
@@ -91,7 +91,18 @@ partial update,空串 = 清除,whitespace 自动 trim,改 anthropic key 后
 序列化写防交错。`anthropicClient.mjs` 加 `data/config.json` sync 兜底
 (`fileURLToPath` 解析项目根,不依赖 cwd)。smoke 17/17。
 
-下一步:`dev 09-integrations-credentials/m2`。
+m2 上线 `/career/settings/integrations` 页面 + Settings 子 nav 入口
+(`KeyRound` 图标)。三张并列卡片:Anthropic API key、Google OAuth
+(clientId + secret)、GitHub (username + token)。每张卡片是独立 form,
+Enter 提交;secret 字段 password 输入 + placeholder 显示 masked tail
+让操作者认得是哪把 key 已配置;clear 按钮二次确认防误删。Code review
+9 项 must-fix 已修:AbortController + mountedRef 防 unmount race、
+auto-dismiss toast、Retry 按钮、form-per-card 提交、跨卡片输入解锁
+(只锁 saving 卡片)、1Password/LastPass ignore 标记、Clear 确认、
+AlertCircle 区分 partial 与 unset、加 "Leave blank to keep current"
+hint 防误清除。
+
+下一步:`dev 09-integrations-credentials/m3`。
 
 ## Contracts
 

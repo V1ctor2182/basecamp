@@ -23,7 +23,7 @@ milestones:
 
   - id: "m2-frontend-integrations-page"
     name: "Frontend — Settings → Integrations 页 + nav + UX"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/settings/Integrations.tsx"
       - "src/career/settings/integrations.css"
@@ -68,22 +68,24 @@ milestones:
       inline。smoke 覆盖 3 个 service 各 1 个 happy + 1 个 fail path
       (mock anthropic, fake github fetch)。
 
-current_sprint: "Integrations & Credentials — m1 done, m2 next"
+current_sprint: "Integrations & Credentials — m2 done, m3 next"
 blockers: []
-completion: 33
+completion: 67
 commits:
   - milestone: "m1-backend-config"
     hash: "b465646"
     message: "m1: /api/config extended for anthropic/google/github + masked GET + anthropicClient config.json fallback"
+  - milestone: "m2-frontend-integrations-page"
+    message: "m2: Settings → Integrations page (3 cards) + nav + UX"
 status_note: >
-  🔄 m1 done (1/3). GET /api/config 现在同时给 TrackerApp 的旧 shape
-  (githubUsername + hasToken) 和 Integrations 页的新 shape
-  ({anthropic, google, github} 各带 set+masked)。PUT 接 anthropicApiKey
-  / googleClientId / googleClientSecret 的 partial update (空串 = 清除,
-  whitespace 自动 trim)。anthropicClient.mjs 加 data/config.json 兜底
-  (fileURLToPath 解析,不依赖 cwd);改完即时生效(_resetClientForTesting
-  via 动态 import)。Code review 修了 7 项:fileURLToPath / 同源守卫 /
-  长度上限 2KB / trim whitespace / 序列化 PUT 写 / readConfigSync 区分
-  缺失 vs 损坏 + warn / 不再 swallow cache-invalidate 错误。smoke 17/17。
-  下一步 m2:Settings → Integrations 页 + nav。
+  🔄 m2 done (2/3)。Settings 下新建 Integrations tab(KeyRound 图标),
+  3 张卡片并列:Anthropic API key / Google OAuth (clientId + secret) /
+  GitHub (username + token)。每张卡片自有 form(Enter 提交),自有
+  save+clear+toast 状态。secret 字段 password 输入框 +
+  data-1p-ignore/lpignore 抑制密码管理器,placeholder 显示 masked tail
+  让操作者认得是哪把 key。Clear 二次确认防误删。Code review 修了 9
+  项:AbortController + mountedRef + auto-dismiss toast + Retry 按钮
+  on load fail + 每张表单(form-per-card) + 跨卡片输入解锁(只锁 saving
+  卡片) + 1Password ignore + Clear confirm + AlertCircle 区分 partial 与 unset。
+  下一步 m3:Test Connection 按钮 + 后端 /test 端点。
 last_updated: "2026-05-24"
