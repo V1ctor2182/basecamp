@@ -82,6 +82,7 @@ commits:
     hash: "b6ca773"
     message: "m3: Flywheel page — rule history + self-test report"
   - milestone: "m4-retire-old-tabs"
+    hash: "b10e4c7"
     message: "m4: retire Learning/Iteration debug tabs, redirect to /career/flywheel"
 status_note: >
   ✅ 全部 4 个 milestone 完成。/career/flywheel 上线四块卡片(失败记录 /
