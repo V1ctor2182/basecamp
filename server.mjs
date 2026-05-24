@@ -165,6 +165,18 @@ async function atomicWriteFile(file, content) {
 }
 async function writeJSON(file, data) { await atomicWriteFile(file, JSON.stringify(data, null, 2)); }
 
+// 09-integrations-credentials m1: mask a secret for safe GET display.
+// Keep last 4 chars visible (helps the operator confirm they edited the
+// right key); everything else becomes a fixed-width dot run so the masked
+// length doesn't leak the true length of short keys. Strings under 8
+// chars fall back to a fully-opaque ●●●● — no characters revealed —
+// because revealing any of a short key gives away too much.
+function maskSecret(value, lastN = 4) {
+  if (typeof value !== 'string' || value.length === 0) return undefined;
+  if (value.length < 8) return '●●●●';
+  return '●●●●●●●●' + value.slice(-lastN);
+}
+
 // Deep-merge: defaults provide structure for any keys missing in `loaded`.
 // Plain-object values are merged recursively; arrays and primitives in `loaded`
 // replace defaults wholesale (so an explicit empty array from yaml stays empty).
@@ -296,26 +308,171 @@ async function githubFetch(endpoint) {
 }
 
 // --- Config ---
+//
+// 09-integrations-credentials m1 extends this endpoint:
+//   - GET response keeps the original {githubUsername, hasToken} for the
+//     TrackerApp's existing useConfig hook (don't break that) and adds
+//     nested {anthropic, google, github} shapes with masked values for
+//     the new /career/settings/integrations page.
+//   - PUT accepts anthropicApiKey / googleClientId / googleClientSecret
+//     in addition to the original github fields. Field semantics:
+//       undefined  → skip (no change)
+//       empty ''   → clear (delete from config.json)
+//       string     → set
+//     Non-string values for new credentials → 400 reject. The new "empty
+//     = clear" rule doesn't break TrackerApp because TrackerApp's existing
+//     form omits an empty token entirely (TrackerApp.tsx:874).
+//   - On anthropicApiKey change, invalidate the cached Anthropic client
+//     so the new key takes effect without restarting the server.
 app.get('/api/config', async (_req, res) => {
   try {
     const config = await readJSON(CONFIG_FILE);
     const envToken = process.env.GITHUB_TOKEN;
     res.json({
+      // Existing top-level fields (TrackerApp consumer). Don't change shape.
       githubUsername: config.githubUsername || '',
       hasToken: !!(envToken || config.githubToken),
+      // New Integrations-page shape. Each leaf is {set, masked?} — never
+      // ships the raw value to the client.
+      anthropic: maskedState(process.env.ANTHROPIC_API_KEY || config.anthropicApiKey),
+      google: {
+        clientId: maskedState(process.env.GOOGLE_CLIENT_ID || config.googleClientId),
+        clientSecret: maskedState(process.env.GOOGLE_CLIENT_SECRET || config.googleClientSecret),
+      },
+      github: {
+        username: config.githubUsername || '',
+        token: maskedState(envToken || config.githubToken),
+      },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Helper local to the config endpoint — wraps a possibly-undefined secret
+// into the {set, masked?} shape the GET response uses.
+function maskedState(value) {
+  if (typeof value !== 'string' || value.length === 0) return { set: false };
+  return { set: true, masked: maskSecret(value) };
+}
+
+// Field whitelist for PUT — anything else in req.body is silently ignored.
+// Each value must be a string (empty string means "clear"; whitespace is
+// trimmed and treated as empty after trim).
+const CONFIG_PUT_FIELDS = Object.freeze([
+  'githubUsername',
+  'githubToken',
+  'anthropicApiKey',
+  'googleClientId',
+  'googleClientSecret',
+]);
+
+// REVIEW H2 (security): cap any single credential field. The default
+// express.json() limit upstream of this route is 10MB; a misbehaving or
+// malicious PUT of a 10MB string would persist into data/config.json
+// and force a hundreds-of-ms JSON.parse on every subsequent read.
+// 2KB is comfortably above the longest real credential (Google OAuth
+// secrets are ~24 chars, GitHub fine-grained tokens ~93, Anthropic keys
+// ~108) and well below the parse-cost cliff.
+const MAX_CREDENTIAL_LEN = 2048;
+
+// REVIEW H5 (Plan): the read-modify-write pattern in PUT isn't atomic
+// across concurrent requests — atomicWriteFile is per-file but two
+// PUTs that interleave (read, mutate, write) can lose one update.
+// Serialize all config writes through a single promise chain so a
+// burst from two clients (TrackerApp + Integrations page) can't drop
+// fields. Per-process only (the dashboard is single-process).
+let _configWriteChain = Promise.resolve();
+function serializeConfigWrite(task) {
+  const next = _configWriteChain.then(task, task);
+  _configWriteChain = next.catch(() => {});
+  return next;
+}
+
+// REVIEW H1 (security): the credentials write path is the new attack
+// surface this Room adds. The server still binds to 0.0.0.0 (broader
+// scope to change) and `cors()` is wide-open, so a malicious page in
+// the operator's browser could PUT a key the attacker controls and
+// the next getClient() would call Anthropic on the attacker's account.
+// Guard PUT specifically with an Origin/Host same-origin check. Direct
+// tools (curl, the smoke harness) don't send Origin and fall through
+// untouched; browsers always send it on cross-origin fetches.
+function isSameOriginConfigWrite(req) {
+  const origin = req.get('origin');
+  if (!origin) return true; // non-browser caller (curl, smoke, fetch from node)
+  let parsed;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return false;
+  }
+  const host = req.get('host') || '';
+  // Strip the port from Host for comparison if present in Origin.
+  const originHostPort = parsed.host;
+  return originHostPort === host;
+}
+
 app.put('/api/config', async (req, res) => {
   try {
-    const existing = await readJSON(CONFIG_FILE);
-    const { githubUsername, githubToken } = req.body;
-    if (githubUsername !== undefined) existing.githubUsername = githubUsername;
-    if (githubToken) existing.githubToken = githubToken;
-    await writeJSON(CONFIG_FILE, existing);
+    if (!isSameOriginConfigWrite(req)) {
+      return res.status(403).json({
+        error: 'cross-origin config write rejected (same-origin policy)',
+      });
+    }
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+      ? req.body
+      : {};
+    // Type-check + length-cap up front so we never write garbage to
+    // config.json — a misconfigured client sending `{anthropicApiKey:
+    // 12345}` or a 10MB string shouldn't silently coerce/persist.
+    // REVIEW H3 (Plan): trim leading/trailing whitespace before
+    // empty-check so `'   '` clears the field instead of writing
+    // whitespace that then breaks Anthropic SDK auth with a confusing
+    // 401 from a "set" key.
+    const normalized = {};
+    for (const field of CONFIG_PUT_FIELDS) {
+      if (body[field] === undefined) continue;
+      if (typeof body[field] !== 'string') {
+        return res.status(400).json({
+          error: `field ${field} must be a string ('' to clear); got ${typeof body[field]}`,
+        });
+      }
+      if (body[field].length > MAX_CREDENTIAL_LEN) {
+        return res.status(400).json({
+          error: `field ${field} exceeds ${MAX_CREDENTIAL_LEN} chars`,
+        });
+      }
+      normalized[field] = body[field].trim();
+    }
+    let anthropicChanged = false;
+    await serializeConfigWrite(async () => {
+      const existing = await readJSON(CONFIG_FILE);
+      const beforeAnthropic = existing.anthropicApiKey;
+      for (const field of CONFIG_PUT_FIELDS) {
+        if (!(field in normalized)) continue;
+        if (normalized[field] === '') delete existing[field];
+        else existing[field] = normalized[field];
+      }
+      await writeJSON(CONFIG_FILE, existing);
+      anthropicChanged = existing.anthropicApiKey !== beforeAnthropic;
+    });
     cache.clear();
     scheduleCacheWrite();
+    // If the Anthropic key materially changed, drop the cached client so
+    // the next getClient() rebuilds from the new env→config.json chain.
+    // Dynamic import so a server boot without anthropicClient on the hot
+    // path still works (the module pulls the SDK + spawn helpers).
+    // REVIEW H1 (edge): don't swallow the import error — log it. A
+    // silently-failed invalidation leaves the stale client in cache and
+    // the operator's new key won't take effect, with no log trail.
+    if (anthropicChanged) {
+      try {
+        const { _resetClientForTesting } = await import('./src/career/lib/anthropicClient.mjs');
+        _resetClientForTesting();
+      } catch (e) {
+        console.warn(
+          `[config] anthropic client cache invalidate failed; new key may not take effect until restart: ${e?.message ?? e}`,
+        );
+      }
+    }
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

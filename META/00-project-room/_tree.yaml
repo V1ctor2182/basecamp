@@ -177,6 +177,7 @@ tree:
         - "00-project-room/04-career-system/06-evaluator"
         - "00-project-room/04-career-system/07-applier"
         - "00-project-room/04-career-system/08-human-gate-tracker"
+        - "00-project-room/04-career-system/09-integrations-credentials"
     - id: "00-project-room/04-career-system/01-foundation"
       type: sub-epic
       lifecycle: active
@@ -511,4 +512,10 @@ tree:
       lifecycle: planning
       owner: backend
       parent: "00-project-room/04-career-system/08-human-gate-tracker"
+      children: []
+    - id: "00-project-room/04-career-system/09-integrations-credentials"
+      type: feature
+      lifecycle: planning
+      owner: fullstack
+      parent: "00-project-room/04-career-system"
       children: []
