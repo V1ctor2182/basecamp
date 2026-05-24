@@ -73,6 +73,7 @@ blockers: []
 completion: 33
 commits:
   - milestone: "m1-backend-config"
+    hash: "b465646"
     message: "m1: /api/config extended for anthropic/google/github + masked GET + anthropicClient config.json fallback"
 status_note: >
   🔄 m1 done (1/3). GET /api/config 现在同时给 TrackerApp 的旧 shape
