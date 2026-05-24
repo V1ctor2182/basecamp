@@ -12,6 +12,7 @@ import {
   MessagesSquare,
   TrendingDown,
   Activity,
+  Repeat,
 } from 'lucide-react'
 
 // find-jobs-redesign m1.e: collapse the 8-tab developer-flavored nav
@@ -21,6 +22,7 @@ import {
 const PRIMARY_TABS: Array<{ to: string; label: string; Icon: typeof LayoutDashboard }> = [
   { to: '/career/find-jobs', label: 'Find Jobs', Icon: Search },
   { to: '/career/applied', label: 'Apply & Track', Icon: Send },
+  { to: '/career/flywheel', label: 'Flywheel', Icon: Repeat },
   { to: '/career/settings', label: 'Profile', Icon: User },
 ]
 

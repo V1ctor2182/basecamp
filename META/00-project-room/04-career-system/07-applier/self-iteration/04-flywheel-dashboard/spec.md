@@ -49,12 +49,12 @@ _(继承父 Room；本 Room 暂无新增)_
 
 ## 当前进度
 
-🔄 **in dev** — 1/4 milestones 完成（2026-05-22）。
+🔄 **in dev** — 2/4 milestones 完成（2026-05-24）。
 
 | # | milestone | 估 | 状态 |
 |---|-----------|-----|------|
 | m1 | Backend — verify-failures + 自测报告端点 | ~120 行 | ✅ done |
-| m2 | Flywheel 页 — 失败记录 + 待审提议 | ~180 行 | pending |
+| m2 | Flywheel 页 — 失败记录 + 待审提议 | ~180 行 | ✅ done |
 | m3 | Flywheel 页 — 规则历史 + 自测报告 | ~150 行 | pending |
 | m4 | 收编旧 Learning / Iteration debug tab | ~60 行 | pending |
 
@@ -63,7 +63,13 @@ m1 上线两个只读端点:`GET /api/career/feedback/verify-failures`
 `GET /api/career/feedback/selftest-report`(读
 `applier-selftest-report.json`;缺失→空壳,损坏→显式 `error`)。
 
-下一步：`dev 04-flywheel-dashboard/m2`。
+m2 上线 `/career/flywheel` 页面 + nav 主入口。两块卡片:① 失败记录
+(30d, by site) — verify-failures 表 + site-failures 表 + field-edits 计数;
+② 待审 AI 提议 — 复用 `/feedback/suggestions` + `:id/approve|reject`。
+Learning.tsx 的全部 review 修复都端口过来(per-section error gate / mid-
+flight refresh skip / mountedRef / sanitize-for-display)。
+
+下一步：`dev 04-flywheel-dashboard/m3`。
 
 ## Contracts
 

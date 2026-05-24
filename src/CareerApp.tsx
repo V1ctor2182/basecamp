@@ -10,6 +10,7 @@ import Applied from './career/Applied'
 import Prep from './career/Prep'
 import Learning from './career/Learning'
 import Iteration from './career/Iteration'
+import Flywheel from './career/Flywheel'
 import FindJobs from './career/find-jobs/FindJobs'
 import Reports from './career/Reports'
 import Apply from './career/Apply'
@@ -28,7 +29,7 @@ import ResumeEdit from './career/settings/resumes/Edit'
 import './career.css'
 
 const LAST_TAB_KEY = 'career-last-tab'
-const VALID_TABS = ['find-jobs', 'overview', 'pipeline', 'shortlist', 'applied', 'prep', 'learning', 'iteration', 'reports', 'settings']
+const VALID_TABS = ['find-jobs', 'overview', 'pipeline', 'shortlist', 'applied', 'prep', 'learning', 'iteration', 'flywheel', 'reports', 'settings']
 
 // localStorage can throw in Safari private mode, when over quota, or when
 // disabled by extension. Don't crash the app boot for a UX nicety.
@@ -87,6 +88,7 @@ export default function CareerApp() {
           <Route path="prep/:company" element={<Prep />} />
           <Route path="learning" element={<Learning />} />
           <Route path="iteration" element={<Iteration />} />
+          <Route path="flywheel" element={<Flywheel />} />
           <Route path="reports" element={<Reports />} />
           <Route path="reports/:id" element={<Reports />} />
           <Route path="apply/:jobId" element={<Apply />} />

@@ -16,7 +16,7 @@ milestones:
 
   - id: "m2-page-records-proposals"
     name: "Flywheel 页 — 失败记录 + 待审提议"
-    status: pending
+    status: completed
     estimated_files:
       - "src/career/Flywheel.tsx"
       - "src/career/flywheel.css"
@@ -68,17 +68,20 @@ milestones:
       到 /career/flywheel。Learning.tsx / Iteration.tsx 文件暂留(不删,
       便于回看历史实现),只摘 nav 入口 + 加重定向。
 
-current_sprint: "Flywheel Dashboard — m1 done, m2 next"
+current_sprint: "Flywheel Dashboard — m2 done, m3 next"
 blockers: []
-completion: 25
+completion: 50
 commits:
   - milestone: "m1-backend-endpoints"
     hash: "5c5e04e"
     message: "m1: verify-failures + selftest-report endpoints (smoke 19/19)"
+  - milestone: "m2-page-records-proposals"
+    message: "m2: Flywheel page — failure records + pending proposals"
 status_note: >
-  🔄 m1 done (1/4). 两个只读端点上线:GET /feedback/verify-failures
-  (按 status + site 聚合,默认 30 天窗口) 和 GET /feedback/selftest-report
-  (读 applier-selftest-report.json,缺失→空壳,损坏→显式 error)。
-  smoke-feedback-stats-endpoint.mjs 加 7 个用例,19/19 全过。
-  下一步 m2:建 /career/flywheel 页面(失败记录 + 待审提议)。
-last_updated: "2026-05-22"
+  🔄 m2 done (2/4). /career/flywheel 页面上线 + 主 nav 入口。两块卡片:
+  ① 失败记录(30d, by site) — verify-failures 表 + site-failures 表 +
+  field-edits/misclassified 计数。② 待审提议 — 复用
+  /feedback/suggestions + :id/approve|reject。Learning.tsx 的全部
+  review 修复(C3 + C4 + H4)都端口过来。下一步 m3:补 规则历史 +
+  自测报告卡片。
+last_updated: "2026-05-24"
