@@ -5298,7 +5298,17 @@ const FEEDBACK_STATUS_VALUES = Object.freeze(['pending', 'approved', 'rejected',
 // insensitive macOS FS vs case-sensitive Linux prod. The optional
 // `.json` group was also useless — readSuggestion adds it.
 // Max length matches ProposalEnvelopeSchema.id cap (120).
-const SUGGESTION_ID_RE = /^[a-z0-9_-]{1,120}$/;
+//
+// 04-flywheel-dashboard followup: whitelist `T` and `Z` in addition to
+// lowercase. savePending in suggestionStore.mjs builds ids from an ISO
+// timestamp via `.replace(/[^0-9TZ]/g, '')`, so every legitimate id
+// contains literal `T`/`Z` characters (e.g. classifier-rule-
+// 20260522T064645630Z-<uuid8>). Pre-fix the regex rejected every real
+// id with a 400 "invalid suggestion id format" — approve/reject from
+// the Flywheel + Learning pages were both DOA. T/Z are the only two
+// uppercase chars the generator emits, so allowing exactly those keeps
+// the macOS-vs-Linux FS case-split concern addressed.
+const SUGGESTION_ID_RE = /^[a-zTZ0-9_-]{1,120}$/;
 
 app.get('/api/career/feedback/suggestions', async (req, res) => {
   try {
@@ -5530,6 +5540,66 @@ app.get('/api/career/feedback/site-coverage', async (_req, res) => {
       .slice(0, 50);
 
     res.json({ rows, count: rows.length });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+// ── 07-applier/self-iteration/04-flywheel-dashboard m1 ──────────────────
+//
+// Two read-only endpoints surfacing the M4 verification data, which had
+// no API: the verify-failures store (post-fill verification failures)
+// and the applier self-test report.
+
+// Verification failures aggregated by status + by site. Default 30-day
+// window; ?since= (ISO) overrides.
+app.get('/api/career/feedback/verify-failures', async (req, res) => {
+  try {
+    const sinceParam = typeof req.query.since === 'string' ? Date.parse(req.query.since) : NaN;
+    const since = Number.isFinite(sinceParam)
+      ? sinceParam
+      : Date.now() - 30 * 24 * 60 * 60 * 1000;
+
+    const STATUSES = ['mismatch', 'fill_error', 'not_seen', 'unverifiable'];
+    const zero = () => Object.fromEntries(STATUSES.map((s) => [s, 0]));
+    const byStatus = zero();
+    const bySite = {};
+    let total = 0;
+    try {
+      for await (const r of feedbackReadJsonl(FEEDBACK_FILES.VERIFY_FAILURES, { since })) {
+        const st = STATUSES.includes(r.verify_status) ? r.verify_status : null;
+        if (!st) continue;
+        total += 1;
+        byStatus[st] += 1;
+        const site = r.site || 'unknown';
+        if (!bySite[site]) bySite[site] = zero();
+        bySite[site][st] += 1;
+      }
+    } catch {
+      // store absent / unreadable → fall through with zeros (no run yet)
+    }
+    res.json({ since: new Date(since).toISOString(), total, by_status: byStatus, by_site: bySite });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+// Latest applier self-test report (scripts/applier-selftest.mjs output).
+app.get('/api/career/feedback/selftest-report', async (_req, res) => {
+  const empty = { ran_at: null, fixture: null, jobs: [], totals: {}, by_outcome: {} };
+  try {
+    const reportPath = path.resolve('data', 'career', 'eval-fixtures', 'applier-selftest-report.json');
+    if (!existsSync(reportPath)) {
+      return res.json(empty); // no self-test has been run yet
+    }
+    let report;
+    try {
+      report = JSON.parse(await fs.readFile(reportPath, 'utf-8'));
+    } catch {
+      // File exists but is corrupt — surface it, never silently empty.
+      return res.json({ ...empty, error: 'self-test report file is unparseable' });
+    }
+    res.json(report);
   } catch (err) {
     res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
   }

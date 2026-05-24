@@ -8,8 +8,11 @@ import Shortlist from './career/Shortlist'
 import NeedsManualEnrich from './career/shortlist/NeedsManualEnrich'
 import Applied from './career/Applied'
 import Prep from './career/Prep'
-import Learning from './career/Learning'
-import Iteration from './career/Iteration'
+// 04-flywheel-dashboard m4: Learning + Iteration "(debug)" tabs were
+// retired in favor of /career/flywheel. The component files stay on
+// disk for historical reference; their routes redirect below so old
+// bookmarks and persisted last-tab values still land somewhere sensible.
+import Flywheel from './career/Flywheel'
 import FindJobs from './career/find-jobs/FindJobs'
 import Reports from './career/Reports'
 import Apply from './career/Apply'
@@ -28,7 +31,7 @@ import ResumeEdit from './career/settings/resumes/Edit'
 import './career.css'
 
 const LAST_TAB_KEY = 'career-last-tab'
-const VALID_TABS = ['find-jobs', 'overview', 'pipeline', 'shortlist', 'applied', 'prep', 'learning', 'iteration', 'reports', 'settings']
+const VALID_TABS = ['find-jobs', 'overview', 'pipeline', 'shortlist', 'applied', 'prep', 'learning', 'iteration', 'flywheel', 'reports', 'settings']
 
 // localStorage can throw in Safari private mode, when over quota, or when
 // disabled by extension. Don't crash the app boot for a UX nicety.
@@ -85,8 +88,9 @@ export default function CareerApp() {
           <Route path="applied" element={<Applied />} />
           <Route path="prep" element={<Prep />} />
           <Route path="prep/:company" element={<Prep />} />
-          <Route path="learning" element={<Learning />} />
-          <Route path="iteration" element={<Iteration />} />
+          <Route path="learning" element={<Navigate to="/career/flywheel" replace />} />
+          <Route path="iteration" element={<Navigate to="/career/flywheel" replace />} />
+          <Route path="flywheel" element={<Flywheel />} />
           <Route path="reports" element={<Reports />} />
           <Route path="reports/:id" element={<Reports />} />
           <Route path="apply/:jobId" element={<Apply />} />

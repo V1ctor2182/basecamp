@@ -1,0 +1,420 @@
+/* Flywheel dashboard — 07-applier/self-iteration/04-flywheel-dashboard.
+ * Tokens mirror learning.css / c-resumes-* so the Career app stays
+ * visually coherent. No new palette / typography. */
+
+.c-fw-root {
+  padding: 24px 32px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.c-fw-header {
+  margin-bottom: 24px;
+}
+
+.c-fw-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: #0c0a08;
+}
+
+.c-fw-sub {
+  margin: 4px 0 0;
+  color: #6b6356;
+  font-size: 13px;
+}
+
+/* Card shell */
+
+.c-fw-card {
+  background: #ffffff;
+  border: 1px solid #e8e2d2;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.c-fw-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d2520;
+}
+
+.c-fw-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 6px;
+  background: #fbe5d6;
+  color: #bf3a06;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.c-fw-sub-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b6356;
+}
+
+.c-fw-loading,
+.c-fw-empty {
+  margin: 4px 0 0;
+  color: #6b6356;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.c-fw-error {
+  margin: 4px 0 0;
+  color: #bf3a06;
+  font-size: 13px;
+}
+
+.c-fw-note {
+  margin: 8px 0 0;
+  color: #8a8275;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.c-fw-muted {
+  color: #8a8275;
+}
+
+/* Tables */
+
+.c-fw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.c-fw-table th,
+.c-fw-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid #f0ead9;
+}
+
+.c-fw-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b6356;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #fbf7ed;
+}
+
+.c-fw-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.c-fw-num-strong {
+  font-weight: 600;
+  color: #2d2520;
+}
+
+.c-fw-row-total {
+  background: #fbf7ed;
+  font-weight: 600;
+}
+
+/* Tags */
+
+.c-fw-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.c-fw-tag-ok {
+  background: #d8f3dc;
+  color: #16723e;
+}
+
+.c-fw-tag-warn {
+  background: #fbe5d6;
+  color: #bf3a06;
+}
+
+.c-fw-tag-type {
+  background: #e5e8f5;
+  color: #3a4e8a;
+}
+
+/* Stat row (flat counts) */
+
+.c-fw-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.c-fw-stat {
+  background: #fbf7ed;
+  border: 1px solid #f0ead9;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.c-fw-stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: #2d2520;
+}
+
+.c-fw-stat-label {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #6b6356;
+}
+
+/* Suggestions list */
+
+.c-fw-suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.c-fw-suggestion {
+  border: 1px solid #f0ead9;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: #fbf7ed;
+}
+
+.c-fw-suggestion-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.c-fw-suggestion-group {
+  font-weight: 600;
+  color: #2d2520;
+}
+
+.c-fw-suggestion-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.c-fw-kv {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.c-fw-k {
+  flex: 0 0 70px;
+  font-size: 11px;
+  color: #6b6356;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.c-fw-v {
+  flex: 1 1 auto;
+  color: #2d2520;
+  word-break: break-word;
+}
+
+.c-fw-v-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: #fff;
+  border: 1px solid #f0ead9;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.c-fw-rationale {
+  font-style: italic;
+  color: #6b6356;
+}
+
+.c-fw-yaml-details {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.c-fw-yaml {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  background: #fff;
+  border: 1px solid #f0ead9;
+  border-radius: 4px;
+  padding: 8px;
+  margin: 4px 0 0;
+  max-height: 240px;
+  overflow: auto;
+}
+
+/* Actions */
+
+.c-fw-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.c-fw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #e8e2d2;
+  background: #fff;
+  border-radius: 5px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: #2d2520;
+  cursor: pointer;
+}
+
+.c-fw-btn:hover {
+  background: #fbf7ed;
+}
+
+.c-fw-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.c-fw-btn-ok {
+  border-color: #b7e0c4;
+  color: #16723e;
+}
+
+.c-fw-btn-ok:hover {
+  background: #eaf7ee;
+}
+
+.c-fw-btn-bad {
+  border-color: #f0c7b3;
+  color: #bf3a06;
+}
+
+.c-fw-btn-bad:hover {
+  background: #fbe5d6;
+}
+
+.c-fw-btn-ghost {
+  background: transparent;
+}
+
+/* History (m3) */
+
+.c-fw-pill-muted {
+  background: #e8e2d2;
+  color: #6b6356;
+}
+
+.c-fw-history {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 760px) {
+  .c-fw-history {
+    grid-template-columns: 1fr;
+  }
+}
+
+.c-fw-history-col {
+  min-width: 0;
+}
+
+.c-fw-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.c-fw-history-item {
+  border: 1px solid #f0ead9;
+  border-radius: 5px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  background: #fff;
+}
+
+.c-fw-history-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.c-fw-history-preview {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: #2d2520;
+  margin-top: 2px;
+  word-break: break-word;
+}
+
+/* Self-test report (m3) */
+
+.c-fw-selftest {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.c-fw-selftest-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: #2d2520;
+}
+
+.c-fw-selftest-outcomes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Footer */
+
+.c-fw-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #f0ead9;
+  font-size: 12px;
+}
