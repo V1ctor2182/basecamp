@@ -76,6 +76,7 @@ commits:
     hash: "5c5e04e"
     message: "m1: verify-failures + selftest-report endpoints (smoke 19/19)"
   - milestone: "m2-page-records-proposals"
+    hash: "dafdd18"
     message: "m2: Flywheel page — failure records + pending proposals"
 status_note: >
   🔄 m2 done (2/4). /career/flywheel 页面上线 + 主 nav 入口。两块卡片:
