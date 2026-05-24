@@ -76,6 +76,7 @@ commits:
     hash: "b465646"
     message: "m1: /api/config extended for anthropic/google/github + masked GET + anthropicClient config.json fallback"
   - milestone: "m2-frontend-integrations-page"
+    hash: "9ce889a"
     message: "m2: Settings → Integrations page (3 cards) + nav + UX"
 status_note: >
   🔄 m2 done (2/3)。Settings 下新建 Integrations tab(KeyRound 图标),
