@@ -79,6 +79,7 @@ commits:
     hash: "dafdd18"
     message: "m2: Flywheel page — failure records + pending proposals"
   - milestone: "m3-page-history-selftest"
+    hash: "b6ca773"
     message: "m3: Flywheel page — rule history + self-test report"
 status_note: >
   🔄 m3 done (3/4). 页面补齐后两块卡片:③ 规则历史 — 复用现有
