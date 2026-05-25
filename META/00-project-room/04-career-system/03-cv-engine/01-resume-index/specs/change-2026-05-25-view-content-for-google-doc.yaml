@@ -1,0 +1,50 @@
+spec_id: "change-2026-05-25-view-content-for-google-doc"
+type: change
+state: active
+intent:
+  summary: "followup: View content link for google_doc resumes (close the UX gap that hid /edit page for synced resumes)"
+  detail: |
+    Small UX gap surfaced after the first real Google Doc sync: the
+    Metadata drawer for `source: 'manual'` resumes shows an "Edit content"
+    link to /career/settings/resumes/:id/edit, but `source: 'google_doc'`
+    resumes had that link replaced with a disabled "Managed by Google Doc"
+    button. The Edit page already handles google_doc as read-only
+    (CodeMirror locked, status pill "Read-only (Google Doc source)",
+    explicit notice) — there was no reason to block VIEWING.
+
+    Symptom: operator syncs a Google Doc, gets the success toast, but
+    has no way to see the synced markdown or render the PDF preview
+    from the Resumes UI.
+
+    Fix: swap the disabled button for a `<Link>` to the same /edit route,
+    labeled "View content" with the Eye icon (lucide-react). The Edit
+    page's existing google_doc branch (read-only CodeMirror + PDF
+    preview iframe pointing at /api/career/resumes/:id/render) becomes
+    the canonical viewer.
+
+    What this doesn't change:
+      - Edit page's read-only behavior for google_doc (unchanged)
+      - Sync Now button (still primary action on the drawer)
+      - manual resumes (still see "Edit content")
+
+constraints: []
+indexing:
+  type: change
+  priority: low
+  layer: feature
+  domain: "04-career-system"
+  tags: [ux, resumes, google-doc, drawer, view-only]
+provenance:
+  source_type: incident
+  confidence: 1.0
+  source_ref: "session 2026-05-25 — operator asked 'i synced, where do i see it?'"
+relations:
+  - "follows change-2026-04-29-m2-resume-gallery-ui (the drawer that this lives in)"
+  - "complements change-2026-04-30-m3-sync-ui-and-readonly-guard (which locked editing)"
+  - "consumes existing /career/settings/resumes/:id/edit route (no Edit page change)"
+anchors:
+  - file: "src/career/settings/Resumes.tsx"
+    symbols:
+      - "MetadataDrawer (google_doc branch — View content Link)"
+created_at: "2026-05-25"
+updated_at: "2026-05-25"

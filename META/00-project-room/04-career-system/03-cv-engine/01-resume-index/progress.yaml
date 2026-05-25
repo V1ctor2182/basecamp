@@ -384,6 +384,12 @@ commits:
       - "_tree.yaml (lifecycle: in_progress → active)"
     milestones_affected:
       - "m3-resume-metadata-editor (→ completed, ROOM COMPLETE)"
+  - date: "2026-05-25"
+    message: "[04-career-system/03-cv-engine/01-resume-index] followup: View content link for google_doc resumes (UX gap)"
+    files_changed: 1
+    specs_affected:
+      - "change-2026-05-25-view-content-for-google-doc (created)"
+    milestones_affected: []
 
 current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []

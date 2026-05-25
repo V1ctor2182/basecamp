@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, MoreVertical, Star, FileText, X, Pencil, Sparkles, ChevronDown } from 'lucide-react'
+import { Plus, MoreVertical, Star, FileText, X, Pencil, Sparkles, ChevronDown, Eye } from 'lucide-react'
 import TagInput from '../TagInput'
 import { deepMerge } from '../utils'
 import './ats-form.css'
@@ -780,15 +780,14 @@ function MetadataDrawer({
               >
                 {syncing ? 'Syncing…' : 'Sync Now'}
               </button>
-              <button
-                type="button"
+              <Link
+                to={`/career/settings/resumes/${resumeId}/edit`}
                 className="af-btn-add"
-                style={{ marginTop: 0, padding: '4px 10px', fontSize: 12, opacity: 0.7 }}
-                disabled
-                title="Google Doc resumes are read-only in the in-app editor to avoid source-of-truth conflicts."
+                style={{ marginTop: 0, padding: '4px 10px', fontSize: 12, textDecoration: 'none' }}
+                title="View synced markdown + PDF preview (read-only; edits happen in Google Docs)"
               >
-                <Pencil size={12} /> Managed by Google Doc
-              </button>
+                <Eye size={12} /> View content
+              </Link>
             </>
           )}
           <button
