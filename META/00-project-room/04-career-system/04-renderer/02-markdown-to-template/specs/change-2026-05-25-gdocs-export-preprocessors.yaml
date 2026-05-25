@@ -1,0 +1,82 @@
+spec_id: "change-2026-05-25-gdocs-export-preprocessors"
+type: change
+state: active
+intent:
+  summary: "followup: add three markdown pre/post-processors so Google-Docs-exported markdown renders as a real Classic LaTeX SWE resume (section header promotion + tab-row encoding + optional leading-name strip)"
+  detail: |
+    Google Docs' "Export as Markdown" doesn't produce the structural
+    markdown a CV renderer expects:
+      1. Section headings come out as `**EDUCATION**` standalone bold
+         paragraphs, NOT `## EDUCATION`. The m1 template's h2 styling
+         (now LaTeX ALL-CAPS-with-rule) never fires.
+      2. Right-aligned dates / locations use literal `\t` tabs. Markdown
+         collapses whitespace to a single space in HTML output, so the
+         two-column "Company [left] · Location [right]" layout vanishes.
+      3. Most Google Docs put `**Name**\ncontacts...` at the top. The
+         identity-yml-derived header already renders that, so the doc's
+         own header duplicates.
+
+    Three preprocessors added to markdownToTemplateHtml.mjs, run in
+    sequence before marked.parse, all inert when the input doesn't
+    match the pattern:
+
+      stripLeadingNameBlock(md, name)  [optional via options]
+        Drops the very first paragraph block if it starts with
+        `**<name>**` (regex-escaped). Caller passes options.stripLeadingName
+        = identity.name. Conservative — only matches the LEADING content,
+        only when the name is the explicit double-asterisk-bold form.
+
+      promoteAllCapsBoldToH2(md)
+        Regex /^[ \t]*\*\*([A-Z0-9][A-Z0-9 &/\-]{1,60}[A-Z0-9])\*\*
+        [ \t]*$/gm — line that is ONLY `**ALL CAPS**` (plus trailing
+        whitespace/tabs Google Docs adds) → `## ALL CAPS`. Sub-section
+        bold inside a longer line (e.g. `**ALIBABA** *role*\tLocation`)
+        won't match because content remains after `**`.
+
+      encodeTabRows(md) + rebuildTabRows(html)
+        Pre: replace the FIRST \t on each line with the literal sentinel
+        'ROW'; subsequent tabs on the same line collapse to a space
+        (LaTeX convention: at most one tab stop per line).
+        Post: scan rendered <p>…</p> for the sentinel, split each <br>-
+        joined line into <div class="row"><span class="row-left">…</span>
+        <span class="row-right">…</span></div>. The CSS in 01-html-template
+        styles .row as flex justify-between baseline.
+
+    ALLOWED_TAGS grew to include 'div', 'span' for the row layout. The
+    function signature changes from markdownToTemplateHtml(md) to
+    markdownToTemplateHtml(md, options = {}). Existing callers without
+    options keep working — preprocessors are no-ops on input that
+    doesn't match their patterns.
+
+    Why not fix Google Docs' exporter:
+      Out of our control. Treating the exporter output as a known
+      "noisy markdown dialect" and normalizing locally is the only
+      lever we have.
+
+constraints: []
+indexing:
+  type: change
+  priority: medium
+  layer: feature
+  domain: "04-career-system"
+  tags: [renderer, markdown, preprocessor, google-docs, section-headers, tab-stops, followup]
+provenance:
+  source_type: incident
+  confidence: 1.0
+  source_ref: "session 2026-05-25 — first Google Doc resume sync revealed the export's structural mismatch with the CV template assumptions"
+relations:
+  - "supersedes change-2026-04-28-m1-markdown-to-template-html (additive — same export, optional options arg, extra ALLOWED_TAGS)"
+  - "produces .row / .row-left / .row-right consumed by change-2026-05-25-classic-latex-template CSS"
+  - "consumes 03-cv-engine/02-google-docs-sync output (the synced base.md is what we preprocess)"
+anchors:
+  - file: "src/career/lib/markdownToTemplateHtml.mjs"
+    symbols:
+      - "markdownToTemplateHtml (new options arg: stripLeadingName)"
+      - "ALLOWED_TAGS (added div, span)"
+      - "promoteAllCapsBoldToH2"
+      - "encodeTabRows"
+      - "rebuildTabRows"
+      - "stripLeadingNameBlock"
+      - "TAB_SENTINEL"
+created_at: "2026-05-25"
+updated_at: "2026-05-25"

@@ -3355,7 +3355,7 @@ app.get('/api/career/resumes/:id/render', async (req, res) => {
       readResumeMetadata(id),
       readResumeContent(id),
     ]);
-    const body_html = markdownToTemplateHtml(content);
+    const body_html = markdownToTemplateHtml(content, { stripLeadingName: identity?.name });
     const html = composeCvHtml({
       identity,
       body_html,

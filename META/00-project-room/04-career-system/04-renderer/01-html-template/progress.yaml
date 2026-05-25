@@ -239,6 +239,12 @@ commits:
       - "_tree.yaml (lifecycle: in_progress → active)"
     milestones_affected:
       - "m2-cv-template-render (→ completed, ROOM COMPLETE, 04-renderer sub-epic done)"
+  - date: "2026-05-25"
+    message: "[04-career-system/04-renderer] followup: classic LaTeX SWE template (Times New Roman + Google-Docs-export markdown preprocessors)"
+    files_changed: 2
+    specs_affected:
+      - "change-2026-05-25-classic-latex-template (created — visual rewrite, anchors preserved)"
+    milestones_affected: []
 
 current_sprint: "Sprint 3 — Renderer + CV Engine"
 blockers: []

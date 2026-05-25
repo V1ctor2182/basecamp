@@ -1,0 +1,75 @@
+spec_id: "change-2026-05-25-classic-latex-template"
+type: change
+state: active
+intent:
+  summary: "followup: rewrite cvTemplate.mjs for Classic LaTeX SWE Resume style (Times New Roman + centered LaTeX header + ALL-CAPS h2 sections + tab-row layout + monochrome with accent on links only)"
+  detail: |
+    The m2 template shipped with a system-ui sans-serif aesthetic and an
+    accent-color-heavy header (h2 in accent, flex header with name-left
+    + contacts-right + bottom border in accent). The first real-content
+    render — a Google-Docs-exported SWE resume — looked corporate / flat,
+    and the operator asked for the Classic LaTeX SWE Resume look
+    (Jake's Resume / Awesome-CV lineage): serif body, centered header,
+    ALL-CAPS section headings with a thin rule, monochrome.
+
+    Files rewritten:
+      - src/career/lib/cvTemplate.mjs:
+        - export signature unchanged: composeCvHtml({ identity, body_html,
+          options }), buildHeader, buildCss, escapeHtml
+        - buildHeader: from flex justify-between (left name + right
+          contacts) → centered block (name big, contacts on one centered
+          line below). Drops the bottom-border-in-accent — the LaTeX look
+          relies on h2 rules to delineate, not a header rule
+        - buildCss font stack: 'Times New Roman', Times,
+          'Liberation Serif' (Linux), 'Nimbus Roman' (BSD), serif —
+          covers macOS / Linux / fallback
+        - body 10.5pt / line-height 1.3 / @page margin 0.5in × 0.6in
+          (denser than v1: ~650 words/page vs ~600)
+        - h2 style: 11pt, text-transform uppercase, letter-spacing
+          0.06em, 0.5pt black border-bottom, page-break-after avoid
+        - Accent color: applied only to <a> (in body + header contacts).
+          h2 / borders / dividers stay black. Operator's metadata
+          .renderer.accent_color still wired but visually subordinated
+        - New CSS rules for .row + .row-left + .row-right (consumed by
+          markdownToTemplateHtml's tab-row encoder): flex justify-between
+          baseline, right side italic, gap 12pt
+
+    Pipeline call site (server.mjs:/api/career/resumes/:id/render):
+      - Passes identity.name to markdownToTemplateHtml as
+        options.stripLeadingName so the markdown's leading "**Name**\n
+        contacts..." block (common in Google Docs exports) is removed,
+        avoiding duplicate header.
+
+    Anchors preserved — composeCvHtml + buildHeader + buildCss + escapeHtml
+    still exported by the same names, so the m2 spec's anchor block
+    stays valid.
+
+constraints: []
+indexing:
+  type: change
+  priority: medium
+  layer: feature
+  domain: "04-career-system"
+  tags: [renderer, css, latex, serif, classic-resume, followup, template-rewrite]
+provenance:
+  source_type: incident
+  confidence: 1.0
+  source_ref: "session 2026-05-25 — operator asked for Classic LaTeX SWE Resume style after seeing first real PDF render"
+relations:
+  - "supersedes change-2026-04-28-m2-cv-template-render (visual layer only — same exports, same composition pipeline)"
+  - "consumes change-2026-05-25-gdocs-export-preprocessors (rebuildTabRows produces .row / .row-left / .row-right that this CSS styles)"
+  - "verified-with /api/career/resumes/sde-real/render (Times New Roman embedded in output PDF; 184KB single-page render)"
+anchors:
+  - file: "src/career/lib/cvTemplate.mjs"
+    symbols:
+      - "composeCvHtml"
+      - "buildHeader"
+      - "buildContacts"
+      - "buildLocation"
+      - "buildCss"
+      - "escapeHtml"
+  - file: "server.mjs"
+    symbols:
+      - "GET /api/career/resumes/:id/render (stripLeadingName: identity.name pass-through)"
+created_at: "2026-05-25"
+updated_at: "2026-05-25"

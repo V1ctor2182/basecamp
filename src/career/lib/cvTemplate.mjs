@@ -1,25 +1,26 @@
 // CV HTML/CSS template assembler. Combines:
-//   - identity.yml header (name + city + contacts)
+//   - identity.yml header (name + city + contacts) rendered classic-LaTeX-
+//     style: centered, serif, thin rule below.
 //   - markdown body already converted via markdownToTemplateHtml()
-//   - inline CSS template (no external resources — Playwright headless
-//     doesn't fetch network content reliably; everything must be inline)
+//   - inline CSS (Playwright headless can't reliably fetch network resources).
 //
-// Output is a complete <!DOCTYPE html>...</html> string ready for
-// page.setContent() in htmlToPdf.mjs.
-//
-// Style choices (locked long-term-best, see plan-milestones decisions):
-//   - Single-column layout (ATS parser-friendly; double-column often gets
-//     re-ordered wrong).
-//   - system-ui sans-serif (works offline; no Google Fonts dependency).
-//   - 11pt body / 22pt name / 13pt h2 — ~600 words per Letter page.
-//   - Configurable accent color (default GitHub blue #0969da) for h2 / a /
-//     header border.
+// Style choices (Classic LaTeX SWE Resume — Jake's Resume / Awesome-CV
+// lineage):
+//   - Single column (ATS-parser friendly).
+//   - Times New Roman serif. Falls back to Liberation Serif on Linux + the
+//     generic `serif` keyword so any reasonable PDF backend has a glyph.
+//   - 10.5pt body, 1.3 line-height, 18pt centered name, 11pt all-caps h2
+//     with a thin rule below. Tight vertical spacing — fits ~650 words/page
+//     vs. system-ui template's ~600.
+//   - Mostly monochrome. The per-resume accent color (metadata.renderer.
+//     accent_color) is applied only to links, so the print is dignified
+//     while the operator's brand color still shows on hyperlinks.
+//   - Tab-separated "row" layout (left bold, right italic dates) handled by
+//     <div class="row"><span class="row-left">…</span><span class="row-right">
+//     …</span></div> produced by markdownToTemplateHtml's tab encoder.
 
 const DEFAULT_ACCENT = '#0969da'
 
-// Escape user-supplied strings before splicing into HTML attributes / text.
-// identity.yml is user-authored but defensive coding here costs nothing and
-// would catch a future case (e.g., someone pastes a name with `"` or `<`).
 function escapeHtml(s) {
   if (s == null) return ''
   return String(s)
@@ -34,8 +35,6 @@ function isNonEmpty(s) {
   return typeof s === 'string' && s.trim().length > 0
 }
 
-// Build the right-hand contacts column. Order is the on-paper convention:
-// email · phone · linkedin · github · portfolio. Empty fields skipped silently.
 function buildContacts(identity) {
   const links = identity?.links ?? {}
   const items = []
@@ -54,7 +53,7 @@ function buildContacts(identity) {
   if (isNonEmpty(links.portfolio)) {
     items.push(`<a href="${escapeHtml(links.portfolio)}">Portfolio</a>`)
   }
-  return items.join(' &middot; ')
+  return items.join(' &nbsp;|&nbsp; ')
 }
 
 function buildLocation(identity) {
@@ -65,110 +64,134 @@ function buildLocation(identity) {
   return escapeHtml(parts.join(', '))
 }
 
-function buildHeader(identity, accentColor) {
+function buildHeader(identity) {
   const name = isNonEmpty(identity?.name) ? escapeHtml(identity.name) : ''
   const location = buildLocation(identity)
   const contacts = buildContacts(identity)
+  // Contacts row: location · email · phone · LinkedIn · GitHub · Portfolio.
+  // All on one centered line under the name — classic LaTeX SWE convention.
+  const contactPieces = []
+  if (location) contactPieces.push(location)
+  if (contacts) contactPieces.push(contacts)
   return `
     <header>
-      <div class="header-left">
-        <h1>${name}</h1>
-        ${location ? `<div class="location">${location}</div>` : ''}
-      </div>
-      ${contacts ? `<div class="contacts">${contacts}</div>` : ''}
+      <h1>${name}</h1>
+      ${contactPieces.length ? `<div class="contacts">${contactPieces.join(' &nbsp;|&nbsp; ')}</div>` : ''}
     </header>`
 }
 
 function buildCss(accentColor) {
   return `
-    @page { size: Letter; margin: 0.5in; }
+    @page { size: Letter; margin: 0.5in 0.6in; }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body {
-      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      font-size: 11pt;
-      line-height: 1.5;
-      color: #1a1a1a;
+      font-family: 'Times New Roman', Times, 'Liberation Serif', 'Nimbus Roman', serif;
+      font-size: 10.5pt;
+      line-height: 1.3;
+      color: #000;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+
+    /* ── Header (identity-derived) ───────────────────────────────────── */
     header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      gap: 16pt;
-      margin-bottom: 16pt;
-      padding-bottom: 8pt;
-      border-bottom: 2pt solid ${accentColor};
+      text-align: center;
+      margin-bottom: 6pt;
     }
-    .header-left h1 {
-      font-size: 22pt;
-      font-weight: 600;
-      margin: 0;
-      letter-spacing: -0.01em;
+    header h1 {
+      font-size: 20pt;
+      font-weight: 700;
+      margin: 0 0 2pt;
+      letter-spacing: 0.02em;
     }
-    .header-left .location {
-      font-size: 10pt;
-      color: #555;
-      margin-top: 2pt;
+    header .contacts {
+      font-size: 9.5pt;
+      color: #000;
     }
-    .contacts {
-      font-size: 10pt;
-      color: #555;
-      text-align: right;
-      line-height: 1.4;
-    }
-    .contacts a {
-      color: #555;
+    header .contacts a {
+      color: ${accentColor};
       text-decoration: none;
     }
+
+    /* ── Section headings (h2 — promoted from **SECTION**) ───────────── */
     main h1 {
-      /* Resume body shouldn't have h1 (header already has the name).
-         Style defensively in case a markdown source slips one in. */
-      font-size: 14pt;
-      font-weight: 600;
-      margin: 14pt 0 4pt;
+      /* Defensive: resume body shouldn't have h1. */
+      font-size: 12pt;
+      font-weight: 700;
+      margin: 8pt 0 2pt;
     }
     main h2 {
-      font-size: 13pt;
-      font-weight: 600;
-      margin: 14pt 0 4pt;
-      color: ${accentColor};
-      border-bottom: 1pt solid #d0d7de;
-      padding-bottom: 2pt;
+      font-size: 11pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 8pt 0 2pt;
+      padding-bottom: 1pt;
+      border-bottom: 0.5pt solid #000;
       page-break-after: avoid;
       break-after: avoid;
     }
     main h3 {
-      font-size: 11pt;
-      font-weight: 600;
-      margin: 8pt 0 2pt;
+      font-size: 10.5pt;
+      font-weight: 700;
+      margin: 4pt 0 1pt;
     }
     main h4, main h5, main h6 {
-      font-size: 11pt;
-      font-weight: 600;
-      margin: 6pt 0 2pt;
+      font-size: 10.5pt;
+      font-weight: 700;
+      margin: 4pt 0 1pt;
     }
-    main p { margin: 4pt 0; }
-    main ul, main ol { padding-left: 18pt; margin: 4pt 0; }
-    main li { margin: 2pt 0; }
-    main strong { font-weight: 600; }
+
+    /* ── Paragraphs & lists ──────────────────────────────────────────── */
+    main p { margin: 2pt 0; }
+    main ul, main ol {
+      padding-left: 16pt;
+      margin: 2pt 0 4pt;
+    }
+    main li {
+      margin: 1pt 0;
+      padding-left: 0;
+    }
+    main ul { list-style-type: disc; }
+    main strong { font-weight: 700; }
     main em { font-style: italic; }
     main a {
       color: ${accentColor};
       text-decoration: none;
     }
+
+    /* ── Tab-row layout (left bold heading + right italic dates) ─────── */
+    main .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12pt;
+      margin: 1pt 0;
+    }
+    main .row .row-left {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    main .row .row-right {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      font-style: italic;
+      color: #000;
+    }
+
+    /* ── Misc ────────────────────────────────────────────────────────── */
     main code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 10pt;
+      font-size: 9.5pt;
       background: #f4f4f4;
-      padding: 1pt 4pt;
-      border-radius: 3pt;
+      padding: 0 3pt;
+      border-radius: 2pt;
     }
     main hr {
       border: 0;
-      border-top: 1pt solid #d0d7de;
-      margin: 12pt 0;
+      border-top: 0.5pt solid #000;
+      margin: 6pt 0;
     }
   `
 }
@@ -184,11 +207,10 @@ export function composeCvHtml({ identity = {}, body_html = '', options = {} } = 
 <style>${buildCss(accentColor)}</style>
 </head>
 <body>
-${buildHeader(identity, accentColor)}
+${buildHeader(identity)}
 <main>${body_html}</main>
 </body>
 </html>`
 }
 
-// Exported for downstream sanitization audits / debugging.
 export { escapeHtml, buildHeader, buildCss }
