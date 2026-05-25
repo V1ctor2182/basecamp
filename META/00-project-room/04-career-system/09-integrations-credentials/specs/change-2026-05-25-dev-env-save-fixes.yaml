@@ -1,0 +1,73 @@
+spec_id: "change-2026-05-25-dev-env-save-fixes"
+type: change
+state: active
+intent:
+  summary: "m3 followup #2: dev-env Save fix — outbound proxy (HTTPS_PROXY) + same-origin allowlist for vite-proxied PUT"
+  detail: |
+    Two latent bugs in the m3-shipped Integrations Save / Test path that
+    surfaced the first time the operator actually filled the form on a
+    real-network machine (GFW-style: external hosts only reachable via a
+    local HTTP proxy). Both are pure server-side guard / network plumbing
+    fixes — no UI, no smoke changes.
+
+    Bug 1 — Save rejected as cross-origin.
+      Repro:  browser on http://localhost:5173 (vite) → PUT /api/config →
+              backend returns 403 "cross-origin config write rejected".
+      Cause:  isSameOriginConfigWrite() compared Origin.host (5173) to
+              req.host (4568) and rejected on mismatch. Vite's proxy
+              rewrites Host to the target (4568), so the legitimate
+              same-tab Save fails the check even though the browser is
+              on the trusted dev frontend.
+      Fix:    accept a configurable origin allowlist when host doesn't
+              match. Default 'http://localhost:5173' (vite dev default).
+              Override via CAREER_ALLOWED_WRITE_ORIGINS (comma-separated).
+              Browser-controlled Origin is the load-bearing signal —
+              non-browsers can spoof but they can also write
+              data/config.json directly, so the check only ever defends
+              against browser-triggered CSRF.
+
+    Bug 2 — Google OAuth callback throws "fetch failed".
+      Repro:  finish Google consent flow → /api/career/google/oauth/
+              callback → server tries to POST oauth2.googleapis.com/token →
+              undici "Connect Timeout Error". Curl reaches Google fine
+              via $http_proxy.
+      Cause:  Node's built-in fetch (undici) ignores HTTP_PROXY env vars
+              by default — unlike curl. On networks where external hosts
+              are only reachable through a local proxy, every server-side
+              fetch (Google OAuth, GitHub API, Anthropic SDK) silently
+              hangs until timeout.
+      Fix:    at server boot, if HTTPS_PROXY / https_proxy / HTTP_PROXY /
+              http_proxy is set, install undici ProxyAgent as the global
+              dispatcher. One log line on startup so the routing is
+              visible. NO_PROXY isn't honored (would require a custom
+              dispatcher); the proxy on 127.0.0.1 is expected to handle
+              loopback itself.
+
+    Why this matters beyond Integrations:
+      - The proxy fix is global — every server-side fetch benefits
+        (Google Docs sync, Anthropic Stage A/B, GitHub /user pings).
+      - The same-origin fix unblocks every PUT /api/config write, not
+        just Integrations (Tracker preferences UI also touches this).
+
+constraints: []
+indexing:
+  type: change
+  priority: high
+  layer: feature
+  domain: "04-career-system"
+  tags: [m3-followup, dev-env, proxy, same-origin, csrf, undici, hotfix]
+provenance:
+  source_type: incident
+  confidence: 1.0
+  source_ref: "session 2026-05-25 — Save + OAuth flow first end-to-end test on real network"
+relations:
+  - "follows change-2026-05-24-m3-test-connection-endpoints (the m3 work itself)"
+  - "unblocks 03-cv-engine/02-google-docs-sync (callback path now reaches Google)"
+  - "unblocks any future Anthropic SDK / GitHub fetch on proxy-only networks"
+anchors:
+  - file: "server.mjs"
+    symbols:
+      - "OUTBOUND_PROXY (top-of-file ProxyAgent installation)"
+      - "isSameOriginConfigWrite"
+created_at: "2026-05-25"
+updated_at: "2026-05-25"

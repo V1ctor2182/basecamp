@@ -6,6 +6,21 @@ try {
   // no .env file — fine, fall back to shell-exported vars
 }
 
+// Route Node's built-in fetch through an HTTP(S) proxy when one is set in
+// the environment. Node's undici-backed fetch ignores HTTP_PROXY by default
+// (unlike curl), which silently breaks every external call (Google OAuth,
+// GitHub API, Anthropic SDK) on networks that can only reach external
+// hosts through a local proxy. Opt-in via env so dev/prod without proxies
+// stay direct. NO_PROXY isn't honored — keep the proxy you set scoped or
+// configure it to passthrough loopback itself.
+import { setGlobalDispatcher, ProxyAgent } from 'undici';
+const OUTBOUND_PROXY = process.env.HTTPS_PROXY || process.env.https_proxy
+  || process.env.HTTP_PROXY || process.env.http_proxy;
+if (OUTBOUND_PROXY) {
+  setGlobalDispatcher(new ProxyAgent(OUTBOUND_PROXY));
+  console.log(`[server] outbound fetch routed via ${OUTBOUND_PROXY}`);
+}
+
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs/promises';
@@ -405,9 +420,16 @@ function isSameOriginConfigWrite(req) {
     return false;
   }
   const host = req.get('host') || '';
-  // Strip the port from Host for comparison if present in Origin.
-  const originHostPort = parsed.host;
-  return originHostPort === host;
+  if (parsed.host === host) return true;
+  // Dev: vite (5173) proxies /api to this server (4568) and rewrites the
+  // Host header to the backend, so Origin ≠ Host even though the browser
+  // is on the trusted dev frontend. Accept a configured allowlist instead
+  // of failing the legitimate same-tab save. Browser-controlled Origin is
+  // load-bearing here — non-browsers can spoof, but they can also hit
+  // the file directly, so the check only ever defends against CSRF.
+  const allowlist = (process.env.CAREER_ALLOWED_WRITE_ORIGINS || 'http://localhost:5173')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  return allowlist.includes(origin);
 }
 
 app.put('/api/config', async (req, res) => {
