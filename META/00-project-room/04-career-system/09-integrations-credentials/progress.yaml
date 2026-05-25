@@ -82,6 +82,7 @@ commits:
     hash: "892ea44"
     message: "m3: Test Connection — per-service /test endpoints + Test buttons + smoke"
   - milestone: "m3-test-connection"
+    hash: "3ef21b3"
     message: "m3 followup #2: dev-env Save fix — outbound proxy (HTTPS_PROXY) + same-origin allowlist for vite-proxied PUT"
 status_note: >
   ✅ 全部 3 个 milestone 完成(2026-05-24)。Settings → Integrations

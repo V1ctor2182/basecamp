@@ -85,7 +85,8 @@ commits:
       - "_tree.yaml (lifecycle: planning → active)"
     milestones_affected:
       - "m1-markdown-to-template-html (→ completed, ROOM COMPLETE)"
-  - date: "2026-05-25"
+  - hash: "b82ab2d"
+    date: "2026-05-25"
     message: "[04-career-system/04-renderer] followup: classic LaTeX SWE template (Times New Roman + Google-Docs-export markdown preprocessors)"
     files_changed: 1
     specs_affected:
