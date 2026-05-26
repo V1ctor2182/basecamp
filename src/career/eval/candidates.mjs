@@ -1,7 +1,7 @@
 // Tuner candidate generator — read m2 eval signals, propose simple
 // allowlist edits (add-role / remove-role) per Q3 (simple-only V1).
 //
-// 07-applier/self-iteration/01-code-calibration m3.
+// 07-applier/07-self-iteration/01-code-calibration m3.
 //
 // Candidate kinds (locked Q3):
 //   - { kind: 'add', role: string }      — add to INTERACTIVE_ROLES

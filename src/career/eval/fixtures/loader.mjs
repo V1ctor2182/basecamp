@@ -1,6 +1,6 @@
 // Loader for data/career/eval-fixtures/*.{html,truth.yml} pairs.
 //
-// 07-applier/self-iteration/01-code-calibration m1.
+// 07-applier/07-self-iteration/01-code-calibration m1.
 //
 // Layout (locked m1 OQ-1: flat):
 //   data/career/eval-fixtures/

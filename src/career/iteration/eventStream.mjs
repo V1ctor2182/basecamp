@@ -1,4 +1,4 @@
-// Event aggregator for the Iteration Dashboard (07-applier/self-iteration
+// Event aggregator for the Iteration Dashboard (07-applier/07-self-iteration
 // 03-iteration-dashboard m1).
 //
 // Reads existing append-only stores and normalizes them into a unified

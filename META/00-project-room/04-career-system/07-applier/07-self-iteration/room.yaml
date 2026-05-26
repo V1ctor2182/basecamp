@@ -1,5 +1,5 @@
 room:
-  id: "00-project-room/04-career-system/07-applier/self-iteration"
+  id: "00-project-room/04-career-system/07-applier/07-self-iteration"
   name: "Self-Iteration"
   parent: "00-project-room/04-career-system/07-applier"
   type: sub-epic

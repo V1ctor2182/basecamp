@@ -1,6 +1,6 @@
 # Flywheel Dashboard — 数据飞轮统一呈现页
 
-> Feature Room · `04-career-system/07-applier/self-iteration/04-flywheel-dashboard`
+> Feature Room · `04-career-system/07-applier/07-self-iteration/04-flywheel-dashboard`
 > lifecycle: **planning** · owner: fullstack · created 2026-05-22
 
 ## Intent

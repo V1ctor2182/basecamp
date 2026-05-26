@@ -2,7 +2,7 @@
 // CI smoke for the full eval pipeline (m1 fixtures + m2 runner + m3
 // tuner DI seams).
 //
-// 07-applier/self-iteration/01-code-calibration m4.
+// 07-applier/07-self-iteration/01-code-calibration m4.
 //
 // Acceptance criterion (f): "全部 fixture < 60s". This smoke runs the
 // actual Playwright snapshot pipeline against every shipped fixture

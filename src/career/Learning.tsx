@@ -1,6 +1,6 @@
 // Learning tab — visualises the 02-data-flywheel feedback loop.
 //
-// 07-applier/self-iteration/02-data-flywheel m4.
+// 07-applier/07-self-iteration/02-data-flywheel m4.
 //
 // 4 cards (collapsible later if needed; m4 ships them all open):
 //   ① 30-day flywheel stats — counts of field-misclassified / field-edits

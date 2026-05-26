@@ -56,7 +56,7 @@ import { activateAdapter } from '../siteAdapters/activate.mjs';
 // The state machine assumes the page is already on the application form.
 // startMachine drives the navigation up front via humanNavigate.
 import { humanNavigate } from '../runtime/humanize.mjs';
-// 07-applier/self-iteration/02-data-flywheel m1 — capture hooks. The
+// 07-applier/07-self-iteration/02-data-flywheel m1 — capture hooks. The
 // flywheel records two events at the multi-step endpoint boundary:
 //   ① approve-step: when user edits a draft suggested_value, append a
 //      field-edits record (m2 induction reads these for narrative style).

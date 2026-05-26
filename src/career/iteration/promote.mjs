@@ -1,7 +1,7 @@
 // Promote-evidence flow — turn a `site-failures.jsonl` record into a
 // scaffolded TODO for the eval-fixture corpus.
 //
-// 07-applier/self-iteration/03-iteration-dashboard m1.
+// 07-applier/07-self-iteration/03-iteration-dashboard m1.
 //
 // Per m1-OQ locked at plan-milestones: we DO NOT capture full HTML in
 // the promote step. The promote action writes a single TODO yaml under

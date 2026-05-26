@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Smoke for 07-applier/self-iteration/02-data-flywheel m3:
+// Smoke for 07-applier/07-self-iteration/02-data-flywheel m3:
 // applySuggestion.mjs (approve / reject / ensureLearnedRulesLoaded) +
 // boot-time wire-up of learned classifier rules.
 //

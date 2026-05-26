@@ -1,6 +1,6 @@
 // Zod schema for eval-fixture ground-truth YAML pairs.
 //
-// 07-applier/self-iteration/01-code-calibration m1.
+// 07-applier/07-self-iteration/01-code-calibration m1.
 //
 // Each fixture lives as a sibling pair under data/career/eval-fixtures/:
 //   {vendor-slug}.html          — offline HTML snapshot (EH4: NOT live URL)

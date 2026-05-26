@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Smoke for 07-applier/self-iteration/02-data-flywheel m4 backend:
+// Smoke for 07-applier/07-self-iteration/02-data-flywheel m4 backend:
 // /api/career/feedback/stats (14-day error_series) +
 // /api/career/feedback/site-coverage.
 //

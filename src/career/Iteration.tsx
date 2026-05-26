@@ -1,6 +1,6 @@
 // Iteration tab — observability layer for the self-iteration sub-epic.
 //
-// 07-applier/self-iteration/03-iteration-dashboard m2.
+// 07-applier/07-self-iteration/03-iteration-dashboard m2.
 //
 // Three sections (D Coverage detail + Promote modal → m3):
 //   A. Health header — APPLY count / SUCCESS rate / 30d failures / calibration / pending counts

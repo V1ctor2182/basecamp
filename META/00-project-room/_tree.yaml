@@ -401,8 +401,8 @@ tree:
         - "00-project-room/04-career-system/07-applier/04-multi-step-state-machine"
         - "00-project-room/04-career-system/07-applier/05-non-standard-controls"
         - "00-project-room/04-career-system/07-applier/06-site-adapters"
+        - "00-project-room/04-career-system/07-applier/07-self-iteration"
         - "00-project-room/04-career-system/07-applier/08-snapshot-refs-layer"
-        - "00-project-room/04-career-system/07-applier/self-iteration"
     - id: "00-project-room/04-career-system/07-applier/01-mode1-simplify-hybrid"
       type: feature
       lifecycle: active
@@ -445,39 +445,39 @@ tree:
       owner: backend
       parent: "00-project-room/04-career-system/07-applier"
       children: []
-    - id: "00-project-room/04-career-system/07-applier/self-iteration"
+    - id: "00-project-room/04-career-system/07-applier/07-self-iteration"
       type: sub-epic
       lifecycle: planning
       owner: fullstack
       parent: "00-project-room/04-career-system/07-applier"
       children:
-        - "00-project-room/04-career-system/07-applier/self-iteration/01-code-calibration"
-        - "00-project-room/04-career-system/07-applier/self-iteration/02-data-flywheel"
-        - "00-project-room/04-career-system/07-applier/self-iteration/03-iteration-dashboard"
-        - "00-project-room/04-career-system/07-applier/self-iteration/04-flywheel-dashboard"
-    - id: "00-project-room/04-career-system/07-applier/self-iteration/01-code-calibration"
+        - "00-project-room/04-career-system/07-applier/07-self-iteration/01-code-calibration"
+        - "00-project-room/04-career-system/07-applier/07-self-iteration/02-data-flywheel"
+        - "00-project-room/04-career-system/07-applier/07-self-iteration/03-iteration-dashboard"
+        - "00-project-room/04-career-system/07-applier/07-self-iteration/04-flywheel-dashboard"
+    - id: "00-project-room/04-career-system/07-applier/07-self-iteration/01-code-calibration"
       type: feature
       lifecycle: done
       owner: backend
-      parent: "00-project-room/04-career-system/07-applier/self-iteration"
+      parent: "00-project-room/04-career-system/07-applier/07-self-iteration"
       children: []
-    - id: "00-project-room/04-career-system/07-applier/self-iteration/02-data-flywheel"
+    - id: "00-project-room/04-career-system/07-applier/07-self-iteration/02-data-flywheel"
       type: feature
       lifecycle: active
       owner: fullstack
-      parent: "00-project-room/04-career-system/07-applier/self-iteration"
+      parent: "00-project-room/04-career-system/07-applier/07-self-iteration"
       children: []
-    - id: "00-project-room/04-career-system/07-applier/self-iteration/03-iteration-dashboard"
+    - id: "00-project-room/04-career-system/07-applier/07-self-iteration/03-iteration-dashboard"
       type: feature
       lifecycle: done
       owner: fullstack
-      parent: "00-project-room/04-career-system/07-applier/self-iteration"
+      parent: "00-project-room/04-career-system/07-applier/07-self-iteration"
       children: []
-    - id: "00-project-room/04-career-system/07-applier/self-iteration/04-flywheel-dashboard"
+    - id: "00-project-room/04-career-system/07-applier/07-self-iteration/04-flywheel-dashboard"
       type: feature
       lifecycle: planning
       owner: fullstack
-      parent: "00-project-room/04-career-system/07-applier/self-iteration"
+      parent: "00-project-room/04-career-system/07-applier/07-self-iteration"
       children: []
     - id: "00-project-room/04-career-system/08-human-gate-tracker"
       type: sub-epic

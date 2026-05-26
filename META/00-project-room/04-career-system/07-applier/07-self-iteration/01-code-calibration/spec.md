@@ -1,10 +1,10 @@
 # Code Calibration (was Snapshot Eval Harness)
 
-**Room ID**: `00-project-room/04-career-system/07-applier/self-iteration/01-code-calibration`
+**Room ID**: `00-project-room/04-career-system/07-applier/07-self-iteration/01-code-calibration`
 **Type**: feature
 **Lifecycle**: done (ROOM COMPLETE 2026-05-18, 4/4 milestones shipped)
 **Owner**: backend
-**Parent**: `00-project-room/04-career-system/07-applier/self-iteration`
+**Parent**: `00-project-room/04-career-system/07-applier/07-self-iteration`
 
 ## Intent
 

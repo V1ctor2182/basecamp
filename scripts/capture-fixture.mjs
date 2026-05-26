@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // CLI wrapper for the eval-fixture capture flow.
 //
-// 07-applier/self-iteration/01-code-calibration m1.
+// 07-applier/07-self-iteration/01-code-calibration m1.
 //
 // Usage:
 //   node scripts/capture-fixture.mjs \

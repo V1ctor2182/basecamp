@@ -1,7 +1,7 @@
 // Haiku induction of a classifier regex rule from N misclassified-field
 // records on the same site.
 //
-// 07-applier/self-iteration/02-data-flywheel m2.
+// 07-applier/07-self-iteration/02-data-flywheel m2.
 //
 // Per OQ1: Haiku first; on Zod-validate failure, retry once with Sonnet
 // before giving up. The output schema is conservative (single regex,

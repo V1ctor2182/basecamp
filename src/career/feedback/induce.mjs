@@ -1,7 +1,7 @@
 // Induction orchestrator — dispatches feedback records to the
 // type-specific Haiku-prompted inducer when threshold is met.
 //
-// 07-applier/self-iteration/02-data-flywheel m2.
+// 07-applier/07-self-iteration/02-data-flywheel m2.
 //
 // Per OQ6: maybeInduce(feedbackType) is called at endpoint.mjs apply
 // close (cheap O(N) groupBy over last 30 days) AND from the m4

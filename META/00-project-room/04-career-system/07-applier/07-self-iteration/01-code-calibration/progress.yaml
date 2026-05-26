@@ -80,7 +80,7 @@ milestones:
       - "package.json"
       - "scripts/smoke-eval-snapshot-ci.mjs"
       - "src/career/eval/README.md"
-      - "META/00-project-room/04-career-system/07-applier/self-iteration/01-code-calibration/spec.md"
+      - "META/00-project-room/04-career-system/07-applier/07-self-iteration/01-code-calibration/spec.md"
     estimated_lines: 150
     depends_on: ["m3-auto-tuner-convergence"]
     complexity_flags: []

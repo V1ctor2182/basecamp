@@ -1,6 +1,6 @@
 // Report formatters for eval runner output.
 //
-// 07-applier/self-iteration/01-code-calibration m2.
+// 07-applier/07-self-iteration/01-code-calibration m2.
 //
 // Two formats:
 //   - JSON       — structured artefact for m3 tuner consumption + CI diffing

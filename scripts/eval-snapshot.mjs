@@ -2,7 +2,7 @@
 // Eval-snapshot CLI — run the eval harness against every fixture in
 // data/career/eval-fixtures/ and print a report.
 //
-// 07-applier/self-iteration/01-code-calibration m2.
+// 07-applier/07-self-iteration/01-code-calibration m2.
 //
 // Usage:
 //   node scripts/eval-snapshot.mjs                     # default — prints console report

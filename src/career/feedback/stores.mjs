@@ -1,6 +1,6 @@
 // Append-only JSONL stores for the feedback flywheel.
 //
-// 07-applier/self-iteration/02-data-flywheel m1.
+// 07-applier/07-self-iteration/02-data-flywheel m1.
 //
 // Three NEW JSONL files (open-question-diffs reuses qa-bank/history.jsonl
 // per OQ5):

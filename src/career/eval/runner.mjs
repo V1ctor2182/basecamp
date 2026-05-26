@@ -3,7 +3,7 @@
 // YAML. Emits a 3-dim score (coverage / noise / aria_accuracy) + per-
 // fixture detail records that the m3 tuner can act on.
 //
-// 07-applier/self-iteration/01-code-calibration m2.
+// 07-applier/07-self-iteration/01-code-calibration m2.
 //
 // Score definitions (Q2 locked: aggregate = min):
 //   coverage      = matched_must_detect / total_must_detect

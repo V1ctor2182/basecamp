@@ -1,6 +1,6 @@
 // Approve / Reject seam for m2-induced proposals.
 //
-// 07-applier/self-iteration/02-data-flywheel m3.
+// 07-applier/07-self-iteration/02-data-flywheel m3.
 //
 // approveSuggestion:
 //   - classifier-rule → append to data/career/feedback/learned-classifier-

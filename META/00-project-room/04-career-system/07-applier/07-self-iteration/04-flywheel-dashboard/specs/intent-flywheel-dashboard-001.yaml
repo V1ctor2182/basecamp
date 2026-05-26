@@ -55,9 +55,9 @@ provenance:
   source_ref: "用户手动记录 2026-05-22 —— '数据飞轮所有的呈现都放在一个分开的页面'"
 relations:
   - kind: depends_on
-    target: "00-project-room/04-career-system/07-applier/self-iteration/02-data-flywheel"
+    target: "00-project-room/04-career-system/07-applier/07-self-iteration/02-data-flywheel"
   - kind: relates_to
-    target: "00-project-room/04-career-system/07-applier/self-iteration/03-iteration-dashboard"
+    target: "00-project-room/04-career-system/07-applier/07-self-iteration/03-iteration-dashboard"
 anchors: []
 open_questions:
   - "新页面是复用现有的 Learning / Iteration 入口，还是新开一个独立 tab/路由？"

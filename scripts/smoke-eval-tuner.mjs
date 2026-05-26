@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Pure-function + DI-evaluator smoke for the auto-tuner.
 //
-// 07-applier/self-iteration/01-code-calibration m3.
+// 07-applier/07-self-iteration/01-code-calibration m3.
 //
 // No Playwright — uses tune()'s opts.evaluator DI seam to inject a
 // deterministic synthetic scorer that drives every code path:

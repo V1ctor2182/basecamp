@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Smoke for 07-applier/self-iteration/01-code-calibration m1:
+// Smoke for 07-applier/07-self-iteration/01-code-calibration m1:
 // schema.mjs (Zod GroundTruthSchema) + loader.mjs (loadFixtures + per-dir
 // signature cache + orphan detection) + capture.mjs scaffoldGroundTruthTemplate.
 //

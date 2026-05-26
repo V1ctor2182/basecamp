@@ -3,7 +3,7 @@
 // in data/career/eval-fixtures/, write the proposed allowlist diff +
 // iteration log for human review.
 //
-// 07-applier/self-iteration/01-code-calibration m3.
+// 07-applier/07-self-iteration/01-code-calibration m3.
 //
 // EH5 enforced: this NEVER mutates snapshot.mjs. It writes a unified
 // diff to `data/career/eval-fixtures/proposed-allowlist.diff` (or

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Smoke for 07-applier/self-iteration/02-data-flywheel m2:
+// Smoke for 07-applier/07-self-iteration/02-data-flywheel m2:
 // induce.mjs (orchestrator + threshold gate + idempotency) +
 // induceClassifierRule.mjs (Haiku prompt → ClassifierRuleProposal) +
 // induceSiteAdapter.mjs (Haiku prompt → SiteAdapter YAML) +

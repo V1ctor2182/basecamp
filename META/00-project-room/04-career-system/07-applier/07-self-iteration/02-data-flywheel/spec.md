@@ -1,10 +1,10 @@
 # Data Flywheel (was Feedback Flywheel)
 
-**Room ID**: `00-project-room/04-career-system/07-applier/self-iteration/02-data-flywheel`  
+**Room ID**: `00-project-room/04-career-system/07-applier/07-self-iteration/02-data-flywheel`  
 **Type**: feature  
 **Lifecycle**: active (🎉 ROOM COMPLETE 2026-05-18 · 4/4 milestones · 97/97 smoke green)  
 **Owner**: fullstack  
-**Parent**: `00-project-room/04-career-system/07-applier/self-iteration`  
+**Parent**: `00-project-room/04-career-system/07-applier/07-self-iteration`  
 
 ## Intent
 

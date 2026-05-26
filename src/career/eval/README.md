@@ -1,7 +1,7 @@
 # Code Calibration — eval + tuner harness
 
 Calibration infrastructure for `snapshot.mjs`'s `INTERACTIVE_ROLES` allowlist.
-Built in [01-code-calibration](../../../META/00-project-room/04-career-system/07-applier/self-iteration/01-code-calibration/).
+Built in [01-code-calibration](../../../META/00-project-room/04-career-system/07-applier/07-self-iteration/01-code-calibration/).
 
 ## Why this exists
 

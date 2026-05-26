@@ -1,7 +1,7 @@
 // Haiku induction of a site-adapter YAML stub from N failures on the
 // same domain.
 //
-// 07-applier/self-iteration/02-data-flywheel m2.
+// 07-applier/07-self-iteration/02-data-flywheel m2.
 //
 // Output validates against 06-site-adapters' SiteAdapterSchema (strict
 // shape — see siteAdapters/schema.mjs). Haiku is asked for a minimal

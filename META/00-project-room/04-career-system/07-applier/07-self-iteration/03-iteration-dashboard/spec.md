@@ -1,10 +1,10 @@
 # Iteration Dashboard
 
-**Room ID**: `00-project-room/04-career-system/07-applier/self-iteration/03-iteration-dashboard`
+**Room ID**: `00-project-room/04-career-system/07-applier/07-self-iteration/03-iteration-dashboard`
 **Type**: feature
 **Lifecycle**: done (ROOM COMPLETE 2026-05-18, 3/3 milestones shipped)
 **Owner**: fullstack
-**Parent**: `00-project-room/04-career-system/07-applier/self-iteration`
+**Parent**: `00-project-room/04-career-system/07-applier/07-self-iteration`
 
 ## Intent
 

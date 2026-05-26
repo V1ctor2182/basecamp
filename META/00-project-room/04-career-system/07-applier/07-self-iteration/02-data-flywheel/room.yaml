@@ -1,7 +1,7 @@
 room:
-  id: "00-project-room/04-career-system/07-applier/self-iteration/02-data-flywheel"
+  id: "00-project-room/04-career-system/07-applier/07-self-iteration/02-data-flywheel"
   name: "Data Flywheel"
-  parent: "00-project-room/04-career-system/07-applier/self-iteration"
+  parent: "00-project-room/04-career-system/07-applier/07-self-iteration"
   type: feature
   lifecycle: active
   created_at: "2026-04-22"

@@ -1,6 +1,6 @@
 # Self-Iteration
 
-**Room ID**: `00-project-room/04-career-system/07-applier/self-iteration`
+**Room ID**: `00-project-room/04-career-system/07-applier/07-self-iteration`
 **Type**: sub-epic
 **Lifecycle**: planning (LOCKED 2026-05-11)
 **Owner**: fullstack

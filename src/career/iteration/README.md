@@ -1,6 +1,6 @@
 # Iteration Dashboard
 
-UX layer for the [07-applier/self-iteration](../../../META/00-project-room/04-career-system/07-applier/self-iteration) sub-epic.
+UX layer for the [07-applier/07-self-iteration](../../../META/00-project-room/04-career-system/07-applier/07-self-iteration) sub-epic.
 The page lives at `/career/iteration` and visualises three things:
 
 - **Health** — last-30-day apply count, success rate, failures, snapshot calibration, pending counts

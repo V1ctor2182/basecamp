@@ -285,7 +285,7 @@ milestones:
 commits:
   - hash: "bd1295b"
     date: "2026-05-17"
-    message: "[04-career-system/07-applier/self-iteration/02-data-flywheel] m1: 3 JSONL stores + Zod schemas + capture hooks (smoke 24/24)"
+    message: "[04-career-system/07-applier/07-self-iteration/02-data-flywheel] m1: 3 JSONL stores + Zod schemas + capture hooks (smoke 24/24)"
     files_changed: 5
     specs_affected:
       - "intent-data-flywheel-001 (anchors: feedback/schemas.mjs + feedback/stores.mjs + endpoint.mjs capture hooks + smoke-feedback-stores.mjs)"
@@ -293,7 +293,7 @@ commits:
       - "m1-stores-schemas-capture-hooks (→ completed)"
   - hash: "4152bc4"
     date: "2026-05-18"
-    message: "[04-career-system/07-applier/self-iteration/02-data-flywheel] m2: Haiku induction worker + threshold detection + proposal storage (smoke 26/26)"
+    message: "[04-career-system/07-applier/07-self-iteration/02-data-flywheel] m2: Haiku induction worker + threshold detection + proposal storage (smoke 26/26)"
     files_changed: 6
     specs_affected:
       - "intent-data-flywheel-001 (anchors: feedback/induce.mjs + induceClassifierRule.mjs + induceSiteAdapter.mjs + suggestionStore.mjs + smoke-feedback-induce.mjs)"
@@ -301,7 +301,7 @@ commits:
       - "m2-induce-worker-haiku-threshold (→ completed)"
   - hash: "ef4b30c"
     date: "2026-05-18"
-    message: "[04-career-system/07-applier/self-iteration/02-data-flywheel] m3: approve/reject seam + applySuggestion + 5 REST routes (smoke 25/25)"
+    message: "[04-career-system/07-applier/07-self-iteration/02-data-flywheel] m3: approve/reject seam + applySuggestion + 5 REST routes (smoke 25/25)"
     files_changed: 5
     specs_affected:
       - "intent-data-flywheel-001 (anchors: feedback/applySuggestion.mjs + suggestionStore.mjs serializeByKey export + server.mjs 5 feedback routes + smoke-feedback-apply-suggestion.mjs)"
@@ -309,7 +309,7 @@ commits:
       - "m3-approve-reject-seam-apply-suggestion (→ completed)"
   - hash: "5f443fb"
     date: "2026-05-18"
-    message: "[04-career-system/07-applier/self-iteration/02-data-flywheel] m4: Learning tab UI + stats endpoints + ROOM COMPLETE (smoke 12/12, Room total 97/97)"
+    message: "[04-career-system/07-applier/07-self-iteration/02-data-flywheel] m4: Learning tab UI + stats endpoints + ROOM COMPLETE (smoke 12/12, Room total 97/97)"
     files_changed: 13
     specs_affected:
       - "intent-data-flywheel-001 (anchors: Learning.tsx + learning.css + CareerNav.tsx + CareerApp.tsx + server.mjs stats/site-coverage endpoints + smoke-feedback-stats-endpoint.mjs)"

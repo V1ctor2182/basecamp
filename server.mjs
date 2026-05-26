@@ -99,7 +99,7 @@ import {
   getStatus as multiStepGetStatus,
 } from './src/career/applier/multistep/endpoint.mjs';
 import { JOB_ID_RE as APPLY_SESSIONS_JOB_ID_RE } from './src/career/applier/multistep/applySessionsStore.mjs';
-// 07-applier/self-iteration/02-data-flywheel m3 — approve/reject seam
+// 07-applier/07-self-iteration/02-data-flywheel m3 — approve/reject seam
 // for Haiku-induced proposals. Importing this module runs its top-level
 // await of ensureLearnedRulesLoaded, which wires user-approved classifier
 // rules into the live classifier at boot via 06's registerExtraRules seam.
@@ -5741,7 +5741,7 @@ app.post('/api/career/applier/multi-step/:jobId/reveal', async (req, res) => {
   }
 });
 
-// ── 07-applier/self-iteration/02-data-flywheel m3 — feedback approve/reject ──
+// ── 07-applier/07-self-iteration/02-data-flywheel m3 — feedback approve/reject ──
 //
 // Routes wrap applySuggestion.mjs's approveSuggestion / rejectSuggestion +
 // suggestionStore's listSuggestions / readSuggestion + stores.mjs's
@@ -5992,7 +5992,7 @@ app.get('/api/career/feedback/site-coverage', async (_req, res) => {
   }
 });
 
-// ── 07-applier/self-iteration/03-iteration-dashboard m1 — event-stream + promote ──
+// ── 07-applier/07-self-iteration/03-iteration-dashboard m1 — event-stream + promote ──
 //
 // 5 endpoints aggregate over existing append-only stores (feedback/*.jsonl
 // + qa-bank/history.jsonl + eval-fixtures/tuner-log.json + applications.json

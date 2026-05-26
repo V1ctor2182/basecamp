@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Smoke for 07-applier/self-iteration/02-data-flywheel m1:
+// Smoke for 07-applier/07-self-iteration/02-data-flywheel m1:
 // schemas.mjs (3 Zod schemas) +
 // stores.mjs (appendJsonl + readJsonl + countByGroup + typed wrappers +
 //  editDistance + classifyError) +

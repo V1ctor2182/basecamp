@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Smoke for 07-applier/self-iteration/03-iteration-dashboard m1:
+// Smoke for 07-applier/07-self-iteration/03-iteration-dashboard m1:
 // eventStream.mjs (readEvents / buildHealth / buildPending / buildCoverage /
 // stableId) + promote.mjs (promoteEvidence / EVIDENCE_ID_RE).
 //

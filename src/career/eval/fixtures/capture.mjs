@@ -1,6 +1,6 @@
 // Capture helpers for new eval fixtures.
 //
-// 07-applier/self-iteration/01-code-calibration m1.
+// 07-applier/07-self-iteration/01-code-calibration m1.
 //
 // Two pieces:
 //   1. scaffoldGroundTruthTemplate(...)  — pure function emitting a YAML

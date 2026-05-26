@@ -1,6 +1,6 @@
 // Zod schemas for the 3 NEW feedback flywheel JSONL stores.
 //
-// 07-applier/self-iteration/02-data-flywheel m1.
+// 07-applier/07-self-iteration/02-data-flywheel m1.
 //
 // The 4 flywheels per the room intent:
 //   ① field-misclassified.jsonl   — classifier got the class wrong

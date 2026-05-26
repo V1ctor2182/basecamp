@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Smoke for 07-applier/self-iteration/03-iteration-dashboard m3 — promote
+// Smoke for 07-applier/07-self-iteration/03-iteration-dashboard m3 — promote
 // modal + coverage section integration.
 //
 // Two coverage levels:
