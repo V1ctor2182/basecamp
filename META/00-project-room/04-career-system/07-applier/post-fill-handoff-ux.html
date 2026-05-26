@@ -1,0 +1,1817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Post-Fill Hand-off UX — User flow + Self-iteration</title>
+<style>
+  :root {
+    --bg:        #fbf7ed;
+    --card:      #ffffff;
+    --border:    #e8e2d2;
+    --border-strong: #d4cab5;
+    --text:      #2d2520;
+    --muted:     #6b6356;
+    --dim:       #8a8275;
+    --accent:    #bf6705;
+    --accent-soft: #fbe5d6;
+    --good:      #16723e;
+    --good-soft: #d8f3dc;
+    --bad:       #bf3a06;
+    --bad-soft:  #fef0ea;
+    --warn:      #92580c;
+    --warn-soft: #fef3c7;
+    --info:      #0969da;
+    --info-soft: #ddf4ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.55;
+    font-size: 14px;
+  }
+  code, .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12.5px;
+  }
+  header.page {
+    padding: 32px 40px 20px;
+    border-bottom: 1px solid var(--border);
+    background: #fff8e8;
+  }
+  header.page h1 {
+    margin: 0 0 4px;
+    font-size: 24px;
+    font-weight: 700;
+  }
+  header.page .sub {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  header.page .meta {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--dim);
+  }
+
+  nav.tabs {
+    display: flex;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  nav.tabs button {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    padding: 14px 22px;
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  nav.tabs button.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  nav.tabs button:hover:not(.active) {
+    color: var(--text);
+  }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 28px 40px 80px; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  h2.section {
+    margin: 32px 0 10px;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+  h2.section:first-of-type { margin-top: 8px; }
+  h3 { margin: 18px 0 6px; font-size: 15px; }
+
+  p { margin: 8px 0; }
+  ul { margin: 6px 0 12px; padding-left: 22px; }
+  ul li { margin: 3px 0; }
+
+  /* Cards & callouts */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin: 12px 0;
+  }
+  .card.flat { padding: 12px 16px; }
+  .card .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .callout {
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 10px 14px;
+    color: var(--warn);
+    margin: 12px 0;
+    font-size: 13.5px;
+  }
+  .callout.good { background: var(--good-soft); border-color: var(--good); color: var(--good); }
+  .callout.bad  { background: var(--bad-soft);  border-color: var(--bad);  color: var(--bad); }
+  .callout.info { background: var(--info-soft); border-color: var(--info); color: var(--info); }
+
+  /* Mockups */
+  .mock {
+    background: #fff;
+    border: 1.5px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 14px 0;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02), 0 4px 12px rgba(45,37,32,0.04);
+  }
+  .mock .mock-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  /* Status board mockup */
+  .statusboard {
+    border: 2px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: #fffefb;
+  }
+  .statusboard .row1 { display: flex; justify-content: space-between; align-items: baseline; }
+  .statusboard h4 { margin: 0; font-size: 14px; }
+  .statusboard .elapsed { font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; }
+  .progress {
+    display: flex; align-items: center; gap: 10px;
+    margin: 12px 0 6px;
+  }
+  .progress .bar {
+    flex: 1; height: 12px;
+    background: var(--bg);
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .progress .bar .fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--good) 0%, #6cb47f 100%);
+    border-radius: 6px;
+  }
+  .progress .count {
+    font-family: ui-monospace, monospace;
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .statusboard .legend {
+    font-size: 12px; color: var(--muted);
+    display: flex; gap: 14px;
+    margin: 4px 0 10px;
+  }
+  .statusboard .actions { display: flex; gap: 8px; }
+  .btn {
+    appearance: none;
+    background: var(--text);
+    color: #fff;
+    border: 0;
+    border-radius: 5px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .btn.outline {
+    background: transparent; color: var(--muted); border: 1px solid var(--border-strong);
+  }
+  .btn.primary { background: var(--accent); }
+  .btn.good { background: var(--good); }
+  .btn.danger { background: var(--bad); }
+  .btn.disabled {
+    background: var(--border); color: var(--dim); cursor: not-allowed;
+  }
+  .btn small { font-weight: 400; opacity: 0.85; }
+
+  /* Triage group */
+  .triage-group {
+    border: 1.5px solid var(--warn);
+    background: #fffaef;
+    border-radius: 7px;
+    padding: 12px 14px;
+    margin: 10px 0;
+  }
+  .triage-group h5 {
+    margin: 0 0 4px; font-size: 13.5px; color: var(--warn);
+  }
+  .triage-group .hint { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .triage-group ul { font-size: 12.5px; margin: 4px 0; color: var(--text); }
+  .triage-group .more { font-size: 11.5px; color: var(--dim); margin-left: 22px; }
+
+  /* Field card */
+  .fieldcard {
+    border: 1.5px solid var(--border-strong);
+    border-left: 4px solid var(--bad);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 8px 0;
+    background: #fffefb;
+  }
+  .fieldcard.good { border-left-color: var(--good); }
+  .fieldcard.warn { border-left-color: var(--warn); }
+  .fieldcard h5 { margin: 0 0 6px; font-size: 13.5px; font-weight: 600; }
+  .fieldcard .kv { font-size: 12px; color: var(--muted); margin: 2px 0; }
+  .fieldcard .kv b { color: var(--text); }
+  .fieldcard .tried { font-size: 12px; margin: 4px 0; }
+  .fieldcard .tried .step-ok  { color: var(--good); }
+  .fieldcard .tried .step-bad { color: var(--bad); }
+  .fieldcard .tried .step-todo { color: var(--dim); }
+  .fieldcard .acts { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* Timeline */
+  .timeline {
+    position: relative;
+    padding: 8px 0 8px 32px;
+    border-left: 2px solid var(--border-strong);
+    margin: 12px 0;
+  }
+  .timeline .ev {
+    position: relative;
+    padding: 4px 0;
+    margin: 6px 0;
+    font-size: 13px;
+  }
+  .timeline .ev::before {
+    content: "";
+    position: absolute;
+    left: -39px; top: 8px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+  }
+  .timeline .ev.good::before { background: var(--good); }
+  .timeline .ev.user::before { background: var(--info); }
+  .timeline .ev .t {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    margin-right: 10px;
+    display: inline-block;
+    min-width: 50px;
+  }
+
+  /* Compare strip */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 24px 1fr;
+    gap: 12px;
+    margin: 16px 0;
+    align-items: stretch;
+  }
+  .compare .before, .compare .after {
+    padding: 14px 16px;
+    border-radius: 7px;
+    border: 1px solid var(--border-strong);
+    background: #fff;
+  }
+  .compare .before {
+    border-left: 4px solid var(--bad);
+  }
+  .compare .after {
+    border-left: 4px solid var(--good);
+  }
+  .compare .arrow {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent); font-size: 22px; font-weight: 700;
+  }
+  .compare h5 {
+    margin: 0 0 6px;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .compare p { margin: 4px 0; font-size: 13px; }
+
+  /* Code blocks */
+  pre.code {
+    background: #2d2520;
+    color: #f5f0e0;
+    padding: 14px 18px;
+    border-radius: 7px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.55;
+    margin: 12px 0;
+  }
+  pre.code .k { color: #ffb86c; }   /* key */
+  pre.code .s { color: #a8d96c; }   /* string */
+  pre.code .n { color: #88c0d0; }   /* number/bool */
+  pre.code .c { color: #6e6d50; font-style: italic; }  /* comment */
+
+  /* Signal cards in system tab */
+  .signal {
+    display: grid;
+    grid-template-columns: 36px 1fr 24px 1fr;
+    gap: 12px;
+    align-items: center;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 10px 0;
+  }
+  .signal .num {
+    grid-row: 1 / span 2;
+    background: var(--accent);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    align-self: start;
+  }
+  .signal .in, .signal .out {
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+  .signal .in b, .signal .out b {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .signal .arrow {
+    color: var(--accent);
+    font-size: 20px;
+    font-weight: 700;
+    text-align: center;
+  }
+  .signal h5 {
+    grid-column: 2 / span 3;
+    margin: 0 0 6px;
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  /* Loop diagram */
+  .loop {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin: 14px 0;
+  }
+  .loop .ring {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin: 8px 0;
+  }
+  .loop .step {
+    border: 1.5px solid var(--border-strong);
+    border-radius: 7px;
+    padding: 10px 12px;
+    background: #fffefb;
+    position: relative;
+  }
+  .loop .step .step-num {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .loop .step h5 {
+    margin: 2px 0 4px;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .loop .step p {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* Improvement card */
+  .improve {
+    background: linear-gradient(135deg, #16723e 0%, #2b8e54 100%);
+    color: #fff;
+    border-radius: 10px;
+    padding: 20px 22px;
+    margin: 18px 0;
+  }
+  .improve h4 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.9;
+  }
+  .improve .num {
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1.1;
+    margin: 4px 0;
+  }
+  .improve .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  .improve .row > div { padding: 0; }
+  .improve .row b { font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.05em; }
+  .improve .row .num.s { font-size: 28px; }
+  .improve .row .sub { font-size: 12px; opacity: 0.8; }
+  .improve .footer {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    font-size: 12px;
+    opacity: 0.92;
+  }
+
+  hr { border: 0; border-top: 1px solid var(--border); margin: 18px 0; }
+  .legend-row {
+    display: flex; gap: 12px; align-items: center;
+    font-size: 12px; color: var(--muted);
+    margin: 6px 0;
+  }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    display: inline-block;
+  }
+  .dot.good { background: var(--good); }
+  .dot.bad  { background: var(--bad); }
+  .dot.warn { background: var(--warn); }
+  .dot.user { background: var(--info); }
+
+  footer.page {
+    text-align: center;
+    color: var(--dim);
+    font-size: 11px;
+    padding: 20px;
+  }
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Post-Fill Hand-off UX</h1>
+  <p class="sub">Mode 2 自动填表跑完之后,残局怎么收。两个角度:用户侧流程 · 系统侧学习闭环。</p>
+  <div class="meta">触发场景:Captivation (Greenhouse 变体) 投递 · 5 verified / 9 didn't land / 9 do these yourself + CAPTCHA · 2026-05-26</div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="user">👤  用户侧 — 从 partial 到 Applied</button>
+  <button class="tab" data-tab="system">🔁  系统侧 — 这次投递怎么让下次更准</button>
+</nav>
+
+<main>
+
+<!-- ════════════════════════════ USER TAB ════════════════════════════ -->
+<section id="user" class="tab-pane active">
+
+  <h2 class="section">问题 — 当前 UX 给用户什么</h2>
+
+  <div class="callout bad">
+    <b>现状:</b>14 件需要人工兜底,只是一个 read-only 列表。没人告诉用户接下来做什么、按什么顺序、怎么算完成、什么时候可以 Submit。
+    "Mark applied" 按钮全凭用户良心,系统根本不知道你有没有真的点了 Submit。
+  </div>
+
+  <div class="compare">
+    <div class="before">
+      <h5>❌ 当前流程</h5>
+      <p>1. 看到 14 件 fail 列表</p>
+      <p>2. 切到 Chromium 自己找字段</p>
+      <p>3. 自己滚动 / 复制 / 填</p>
+      <p>4. 不知道还差几个</p>
+      <p>5. 心累关闭 / 误点 Mark applied</p>
+      <p>→ <b>没投出去 / 假阳数据</b></p>
+    </div>
+    <div class="arrow">→</div>
+    <div class="after">
+      <h5>✅ 新流程(本设计)</h5>
+      <p>1. Status board 显示进度</p>
+      <p>2. Triage 把同根问题合一组</p>
+      <p>3. 每字段一卡:Copy / Focus / Retry</p>
+      <p>4. 在浏览器手填,系统自动认出</p>
+      <p>5. Submit gate 转绿 → 自动 Mark</p>
+      <p>→ <b>真实 Applied + 完整 session 数据</b></p>
+    </div>
+  </div>
+
+  <h2 class="section">UI 组件 1 — Status board(永久顶部,实时刷新)</h2>
+
+  <div class="mock">
+    <div class="mock-title">Mockup · Apply.tsx 顶部</div>
+    <div class="statusboard">
+      <div class="row1">
+        <h4>Captivation · Software Engineer 1</h4>
+        <span class="elapsed">02:34 elapsed</span>
+      </div>
+      <div class="progress">
+        <span class="count">Verified&nbsp;</span>
+        <div class="bar"><div class="fill" style="width:36%"></div></div>
+        <span class="count">5 / 14</span>
+      </div>
+      <div class="legend">
+        <span><span class="dot bad"></span>&nbsp;to retry: 9</span>
+        <span><span class="dot warn"></span>&nbsp;unlabeled: 7</span>
+        <span><span class="dot user"></span>&nbsp;manual (CAPTCHA): 1</span>
+      </div>
+      <div class="actions">
+        <button class="btn primary">▶ Start clean-up</button>
+        <button class="btn outline">⏸ Pause session</button>
+        <button class="btn outline">🚪 Cancel</button>
+      </div>
+    </div>
+  </div>
+  <p>数字<b>实时刷新</b> — 用户每在浏览器手填一个字段,系统通过 MutationObserver 检测到 DOM 变化,debounce 200ms 后悄悄 re-verify,绿条往前走。<b>不用回 dashboard 点"我填好了"。</b></p>
+
+  <h2 class="section">UI 组件 2 — Triage view(同根问题折叠成组)</h2>
+
+  <div class="mock">
+    <div class="mock-title">Mockup · 点 Start clean-up 后</div>
+
+    <div class="triage-group">
+      <h5>⚠ EEO 段(9 字段,全部为空)&nbsp;&nbsp;&nbsp;<small style="color:var(--muted)">推测同根因</small></h5>
+      <div class="hint">推测:Greenhouse-EEO React-Select 兼容问题</div>
+      <button class="btn primary" style="margin: 4px 0 8px">🔁 Batch retry with <code style="color:#fff">react_select_click</code> strategy</button>
+      <ul>
+        <li>Are You Authorized to work in the U.S. ...</li>
+        <li>Will You Now or in the Future Require Sponsorship ...</li>
+        <li>Gender</li>
+      </ul>
+      <div class="more">… +6 more, 点开展开</div>
+    </div>
+
+    <div class="triage-group" style="border-color: var(--info); background: #f5fbff;">
+      <h5 style="color: var(--info);">❓ Unlabeled fields(7)</h5>
+      <ul style="font-family: ui-monospace, monospace; font-size: 11.5px;">
+        <li>&lt;select.application-question__select&gt; (line 142)</li>
+        <li>&lt;input[type=text]#field_3022&gt; (line 156)</li>
+      </ul>
+      <div class="more">… +5 more</div>
+    </div>
+
+    <div class="triage-group" style="border-color: var(--accent); background: #fff8ef;">
+      <h5 style="color: var(--accent);">✋ Manual(1)</h5>
+      <ul><li>CAPTCHA — 切到浏览器解,我等(超时 10:00 警告)</li></ul>
+    </div>
+  </div>
+  <p>"同根"通过 DOM 共享祖先检测(<code>closest('.application-question--eeo')</code>)。Batch retry 一次性对组内所有字段试新策略 — <b>一次操作修 9 个。</b></p>
+
+  <h2 class="section">UI 组件 3 — Per-field card(展开后)</h2>
+
+  <div class="mock">
+    <div class="mock-title">Mockup · 单个字段展开</div>
+    <div class="fieldcard">
+      <h5>Are You Authorized to work in the U.S. without restriction?</h5>
+      <div class="kv">Expected: <b>"Yes"</b> &nbsp;&nbsp; Form has: <b style="color: var(--muted)">(empty)</b></div>
+      <div class="kv">Control: <code>&lt;div role="combobox" class="select__control"&gt;</code></div>
+      <div class="tried">
+        Tried: <span class="step-bad">✗ selectOption(value)</span> &nbsp;
+        <span class="step-bad">✗ click()</span> &nbsp;
+        <span class="step-todo">⏸ keyboard</span> &nbsp;
+        <span class="step-todo">⏸ role-locator</span>
+      </div>
+      <div class="acts">
+        <button class="btn outline">📋 Copy "Yes"</button>
+        <button class="btn primary">🎯 Focus in browser</button>
+        <button class="btn outline">🔁 Try keyboard</button>
+        <button class="btn outline">✋ I'll skip</button>
+      </div>
+    </div>
+  </div>
+  <ul>
+    <li><b>Tried</b> 行显示已尝试过的 strategy ladder 状态(剩下哪步可点)</li>
+    <li>点 <b>Focus</b> → Chromium 自动 scroll + outline 红框 + cursor 进字段</li>
+    <li>动作完成后,卡片自动 re-verify;成功就翻绿、折叠 — 用户视觉看见进度往前走</li>
+  </ul>
+
+  <h2 class="section">UI 组件 4 — 自动恢复按钮(让用户少切 Chromium)</h2>
+
+  <div class="callout">
+    <b>核心想法:</b>对已知 fail 类型,卡片不应该只给 Copy / Focus / Retry 让用户自己折腾。
+    应该提供"我替你修"按钮 — 系统调用自己的能力(03-cv-engine 重渲染 / strategy ladder 试备用格式 / adapter 切换)直接在我们窗口里把问题搞定。<br><br>
+    <b>每按一次自动恢复,就少一次用户切 Chromium 的理由 → 留在我们窗口比例↑ → observer 工作时间长 → 飞轮数据收集越完整。</b>
+  </div>
+
+  <div class="mock">
+    <div class="mock-title">Recovery 1 · Resume too large</div>
+    <div class="fieldcard">
+      <h5>✗ Resume / CV — Upload failed</h5>
+      <div class="kv">Error: <b style="color: var(--bad);">File must be &lt; 2MB</b>(yours is 3.0MB)</div>
+      <div class="kv">Auto-fix available:</div>
+      <div class="acts">
+        <button class="btn primary">⚡ Re-render compressed (1.5MB) + retry</button>
+      </div>
+      <div class="kv" style="font-size: 11px; color: var(--dim); margin-top: 4px;">
+        调 03-cv-engine 渲染 quality=0.6 版本 + 自动 setInputFiles + verify
+      </div>
+      <div class="acts" style="margin-top: 6px;">
+        <button class="btn outline">📁 Use different file</button>
+        <button class="btn outline">✋ I'll handle it</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="mock-title">Recovery 2 · Phone format rejected</div>
+    <div class="fieldcard">
+      <h5>✗ Phone — Invalid format</h5>
+      <div class="kv">Tried: <code>"+1-929-235-3841"</code> · Form said: <b style="color: var(--bad);">"Invalid format"</b></div>
+      <div class="kv">Auto-fix available:</div>
+      <div class="acts">
+        <button class="btn primary">⚡ Try alternative formats</button>
+      </div>
+      <div class="kv" style="font-size: 11px; color: var(--dim); margin-top: 4px;">
+        ladder: <code>"9292353841"</code> → <code>"(929) 235-3841"</code> → <code>"+19292353841"</code>
+        — 每条试完 verify,中了就停
+      </div>
+      <div class="acts" style="margin-top: 6px;">
+        <button class="btn outline">📋 Copy original</button>
+        <button class="btn outline">✋ I'll handle it</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="mock-title">Recovery 3 · Unknown ATS</div>
+    <div class="fieldcard">
+      <h5>⚠ ATS not recognized (captivation.com)</h5>
+      <div class="kv">Auto-fill skipped — adapter unknown.</div>
+      <div class="kv">Quick identify(选完 load 对应 adapter + 重跑 Mode 2):</div>
+      <div class="acts">
+        <button class="btn primary">🌱 Greenhouse</button>
+        <button class="btn primary" style="background: #0969da;">🔵 Lever</button>
+        <button class="btn primary" style="background: #6f42c1;">🟣 Workday</button>
+        <button class="btn primary" style="background: #6b6356;">⚙ iCIMS</button>
+      </div>
+      <div class="acts" style="margin-top: 6px;">
+        <button class="btn outline">❓ I don't know</button>
+        <button class="btn outline">✋ Skip, I'll fill manually</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="mock-title">Recovery 4 · All strategies failed → user hint loop</div>
+    <div class="fieldcard">
+      <h5>✗ Disability Status — All 4 strategies failed</h5>
+      <div class="kv">Tried: selectOption / click / keyboard / role-locator</div>
+      <div class="kv">Tell me what worked for you(系统按 hint 试新策略):</div>
+      <div style="margin: 6px 0;">
+        <input type="text" placeholder="e.g. had to scroll inside dropdown then click..."
+               style="width:100%; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 4px; font-family: ui-monospace, monospace; font-size: 12px;">
+      </div>
+      <div class="acts">
+        <button class="btn primary">📤 Send hint</button>
+        <button class="btn outline">📋 Copy "I do not want to answer"</button>
+        <button class="btn outline">✋ I'll handle it</button>
+      </div>
+      <div class="kv" style="font-size: 11px; color: var(--dim); margin-top: 4px;">
+        hint 也存进 envelope → 飞轮看到同一 fingerprint 多个 hint 收敛到同一种动作 → propose 新 strategy 加进 ladder
+      </div>
+    </div>
+  </div>
+
+  <div class="callout good">
+    <b>每个自动恢复按钮本身就是一条飞轮信号:</b>
+    哪种 recovery 用户最常点 / 哪种最有效,系统按数据自动调用顺序。
+    Recovery 3 的 "Greenhouse" 按钮被点完 + 后续投递验证 → 也是给信号 G 的输入(用户标注的 ATS 类型)。
+  </div>
+
+  <h2 class="section">UI 组件 5 — Active observation(隐形,但关键)</h2>
+
+  <div class="callout info">
+    <b>关键创新:</b>用户在 Chromium 里手动填的字段,系统应该<b>自动认出来更新状态</b>,不要求用户回 dashboard 点"我填好了"。
+  </div>
+
+  <div class="card flat">
+    <div class="label">机制</div>
+    <ul style="margin: 6px 0;">
+      <li>02-playwright-runtime 在 page 上挂 <code>MutationObserver</code>,监听 <code>input / change</code> 事件</li>
+      <li>debounce 200ms → 取该字段当前 value → 跟 expected 比较</li>
+      <li>匹配 → 卡片翻绿 + flywheel 记 <code>final_state: "filled_by_user_manual"</code></li>
+      <li>不匹配但非空 → 卡片黄,记"用户填了但跟 expected 不同"(可能 expected 错,qa-bank 陈旧)</li>
+      <li>只监听 form 区域,不监听整个 document(避免 React re-render 风暴)</li>
+    </ul>
+  </div>
+
+  <h2 class="section">UI 组件 6 — 卡片 vs Observer 是两层(数据完整性保障)</h2>
+
+  <div class="callout">
+    <b>关键概念:卡片 UI 和 MutationObserver 不是同一件事。</b><br>
+    卡片是"看得见的引导",observer 是"看不见的安全网"。卡片只能覆盖 classifier 认出来的字段;observer 把卡片管不到的兜住。两层一起才能保证 envelope 数据完整。
+  </div>
+
+  <h3 style="margin-top: 14px;">两层各自负责什么</h3>
+
+  <table style="width:100%; border-collapse: collapse; font-size: 13px; margin: 10px 0;">
+    <thead>
+      <tr style="background: #fff; border-bottom: 2px solid var(--border-strong);">
+        <th style="text-align: left; padding: 8px 10px;">维度</th>
+        <th style="text-align: left; padding: 8px 10px;">卡片 UI</th>
+        <th style="text-align: left; padding: 8px 10px;">MutationObserver</th>
+      </tr>
+    </thead>
+    <tbody style="font-size: 12.5px;">
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>角色</b></td>
+        <td style="padding: 8px 10px;">已知 fail 的操作建议(Copy / Focus / Retry / 自动恢复)</td>
+        <td style="padding: 8px 10px;">观察用户在 Chromium 的<b>任何动作</b></td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>覆盖</b></td>
+        <td style="padding: 8px 10px;">只覆盖 classifier 认识的字段(有 label + expected)</td>
+        <td style="padding: 8px 10px;">全 form 区域,包括 unknown / upload / CAPTCHA / 自定义 widget</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>Unknown 字段</b></td>
+        <td style="padding: 8px 10px; color: var(--bad);">✗ 没卡片(我们不知道存在)</td>
+        <td style="padding: 8px 10px; color: var(--good);">✓ 抓 user_answer + surrounding_html → 喂 classifier</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>File upload</b></td>
+        <td style="padding: 8px 10px;">只能 Focus 高亮(无法在卡片里上传)</td>
+        <td style="padding: 8px 10px; color: var(--good);">✓ 抓 <code>&lt;input type=file&gt;</code> 的 change 事件 → file.size + file.name</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>CAPTCHA</b></td>
+        <td style="padding: 8px 10px;">只能 Focus(无法自动解)</td>
+        <td style="padding: 8px 10px; color: var(--good);">✓ 抓 token field 出现 → captcha_solved_by_user</td>
+      </tr>
+      <tr style="background: #fff;">
+        <td style="padding: 8px 10px;"><b>失败前提</b></td>
+        <td style="padding: 8px 10px; color: var(--bad);">用户不点卡片就没用</td>
+        <td style="padding: 8px 10px; color: var(--bad);">用户切到自己 Chrome / Safari 就废</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin-top: 14px;">3 层防御(越往后越被动)</h3>
+
+  <div class="card flat" style="background: var(--good-soft); border-color: var(--good); margin: 10px 0;">
+    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--good); font-weight: 700; margin-bottom: 6px;">Layer 1 · 卡片 UI · 主动</div>
+    <p style="margin: 4px 0; font-size: 13px;"><b>覆盖:</b>classifier 认识的 fail(known label + expected)</p>
+    <p style="margin: 4px 0; font-size: 13px;"><b>操作:</b>Copy / Focus / Retry / <b>自动恢复</b>(re-render PDF / 试备用 phone 格式 / 切 adapter)</p>
+    <p style="margin: 4px 0; font-size: 13px;"><b>缺口:</b>unknown / file picker / CAPTCHA / 复杂 widget(走 Layer 2)</p>
+  </div>
+
+  <div style="text-align: center; color: var(--accent); font-size: 18px;">↓</div>
+
+  <div class="card flat" style="background: var(--info-soft); border-color: var(--info); margin: 10px 0;">
+    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--info); font-weight: 700; margin-bottom: 6px;">Layer 2 · MutationObserver · 隐形,永远在跑</div>
+    <p style="margin: 4px 0; font-size: 13px;"><b>覆盖:</b>卡片管不到的 — 全部 Chromium 内 DOM 事件</p>
+    <p style="margin: 4px 0; font-size: 13px;"><b>抓:</b>unknown user_answer / file.size / token appear / 任何 input 事件 → 全部进 envelope</p>
+    <p style="margin: 4px 0; font-size: 13px;"><b>前提:</b>用户在我们的 Chromium 窗口里(任何方式操作都行,不限于卡片)</p>
+  </div>
+
+  <div style="text-align: center; color: var(--accent); font-size: 18px;">↓</div>
+
+  <div class="card flat" style="background: var(--bad-soft); border-color: var(--bad); margin: 10px 0;">
+    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--bad); font-weight: 700; margin-bottom: 6px;">Layer 3 · Lossy fallback · 用户切自己 Chrome / Safari 了</div>
+    <p style="margin: 4px 0; font-size: 13px;"><b>envelope:</b><code>outcome="abandoned_to_manual"</code></p>
+    <p style="margin: 4px 0; font-size: 13px;"><b>飞轮:</b>只用前 4 条信号(A strategy demote · D unlabeled fingerprint · G unknown ATS host · B 部分)</p>
+    <p style="margin: 4px 0; font-size: 13px;"><b>补救:</b>用户回 dashboard 点 Mark applied 时弹 30 秒 opt-in 问卷(Phone 最终用什么格式 · Resume 多大 · 哪题最难)</p>
+  </div>
+
+  <h3 style="margin-top: 18px;">真的只能 Chromium 操作的(observer 是唯一信号)</h3>
+
+  <table style="width:100%; border-collapse: collapse; font-size: 12.5px; margin: 8px 0;">
+    <thead>
+      <tr style="background: #fff; border-bottom: 2px solid var(--border-strong);">
+        <th style="text-align: left; padding: 6px 10px;">类型</th>
+        <th style="text-align: left; padding: 6px 10px;">系统能做的</th>
+        <th style="text-align: left; padding: 6px 10px;">系统不能做的</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 6px 10px;"><b>CAPTCHA</b></td>
+        <td style="padding: 6px 10px;">弹"在 Chromium 解" + observer 等 token field 出现</td>
+        <td style="padding: 6px 10px; color: var(--bad);">自动解</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 6px 10px;"><b>签名 pad</b></td>
+        <td style="padding: 6px 10px;">Focus 跳过去 + observer 等 canvas 变化</td>
+        <td style="padding: 6px 10px; color: var(--bad);">自动签</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 6px 10px;"><b>完全没 context 的 unknown</b></td>
+        <td style="padding: 6px 10px;">observer 抓 user_answer + surrounding_html → 喂 classifier</td>
+        <td style="padding: 6px 10px; color: var(--bad);">提前给提示(我们不知道是什么)</td>
+      </tr>
+      <tr style="background: #fff;">
+        <td style="padding: 6px 10px;"><b>复杂日期 / 多选自定义 widget</b></td>
+        <td style="padding: 6px 10px;">Focus + observer 等值变化</td>
+        <td style="padding: 6px 10px; color: var(--bad);">自动填(目前)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout good">
+    <b>底线:</b>只要用户**留在我们 Chromium 窗口**,即使我们完全没卡片 / 没 strategy / 没 adapter — observer 还能记下用户做了什么,**飞轮一样有学习材料**。
+    Layer 1 + 2 同时工作能覆盖 95% 场景;Layer 3 是切走自己浏览器的 fallback。
+  </div>
+
+  <h2 class="section">UI 组件 7 — Submit gate(防止糟糕状态下误提交)</h2>
+
+  <div class="mock">
+    <div class="mock-title">Mockup · gate 灰(未达成)</div>
+    <div class="statusboard" style="background: #fef0ea; border-color: var(--bad);">
+      <h4 style="color: var(--bad); margin: 0 0 6px;">⛔ 还有 3 个必填字段没好</h4>
+      <p style="font-size: 12.5px; color: var(--muted); margin: 4px 0 10px;">required 字段 verified 数没到全部前,Submit gate 不会转绿。</p>
+      <button class="btn disabled">Mark applied(disabled)</button>
+    </div>
+  </div>
+
+  <div class="mock">
+    <div class="mock-title">Mockup · gate 绿(达成)</div>
+    <div class="statusboard" style="background: #d8f3dc; border-color: var(--good);">
+      <h4 style="color: var(--good); margin: 0 0 4px;">✓ All required fields verified.</h4>
+      <p style="font-size: 13px; color: var(--text); margin: 4px 0 10px;">现在切到浏览器,点 Submit。我会自动检测页面跳转。</p>
+      <div class="actions">
+        <button class="btn primary">🔵 Open Chromium</button>
+        <button class="btn outline">我已点 Submit,手动 Mark</button>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="section">UI 组件 8 — Submit 自动检测</h2>
+
+  <p>用户切到 Chromium 点 Submit 后,02-playwright-runtime 后台监听 — <b>不靠用户记得来点 Mark applied</b>:</p>
+
+  <div class="card">
+    <div class="label">检测信号(三选一即触发自动 Mark)</div>
+    <ul style="margin: 6px 0;">
+      <li><span class="dot good"></span>&nbsp; URL 变化(含 <code>success</code> / <code>thank-you</code> / <code>confirmation</code>)— 强信号</li>
+      <li><span class="dot good"></span>&nbsp; HTTP request to <code>/applications</code> 返 200 + redirect — 强信号</li>
+      <li><span class="dot good"></span>&nbsp; 页面出现 "Thank you for applying" 类文案(adapter rule 提供 selector)— 强信号</li>
+      <li><span class="dot warn"></span>&nbsp; 60s 无变化 — 询问用户</li>
+      <li><span class="dot warn"></span>&nbsp; 用户关 tab / 切 URL 离开 — 询问"是否已提交?"</li>
+    </ul>
+    <p style="font-size: 13px; color: var(--muted); margin: 8px 0 0;">
+      检测到强信号 → 自动 POST <code>/api/career/apply/:jobId/submitted</code> → 状态机 applied → session 关闭 + 写 history.jsonl。
+      Mark applied 按钮变成 fallback,仅当系统检测失败时显眼。
+    </p>
+  </div>
+
+  <h2 class="section">完整时间线</h2>
+
+  <div class="card">
+    <div class="label">用户视角 — Captivation 投递从 partial 到 Applied</div>
+    <div class="timeline">
+      <div class="ev"><span class="t">00:00</span> Mode 2 启动,自动填表 → 5 verified / 9 fail / 7 unlabeled / 1 CAPTCHA</div>
+      <div class="ev"><span class="t">00:30</span> Triage 显示<b>同根 EEO 分组提示</b></div>
+      <div class="ev good"><span class="t">00:32</span> 用户点 EEO 组的 <b>Batch retry (react_select_click)</b></div>
+      <div class="ev good"><span class="t">00:40</span> 9 字段里 <b>6 个翻绿</b>,3 个仍红</div>
+      <div class="ev user"><span class="t">00:45</span> 用户点第一个红字段 Focus → 切到 Chromium → 手填</div>
+      <div class="ev good"><span class="t">00:48</span> 系统检测 DOM 变化 → re-verify → 卡片翻绿(重复 3 次)</div>
+      <div class="ev user"><span class="t">01:30</span> Unlabeled 7 个里 4 个 Focus + Copy 填上,3 个 optional 直接 Skip</div>
+      <div class="ev user"><span class="t">02:00</span> CAPTCHA 用户在浏览器解掉</div>
+      <div class="ev good"><span class="t">02:05</span> <b>Submit gate 转绿</b></div>
+      <div class="ev user"><span class="t">02:08</span> 用户在浏览器点 Submit</div>
+      <div class="ev good"><span class="t">02:09</span> 系统检测到 URL → /thank-you → <b>自动 Mark applied</b></div>
+    </div>
+    <p style="font-size: 12px; color: var(--muted); margin-top: 10px;">
+      <span class="dot good"></span>&nbsp;系统动作 &nbsp;&nbsp; <span class="dot user"></span>&nbsp;用户动作
+    </p>
+  </div>
+
+  <div class="callout good">
+    <b>核心差别:</b>用户从未在 dashboard 上点过 "Mark applied"。系统全程引导 + 检测 + 收尾。
+    "投出去了"这件事不靠记性,靠浏览器跳转的真实信号。
+  </div>
+
+</section>
+
+<!-- ════════════════════════════ SYSTEM TAB ════════════════════════════ -->
+<section id="system" class="tab-pane">
+
+  <h2 class="section">两个阶段 — 在线收数据 / 离线变更强</h2>
+
+  <div class="callout info">
+    <b>关键分清两件事:</b><br>
+    <b>① 在线(投递的那 2 分钟):</b>系统**只做一件事 — 把每个动作的"事实"写进 envelope。</b>不学,不改 rule,只记。<br>
+    <b>② 离线(投完之后,后台跑):</b>飞轮读最近 7 天的所有 envelope,**自动 propose 改动**(strategy 重排 / 新 adapter rule / qa-bank cache),
+    用户 review 后人工 promote。promote 完,**下一次同 ATS 投递就更快了**。
+  </div>
+
+  <h2 class="section">阶段 1 · 在线 — Captivation 这次 apply 留下了什么数据</h2>
+
+  <div class="callout bad">
+    <b>真实投递不是 happy path。</b> 一次第一次投陌生 ATS 的 session 包含一堆失败模式:adapter 不认识这家网站 / resume 上传被拒(文件太大)/ 字段格式被表单拒绝(phone 必须不带连字符)/ system 完全没答案(开放题)/ 4 种 strategy 全失败 / 7 个字段连 label 都找不到 ...
+    <br><br>
+    <b>这些"问题"恰恰是飞轮最有价值的料 — 没有失败就没东西可学。</b>
+    下面时间线把 messy 路径完整还原,每行 envelope 列展示该刻被记下的东西。
+  </div>
+
+  <div class="card">
+    <div class="label">时间线 → envelope 写入(<span style="color: var(--bad);">红 = 失败/未知</span>,<span style="color: var(--good);">绿 = 成功</span>,<span style="color: var(--info);">蓝 = 用户兜底</span>)</div>
+
+    <table style="width:100%; border-collapse: collapse; font-size: 12.5px; margin-top: 6px;">
+      <thead>
+        <tr style="border-bottom: 2px solid var(--border-strong);">
+          <th style="text-align: left; padding: 6px 8px; width: 60px;">时刻</th>
+          <th style="text-align: left; padding: 6px 8px;">发生了什么</th>
+          <th style="text-align: left; padding: 6px 8px;">写到 envelope 的字段</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <!-- ATS unknown -->
+        <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+          <td class="mono" style="padding: 6px 8px; color: var(--bad);">00:00</td>
+          <td style="padding: 6px 8px;"><b style="color: var(--bad);">⚠ adapter 检测:URL 不匹配任何 known ATS</b>(captivation.com 是首次见)</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>ats_detected="unknown"</code><br>
+            <code>ats_confidence=0.0</code><br>
+            <code>site_url="..."</code><br>
+            <code>host="captivation.com"</code>
+          </td>
+        </tr>
+
+        <!-- 7 unlabeled -->
+        <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+          <td class="mono" style="padding: 6px 8px; color: var(--warn);">00:02</td>
+          <td style="padding: 6px 8px;">DOM snapshot · classifier 标 14 control,但<b style="color: var(--warn);">其中 7 个 label 找不到</b>(form 结构跟已知模板差异大)</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>fields[14] {</code><br>
+            <code>&nbsp;&nbsp;label,</code> 7 个 = <code>"(unlabeled)"</code><br>
+            <code>&nbsp;&nbsp;surrounding_html_sample</code> 抓样<br>
+            <code>&nbsp;&nbsp;control_fingerprint</code>
+          </td>
+        </tr>
+
+        <!-- Resume upload fail -->
+        <tr style="border-bottom: 1px solid var(--border); background: var(--bad-soft);">
+          <td class="mono" style="padding: 6px 8px; color: var(--bad);">00:08</td>
+          <td style="padding: 6px 8px;"><b style="color: var(--bad);">✗ Resume 上传失败</b> — <code>setInputFiles(base.pdf)</code> 跑了,form 弹 inline error "File must be &lt; 2MB"</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>fields[5].strategies_tried.push({</code><br>
+            <code>&nbsp;&nbsp;name:"setInputFiles",</code><br>
+            <code>&nbsp;&nbsp;result:"upload_failed",</code><br>
+            <code>&nbsp;&nbsp;error_code:"file_too_large",</code><br>
+            <code>&nbsp;&nbsp;error_msg:"File must be &lt; 2MB"</code><br>
+            <code>})</code><br>
+            <code>fields[5].attempted_path="..."</code><br>
+            <code>fields[5].file_size=3145728</code>
+          </td>
+        </tr>
+
+        <!-- Phone validation reject -->
+        <tr style="border-bottom: 1px solid var(--border); background: var(--bad-soft);">
+          <td class="mono" style="padding: 6px 8px; color: var(--bad);">00:10</td>
+          <td style="padding: 6px 8px;"><b style="color: var(--bad);">✗ Phone 字段格式被拒</b> — fill <code>"+1-929-235-3841"</code> 落了,但 form 弹 "Invalid format"</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>fields[6].strategies_tried.push({</code><br>
+            <code>&nbsp;&nbsp;name:"fill",</code><br>
+            <code>&nbsp;&nbsp;result:"validation_rejected",</code><br>
+            <code>&nbsp;&nbsp;validation_msg:"Invalid format",</code><br>
+            <code>&nbsp;&nbsp;value_attempted:"+1-929-..."</code><br>
+            <code>})</code>
+          </td>
+        </tr>
+
+        <!-- selectOption no effect -->
+        <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+          <td class="mono" style="padding: 6px 8px; color: var(--warn);">00:12</td>
+          <td style="padding: 6px 8px;">"Are You Authorized..." 试 <code>selectOption("Yes")</code> → form 仍空</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>fields[3].strategies_tried.push({</code><br>
+            <code>&nbsp;&nbsp;name:"selectOption",</code><br>
+            <code>&nbsp;&nbsp;result:"no_effect"</code><br>
+            <code>})</code>
+          </td>
+        </tr>
+
+        <!-- All strategies failed -->
+        <tr style="border-bottom: 1px solid var(--border); background: var(--bad-soft);">
+          <td class="mono" style="padding: 6px 8px; color: var(--bad);">00:15</td>
+          <td style="padding: 6px 8px;"><b style="color: var(--bad);">✗ "Disability Status" 4 种 strategy 全失败</b>(selectOption / click / keyboard / role-locator)</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>fields[9].strategies_tried = [</code><br>
+            <code>&nbsp;&nbsp;4 条全 no_effect</code><br>
+            <code>]</code><br>
+            <code>fields[9].final_state =</code><br>
+            <code>&nbsp;&nbsp;"all_strategies_failed"</code><br>
+            <code>fields[9].needs_user = true</code>
+          </td>
+        </tr>
+
+        <!-- No answer available -->
+        <tr style="border-bottom: 1px solid var(--border); background: var(--bad-soft);">
+          <td class="mono" style="padding: 6px 8px; color: var(--bad);">00:18</td>
+          <td style="padding: 6px 8px;"><b style="color: var(--bad);">✗ "Why do you want to work here?" 系统压根没答案</b>(qa-bank 无记录 + identity / narrative 无对应字段)</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>fields[8].expected = null</code><br>
+            <code>fields[8].final_state =</code><br>
+            <code>&nbsp;&nbsp;"no_answer_available"</code><br>
+            <code>fields[8].reason =</code><br>
+            <code>&nbsp;&nbsp;"no_qa_bank_match_</code><br>
+            <code>&nbsp;&nbsp;&nbsp;and_no_identity_field"</code>
+          </td>
+        </tr>
+
+        <!-- Retry success -->
+        <tr style="border-bottom: 1px solid var(--border); background: var(--good-soft);">
+          <td class="mono" style="padding: 6px 8px; color: var(--good);">00:32</td>
+          <td style="padding: 6px 8px;"><b style="color: var(--good);">✓ 用户点 Batch retry → react_select_click 成功</b>(6/9 EEO 字段救回来)</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>fields[3].strategies_tried.push({</code><br>
+            <code>&nbsp;&nbsp;name:"react_select_click",</code><br>
+            <code>&nbsp;&nbsp;result:"verified"</code><br>
+            <code>})</code><br>
+            <code>fields[3].final_state =</code><br>
+            <code>&nbsp;&nbsp;"verified_after_retry"</code>
+          </td>
+        </tr>
+
+        <!-- User manual fill open question -->
+        <tr style="border-bottom: 1px solid var(--border); background: var(--info-soft);">
+          <td class="mono" style="padding: 6px 8px; color: var(--info);">00:45</td>
+          <td style="padding: 6px 8px;"><b style="color: var(--info);">↪ 用户切 Chromium 答开放题</b> "Why do you want to work here?" — 写了 200 字</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>fields[8].final_state =</code><br>
+            <code>&nbsp;&nbsp;"filled_by_user_manual"</code><br>
+            <code>fields[8].user_answer =</code><br>
+            <code>&nbsp;&nbsp;"I'm passionate about..."</code><br>
+            <code>fields[8].user_time_ms = 32000</code>
+          </td>
+        </tr>
+
+        <!-- User retries phone -->
+        <tr style="border-bottom: 1px solid var(--border); background: var(--info-soft);">
+          <td class="mono" style="padding: 6px 8px; color: var(--info);">00:55</td>
+          <td style="padding: 6px 8px;"><b style="color: var(--info);">↪ 用户改 Phone 格式</b> 为 <code>"9292353841"</code> → form 接受 ✓</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>fields[6].final_state =</code><br>
+            <code>&nbsp;&nbsp;"filled_by_user_</code><br>
+            <code>&nbsp;&nbsp;&nbsp;manual_after_validation"</code><br>
+            <code>fields[6].user_answer = "9292353841"</code><br>
+            <code>fields[6].format_lesson =</code><br>
+            <code>&nbsp;&nbsp;"no_dashes_no_country_code"</code>
+          </td>
+        </tr>
+
+        <!-- User compresses resume -->
+        <tr style="border-bottom: 1px solid var(--border); background: var(--info-soft);">
+          <td class="mono" style="padding: 6px 8px; color: var(--info);">01:00</td>
+          <td style="padding: 6px 8px;"><b style="color: var(--info);">↪ 用户压缩 resume(3MB → 1.5MB)再上传</b> → 接受 ✓</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>fields[5].final_state =</code><br>
+            <code>&nbsp;&nbsp;"filled_by_user_</code><br>
+            <code>&nbsp;&nbsp;&nbsp;manual_after_upload_fail"</code><br>
+            <code>fields[5].user_filename =</code><br>
+            <code>&nbsp;&nbsp;"Resume_compressed.pdf"</code><br>
+            <code>fields[5].user_file_size = 1500000</code>
+          </td>
+        </tr>
+
+        <!-- User unlabeled filled -->
+        <tr style="border-bottom: 1px solid var(--border); background: var(--info-soft);">
+          <td class="mono" style="padding: 6px 8px; color: var(--info);">01:20</td>
+          <td style="padding: 6px 8px;"><b style="color: var(--info);">↪ 用户对 4 个 unlabeled 字段手填了答案</b>(这些答案 + 周围 HTML 会喂回 classifier)</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>fields[11..14].final_state =</code><br>
+            <code>&nbsp;&nbsp;"filled_by_user_manual"</code><br>
+            <code>fields[11..14].user_answer = ...</code><br>
+            <code>(surrounding_html 之前已抓)</code>
+          </td>
+        </tr>
+
+        <!-- skipped -->
+        <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+          <td class="mono" style="padding: 6px 8px; color: var(--muted);">01:30</td>
+          <td style="padding: 6px 8px;">3 个 unlabeled optional 字段用户点 Skip</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>fields[15..17].final_state =</code><br>
+            <code>&nbsp;&nbsp;"skipped_by_user"</code>
+          </td>
+        </tr>
+
+        <!-- CAPTCHA -->
+        <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+          <td class="mono" style="padding: 6px 8px; color: var(--muted);">02:00</td>
+          <td style="padding: 6px 8px;">CAPTCHA 用户在浏览器解掉,系统检测到 token</td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>fields[18].final_state =</code><br>
+            <code>&nbsp;&nbsp;"captcha_solved_by_user"</code>
+          </td>
+        </tr>
+
+        <!-- Submit -->
+        <tr style="border-bottom: 1px solid var(--border); background: var(--good-soft);">
+          <td class="mono" style="padding: 6px 8px; color: var(--good);">02:09</td>
+          <td style="padding: 6px 8px;"><b style="color: var(--good);">✓ URL → /thank-you,系统自动检测</b></td>
+          <td class="mono" style="padding: 6px 8px;">
+            <code>outcome = "applied"</code><br>
+            <code>submit_detected_by = "url_redirect"</code>
+          </td>
+        </tr>
+
+        <!-- Session closed -->
+        <tr style="background: var(--good-soft);">
+          <td class="mono" style="padding: 6px 8px; color: var(--good);">02:10</td>
+          <td style="padding: 6px 8px; color: var(--good);"><b>Session 关闭 — envelope 整条 append 到 history.jsonl</b></td>
+          <td class="mono" style="padding: 6px 8px; color: var(--good);">
+            <code>data/career/qa-bank/</code><br>
+            <code>history.jsonl</code> += 1 行
+          </td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <b>注意看背景色分布:</b>红(失败/未知)≥ 蓝(用户兜底)≥ 绿(自动成功)。
+    这<b>就是真实</b>的第一次投陌生 ATS — 系统能干净自动完成的字段是少数,大部分要么失败要么走用户兜底。
+    <br><br>
+    但<b>每一行红 / 蓝</b>都是 envelope 里的一个"学习点":失败的策略告诉飞轮该 demote 谁,用户的兜底告诉飞轮正确答案 / 正确格式 / 正确文件大小是什么。<b>失败不是 bug,是燃料。</b>
+  </div>
+
+  <p style="margin-top: 12px;">所以这次 apply 留给系统的<b>就是一行 JSON</b>(envelope)。下面是真实形状 —— 每个 field 的 <code>final_state</code> 颜色不一样,失败状态写得很细:</p>
+
+  <pre class="code">{
+  <span class="k">"session_id"</span>: <span class="s">"captivation-2026-05-25-XXXX"</span>,
+  <span class="k">"ats_detected"</span>: <span class="s">"unknown"</span>,                  <span class="c">// ← 没认出来 → 信号 G(propose 新 adapter)</span>
+  <span class="k">"ats_confidence"</span>: <span class="n">0.0</span>,
+  <span class="k">"host"</span>: <span class="s">"captivation.com"</span>,
+  <span class="k">"outcome"</span>: <span class="s">"applied"</span>,
+  <span class="k">"submit_detected_by"</span>: <span class="s">"url_redirect"</span>,         <span class="c">// → 信号 F(submit detection 评分)</span>
+  <span class="k">"counters"</span>: {
+    <span class="k">"verified_auto"</span>: <span class="n">3</span>,
+    <span class="k">"verified_after_retry"</span>: <span class="n">6</span>,
+    <span class="k">"filled_by_user_manual"</span>: <span class="n">4</span>,
+    <span class="k">"filled_after_validation_reject"</span>: <span class="n">1</span>,        <span class="c">// ← 失败 → 兜底</span>
+    <span class="k">"filled_after_upload_fail"</span>: <span class="n">1</span>,             <span class="c">// ← 失败 → 兜底</span>
+    <span class="k">"all_strategies_failed"</span>: <span class="n">1</span>,                <span class="c">// ← 完全失败</span>
+    <span class="k">"no_answer_available"</span>: <span class="n">1</span>,                  <span class="c">// ← 系统没答案</span>
+    <span class="k">"skipped_by_user"</span>: <span class="n">3</span>,
+    <span class="k">"captcha_solved_by_user"</span>: <span class="n">1</span>
+  },
+  <span class="k">"fields"</span>: [
+    <span class="c">// === 失败:resume 上传(文件太大) → 用户兜底压缩重传 ===</span>
+    {
+      <span class="k">"label"</span>: <span class="s">"Resume / CV"</span>,
+      <span class="k">"control_fingerprint"</span>: { <span class="k">"tag"</span>: <span class="s">"input"</span>, <span class="k">"type"</span>: <span class="s">"file"</span>,
+        <span class="k">"ancestors"</span>: [<span class="s">".application__resume-upload"</span>] },
+      <span class="k">"strategies_tried"</span>: [
+        { <span class="k">"name"</span>: <span class="s">"setInputFiles"</span>,  <span class="k">"result"</span>: <span class="s">"upload_failed"</span>,
+          <span class="k">"error_code"</span>: <span class="s">"file_too_large"</span>,
+          <span class="k">"error_msg"</span>: <span class="s">"File must be &lt; 2MB"</span>,
+          <span class="k">"attempted_size"</span>: <span class="n">3145728</span> }
+      ],
+      <span class="k">"final_state"</span>: <span class="s">"filled_by_user_manual_after_upload_fail"</span>,
+      <span class="k">"user_filename"</span>: <span class="s">"Resume_compressed.pdf"</span>,
+      <span class="k">"user_file_size"</span>: <span class="n">1500000</span>                <span class="c">// ← 信号 H:这家 ATS 限 2MB</span>
+    },
+
+    <span class="c">// === 失败:phone 格式被拒 → 用户兜底改格式 ===</span>
+    {
+      <span class="k">"label"</span>: <span class="s">"Phone"</span>,
+      <span class="k">"expected"</span>: <span class="s">"+1-929-235-3841"</span>,
+      <span class="k">"strategies_tried"</span>: [
+        { <span class="k">"name"</span>: <span class="s">"fill"</span>, <span class="k">"result"</span>: <span class="s">"validation_rejected"</span>,
+          <span class="k">"validation_msg"</span>: <span class="s">"Invalid format"</span>,
+          <span class="k">"value_attempted"</span>: <span class="s">"+1-929-235-3841"</span> }
+      ],
+      <span class="k">"final_state"</span>: <span class="s">"filled_by_user_manual_after_validation"</span>,
+      <span class="k">"user_answer"</span>: <span class="s">"9292353841"</span>,              <span class="c">// ← 信号 C:这家要 no-format</span>
+      <span class="k">"format_lesson"</span>: <span class="s">"no_dashes_no_country_code"</span>
+    },
+
+    <span class="c">// === 成功(retry):EEO 段 1 个,react_select_click 救回来 ===</span>
+    {
+      <span class="k">"label"</span>: <span class="s">"Are You Authorized to work in the U.S."</span>,
+      <span class="k">"expected"</span>: <span class="s">"Yes"</span>,
+      <span class="k">"control_fingerprint"</span>: { <span class="k">"tag"</span>: <span class="s">"div"</span>, <span class="k">"role"</span>: <span class="s">"combobox"</span>,
+        <span class="k">"class"</span>: <span class="s">"select__control"</span>,
+        <span class="k">"ancestors"</span>: [<span class="s">".application-question--eeo"</span>] },
+      <span class="k">"strategies_tried"</span>: [
+        { <span class="k">"name"</span>: <span class="s">"selectOption"</span>,       <span class="k">"result"</span>: <span class="s">"no_effect"</span> },
+        { <span class="k">"name"</span>: <span class="s">"react_select_click"</span>, <span class="k">"result"</span>: <span class="s">"verified"</span> }
+      ],
+      <span class="k">"final_state"</span>: <span class="s">"verified_after_retry"</span>      <span class="c">// → 信号 A + B</span>
+    },
+
+    <span class="c">// === 完全失败:4 种 strategy 全军覆没 ===</span>
+    {
+      <span class="k">"label"</span>: <span class="s">"Disability Status"</span>,
+      <span class="k">"expected"</span>: <span class="s">"I do not want to answer"</span>,
+      <span class="k">"control_fingerprint"</span>: { ... <span class="s">"unusual-pattern"</span> ... },
+      <span class="k">"strategies_tried"</span>: [
+        { <span class="k">"name"</span>: <span class="s">"selectOption"</span>,        <span class="k">"result"</span>: <span class="s">"no_effect"</span> },
+        { <span class="k">"name"</span>: <span class="s">"react_select_click"</span>,  <span class="k">"result"</span>: <span class="s">"no_effect"</span> },
+        { <span class="k">"name"</span>: <span class="s">"keyboard"</span>,            <span class="k">"result"</span>: <span class="s">"no_effect"</span> },
+        { <span class="k">"name"</span>: <span class="s">"role_locator"</span>,        <span class="k">"result"</span>: <span class="s">"no_effect"</span> }
+      ],
+      <span class="k">"final_state"</span>: <span class="s">"all_strategies_failed"</span>,   <span class="c">// → 信号 A 紧急:需要新 strategy</span>
+      <span class="k">"needs_user"</span>: <span class="n">true</span>
+    },
+
+    <span class="c">// === 系统没答案:开放题 expected=null ===</span>
+    {
+      <span class="k">"label"</span>: <span class="s">"Why do you want to work here?"</span>,
+      <span class="k">"expected"</span>: <span class="n">null</span>,                       <span class="c">// ← 系统没法答</span>
+      <span class="k">"reason_no_answer"</span>: <span class="s">"no_qa_bank_match_and_no_narrative_field"</span>,
+      <span class="k">"final_state"</span>: <span class="s">"filled_by_user_manual_from_blank"</span>,
+      <span class="k">"user_answer"</span>: <span class="s">"I'm passionate about distributed systems..."</span>,
+      <span class="k">"user_time_ms"</span>: <span class="n">32000</span>                    <span class="c">// → 信号 I:存进 narrative.yml?</span>
+    },
+
+    <span class="c">// === Unlabeled:用户填了答案,带 HTML context 给 classifier 学 ===</span>
+    {
+      <span class="k">"label"</span>: <span class="s">"(unlabeled)"</span>,                  <span class="c">// → 信号 D(classifier 重训)</span>
+      <span class="k">"control_fingerprint"</span>: {...},
+      <span class="k">"surrounding_html_sample"</span>: <span class="s">"&lt;div&gt;...How did you hear about us?&lt;/div&gt;"</span>,
+      <span class="k">"final_state"</span>: <span class="s">"filled_by_user_manual"</span>,
+      <span class="k">"user_answer"</span>: <span class="s">"LinkedIn"</span>
+    }
+    <span class="c">// ... 其他 13 个 field 省略</span>
+  ]
+}</pre>
+
+  <div class="callout">
+    <b>关键字段升级版(7 个,前 4 个跟之前一样,后 3 个是失败模式专属):</b><br>
+    ① <code>control_fingerprint</code> — 字段长什么样<br>
+    ② <code>strategies_tried[]</code> — 试了哪些填法 + 每条的 result + error_code/validation_msg<br>
+    ③ <code>final_state</code> — verified / verified_after_retry / filled_by_user_manual /
+       <b style="color: var(--bad);">_after_validation</b> / <b style="color: var(--bad);">_after_upload_fail</b> /
+       <b style="color: var(--bad);">all_strategies_failed</b> / <b style="color: var(--bad);">no_answer_available</b> / skipped / captcha_solved<br>
+    ④ <code>label</code> + <code>expected</code> — 问题 + 期望答案(<b>expected 可以是 null</b> = 系统不知道怎么答)<br>
+    ⑤ <code>user_answer</code> + <code>format_lesson</code> — 用户真填的 + 系统该学的格式教训<br>
+    ⑥ <code>error_code / validation_msg / error_msg</code> — 失败的精确原因<br>
+    ⑦ <code>surrounding_html_sample</code> — unlabeled 字段的 DOM 上下文(给 classifier 重训学)
+  </div>
+
+  <h2 class="section">失败模式 → 飞轮信号映射</h2>
+
+  <p>这是阶段 1 → 阶段 2 的桥梁。每种失败模式 envelope 里都有专属字段,而每种字段都被某条飞轮信号(A-I)消费。**没有失败数据就没东西可学**。</p>
+
+  <table style="width:100%; border-collapse: collapse; font-size: 12.5px; margin: 12px 0;">
+    <thead>
+      <tr style="background: #fff; border-bottom: 2px solid var(--border-strong);">
+        <th style="text-align: left; padding: 8px 10px; width: 22%;">失败模式</th>
+        <th style="text-align: left; padding: 8px 10px; width: 26%;">envelope 标记</th>
+        <th style="text-align: left; padding: 8px 10px;">→ 飞轮怎么用</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px; color: var(--bad);"><b>⚠ ATS 没认出来</b></td>
+        <td class="mono" style="padding: 8px 10px;"><code>ats_detected="unknown"</code><br><code>host="captivation.com"</code></td>
+        <td style="padding: 8px 10px;"><b>信号 G(新)</b> — 同 host 累积 ≥ 3 次 unknown → propose 新建 <code>captivation.yml</code> adapter scaffolding(基于这 3 次的 DOM 共性)</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px; color: var(--bad);"><b>✗ Resume 上传失败</b></td>
+        <td class="mono" style="padding: 8px 10px;"><code>error_code="file_too_large"</code><br><code>user_file_size=1500000</code></td>
+        <td style="padding: 8px 10px;"><b>信号 H(新)</b> — adapter 加 <code>resume_constraints</code> 块(max_size / accepted_format)。下次同 ATS 自动用压缩版 resume</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px; color: var(--bad);"><b>✗ 字段格式被拒</b></td>
+        <td class="mono" style="padding: 8px 10px;"><code>validation_rejected</code><br><code>format_lesson="no_dashes"</code></td>
+        <td style="padding: 8px 10px;"><b>信号 C 升级</b> — qa-bank 不只存 value,还存 <code>accepted_format</code>。同 ATS 下次同字段直接用对的格式</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px; color: var(--bad);"><b>✗ 全部 strategy 失败</b></td>
+        <td class="mono" style="padding: 8px 10px;"><code>all_strategies_failed</code><br><code>strategies_tried 4 条全 no_effect</code></td>
+        <td style="padding: 8px 10px;"><b>信号 A 紧急路径</b> — 这个 fingerprint 当前 strategy ladder 全军覆没 → 03-dashboard 显眼提示:"X 个 fingerprint 需要新 strategy 代码,看附带的 HTML snapshot 设计"</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px; color: var(--bad);"><b>✗ 系统压根没答案</b></td>
+        <td class="mono" style="padding: 8px 10px;"><code>expected=null</code><br><code>final_state="no_answer_available"</code><br><code>user_answer="..."</code></td>
+        <td style="padding: 8px 10px;"><b>信号 I(新)</b> — 用户填的答案 + label → propose 加进 <code>narrative.yml</code> 或 qa-bank。"你写了 200 字答 Why-do-you-want-to-work-here,要存吗?以后所有 ATS 同类问题自动用"</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px; color: var(--warn);"><b>❓ 7 个 label 找不到</b></td>
+        <td class="mono" style="padding: 8px 10px;"><code>label="(unlabeled)"</code><br><code>surrounding_html_sample</code><br><code>user_answer="LinkedIn"</code></td>
+        <td style="padding: 8px 10px;"><b>信号 D</b>(已有,这里富化输入)— classifier 重训池里每条 unlabeled 都带"用户最终填了什么"作为<b>正确标注</b>,calibration 时算分类准确率</td>
+      </tr>
+      <tr style="background: #fff;">
+        <td style="padding: 8px 10px; color: var(--warn);"><b>↪ 用户兜底常见模式</b></td>
+        <td class="mono" style="padding: 8px 10px;"><code>filled_by_user_manual</code> 同 label 累积</td>
+        <td style="padding: 8px 10px;"><b>信号 E</b>(已有)— 同 label 连续 3 次手填且 answer 一致 → propose 加进 identity.yml</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout good">
+    <b>所以"unknown / 上传失败 / 字段错误"不是 bug,是飞轮的输入数据。</b>
+    第一次投 Captivation 这次留下了 6 类失败 envelope 标记,飞轮跑完后会产出至少 5 条 propose(新 adapter / resume 限制 / qa-bank format / narrative 字段 / 紧急 strategy 提示),
+    每条 propose 用户 Promote 完都会让<b>下次同类投递更顺</b>。
+  </div>
+
+  <h2 class="section">阶段 2 · 离线 — 飞轮怎么把数据变成"下次更准"</h2>
+
+  <p>飞轮跑 <b>cron(每日)</b> 或 <b>on-demand</b>。读最近 7 天所有 envelope,对每条信号做<b>聚合 → 拟改动 → 写 promote-queue</b>。用户在 dashboard review 后人工 promote。</p>
+
+  <p>下面 6 条信号每条都给出:<b>读什么 → 算什么 → 写到哪 → 用户下次能看到什么差别</b>。</p>
+
+  <!-- Signal A -->
+  <div class="card" style="border-left: 4px solid var(--accent);">
+    <div class="label">信号 A · Strategy ladder 自动重排序</div>
+    <h3 style="margin-top: 4px;">"哪种填法对哪种字段最灵"</h3>
+
+    <table style="width:100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px;">
+      <tr>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">读</b><br>
+          所有 envelope 里 <code>strategies_tried</code> +
+          <code>control_fingerprint.class</code> +
+          <code>final_state</code>
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">算</b><br>
+          按 fingerprint class 分桶,统计每条 strategy 的命中率:<br><br>
+          <code>"select__control"</code> 桶:<br>
+          · selectOption&nbsp;&nbsp;&nbsp; <span style="color:var(--bad);">4%</span> (3/72)<br>
+          · react_select_click <span style="color:var(--good);">87%</span> (39/45)<br>
+          · keyboard&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style="color:var(--good);">60%</span> (18/30)
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top;">
+          <b style="font-size:11px; color: var(--muted);">写</b><br>
+          <code>greenhouse.yml</code> 里 strategy_priority 字段(auto-tuned 块,带时间戳标记):<br><br>
+          <code>"select__control":<br>
+          &nbsp;&nbsp;- react_select_click<br>
+          &nbsp;&nbsp;- keyboard<br>
+          &nbsp;&nbsp;- selectOption&nbsp;&nbsp; # demoted</code>
+        </td>
+      </tr>
+    </table>
+
+    <div class="callout good" style="margin-top: 10px;">
+      <b>下次效果:</b>同样 Greenhouse EEO 字段,系统第 1 次就用 <code>react_select_click</code>,不再浪费 <code>selectOption</code> 那一轮失败 → 平均省 1-2 秒/字段。
+    </div>
+  </div>
+
+  <!-- Signal B -->
+  <div class="card" style="border-left: 4px solid var(--accent);">
+    <div class="label">信号 B · 整段 EEO 自动生成 site adapter rule(最有杀伤力的一条)</div>
+    <h3 style="margin-top: 4px;">"4 次 Greenhouse 都在 EEO 段挂,该写新 rule 了"</h3>
+
+    <table style="width:100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px;">
+      <tr>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">读</b><br>
+          最近 N 次 <code>ats_detected = "greenhouse"</code> 的 envelope,
+          按 <code>control_fingerprint.ancestors</code> 共享祖先聚类
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">算</b><br>
+          找到一组:<code>.application-question--eeo</code> 共 36 个字段,
+          原生 selectOption verify 率 36%。<br><br>
+          <b>试拟 candidate rule:</b><br>
+          <code>eeo_section:<br>
+          &nbsp;&nbsp;primary_strategy:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;react_select_click</code><br><br>
+          在<b>保存的 snapshot</b> 上 replay:<br>
+          预测 verify 率 → 95%。提升 +59pp ✓
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top;">
+          <b style="font-size:11px; color: var(--muted);">写</b><br>
+          <code>data/career/eval-fixtures/<br>promote-queue/<br>greenhouse-eeo-rule-<br>2026-05-26.yaml</code><br><br>
+          dashboard 队列里出现:<br>
+          "Adapter Rule Proposal:<br>greenhouse.yml +eeo_section<br>(36%→95%, 0 regression)"<br>
+          [Review YAML] [Promote] [Reject]
+        </td>
+      </tr>
+    </table>
+
+    <div class="callout good" style="margin-top: 10px;">
+      <b>用户 Promote 之后:</b>所有 Greenhouse 投递的 EEO 段 → 0 LLM / 0 retry / 一次填对。
+      <b>这才是"投得多就更快"的真正机制。</b>
+    </div>
+  </div>
+
+  <!-- Signal C -->
+  <div class="card" style="border-left: 4px solid var(--accent);">
+    <div class="label">信号 C · qa-bank 答案缓存(跨 ATS)</div>
+    <h3 style="margin-top: 4px;">"这个问题我以前在别家答过,直接用,不调 LLM"</h3>
+
+    <table style="width:100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px;">
+      <tr>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">读</b><br>
+          所有 envelope 里 <code>final_state ∈ {verified, verified_after_retry, filled_by_user_manual}</code> 的字段,带 label + expected/user_answer
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">算</b><br>
+          label 跑一遍 normalize(lowercase, 去标点, 提关键词)→ label_hash。
+          同 hash 出现 ≥ 2 次,answer 一致 → 记入 qa-bank
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top;">
+          <b style="font-size:11px; color: var(--muted);">写</b><br>
+          <code>data/career/qa-bank/<br>known-answers.yml</code>:<br><br>
+          <code>- label_hash:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;"authorized_work_us"<br>
+          &nbsp;&nbsp;answer: "Yes"<br>
+          &nbsp;&nbsp;confidence: high<br>
+          &nbsp;&nbsp;evidence:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;- captivation-...<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;- notion-...</code>
+        </td>
+      </tr>
+    </table>
+
+    <div class="callout good" style="margin-top: 10px;">
+      <b>下次效果:</b>任何 ATS(不只 Greenhouse!)出现 label fuzzy-match "authorized to work" → classifier 跳过 LLM,直接返 "Yes"。<br>
+      <b>跨 ATS</b> 复用 → 第一次答完,以后所有同问题都 0 token。
+    </div>
+  </div>
+
+  <!-- Signal D -->
+  <div class="card" style="border-left: 4px solid var(--accent);">
+    <div class="label">信号 D · Unlabeled pool → classifier 重训提示</div>
+    <h3 style="margin-top: 4px;">"classifier 看不懂的字段攒一池,周期性 calibration"</h3>
+
+    <table style="width:100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px;">
+      <tr>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">读</b><br>
+          所有 envelope 里 <code>label = "(unlabeled)"</code> 的字段,带 fingerprint + 周围 HTML 片段 + 用户最终手填的 answer
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">算</b><br>
+          累计到 ≥ 50 条 → 触发 <code>01-code-calibration</code> 跑一轮:<br><br>
+          让 LLM 重新分类这些 fingerprint(看 surrounding_html),
+          跟<b>用户实际填的答案</b>比对算准确率
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top;">
+          <b style="font-size:11px; color: var(--muted);">写</b><br>
+          <code>data/career/eval-fixtures/<br>unlabeled-pool/</code> 累积<br><br>
+          + dashboard 提示:<br>"unlabeled 池 47 条,
+          可发起 classifier eval calibration"<br><br>
+          calibration 跑完 → prompt 调优建议
+        </td>
+      </tr>
+    </table>
+
+    <div class="callout good" style="margin-top: 10px;">
+      <b>下次效果:</b>classifier prompt 改完,下次遇到类似 DOM 结构(没 label / label 在远处的字段)能正确识别 → unlabeled 字段数下降。
+    </div>
+  </div>
+
+  <!-- Signal E -->
+  <div class="card" style="border-left: 4px solid var(--accent);">
+    <div class="label">信号 E · "你总在手填同一个字段" → 识别为缺失的 identity 字段</div>
+    <h3 style="margin-top: 4px;">"你 3 次都自己填 Preferred Name=Victor,要不要存进 identity?"</h3>
+
+    <table style="width:100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px;">
+      <tr>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">读</b><br>
+          所有 envelope 里 <code>final_state = "filled_by_user_manual"</code> 的字段,
+          按 label_hash 分组
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">算</b><br>
+          同 label_hash 在最近 N 次 session 出现 ≥ 3 次,
+          且 <code>user_answer</code> 一致(说明系统从来填不上,且你每次答都一样)
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top;">
+          <b style="font-size:11px; color: var(--muted);">写</b><br>
+          dashboard 队列里出现:<br><br>
+          "Add to identity.yml?<br><code>preferred_name: 'Victor'</code><br>命中过去 3 次手填同字段"<br>
+          [Promote] [Reject]
+        </td>
+      </tr>
+    </table>
+
+    <div class="callout good" style="margin-top: 10px;">
+      <b>下次效果:</b>用户一键 Promote → identity.yml 多了 <code>preferred_name</code> 字段 → 后续任何 ATS 出现 "Preferred name" 都自动填 Victor,不再手动打字。<br>
+      <b>系统主动把"频繁手填"升级成"自动填",而不是等用户去 Settings 里手动加。</b>
+    </div>
+  </div>
+
+  <!-- Signal F -->
+  <div class="card" style="border-left: 4px solid var(--accent);">
+    <div class="label">信号 F · Submit 检测自适应(提高自动 Mark applied 命中率)</div>
+    <h3 style="margin-top: 4px;">"这家 ATS 的 thank-you 页面长什么样,自动认出来"</h3>
+
+    <table style="width:100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px;">
+      <tr>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">读</b><br>
+          所有 <code>outcome = "applied"</code> 的 envelope 里的
+          <code>submit_detected_by</code>("url_redirect" 自动 vs "user_fallback" 失败)
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">算</b><br>
+          按 ATS 分桶,统计 fallback 比例。<br><br>
+          <code>"lever"</code> 桶:fallback 率 80%(说明当前 thank-you 规则对 Lever 不灵)。<br><br>
+          看用户 fallback 时的最后 URL pattern,提取新 selector
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top;">
+          <b style="font-size:11px; color: var(--muted);">写</b><br>
+          <code>lever.yml</code> 的 <code>submit_detection</code> 块:<br><br>
+          <code>thank_you_patterns:<br>
+          &nbsp;&nbsp;- url_contains:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;"/confirmation"<br>
+          &nbsp;&nbsp;- text_contains:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;"Application received"</code>
+        </td>
+      </tr>
+    </table>
+
+    <div class="callout good" style="margin-top: 10px;">
+      <b>下次效果:</b>Lever 投递点 Submit 后系统能自动识别 thank-you 页 → 不再让用户回 dashboard 手点 Mark applied。
+    </div>
+  </div>
+
+  <!-- Signal G -->
+  <div class="card" style="border-left: 4px solid var(--bad);">
+    <div class="label">信号 G · 新 ATS adapter scaffolding(消费 "unknown ATS" 失败)</div>
+    <h3 style="margin-top: 4px;">"captivation.com 已经投了 3 次,该给它建 adapter 了"</h3>
+
+    <table style="width:100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px;">
+      <tr>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">读</b><br>
+          所有 <code>ats_detected = "unknown"</code> 的 envelope,按 <code>host</code> 分组
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">算</b><br>
+          同 host 累积 ≥ 3 次 → 拿这 3 个 envelope 的 DOM snapshot,
+          找共同的 URL pattern / 共同的 form selector / 共同的 question class
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top;">
+          <b style="font-size:11px; color: var(--muted);">写</b><br>
+          <code>data/career/eval-fixtures/promote-queue/<br>captivation-adapter-2026-05-26.yaml</code><br><br>
+          一份带 detect rules + 已知 field selector 的 adapter 骨架,等用户 review
+        </td>
+      </tr>
+    </table>
+
+    <div class="callout good" style="margin-top: 10px;">
+      <b>下次效果:</b>Promote 后,投 Captivation 任意岗位都走 captivation.yml — adapter 知道 form selector 在哪、resume control 在哪、submit 按钮长什么样。一个 unknown ATS 投 3 次后就被"驯服"了。
+    </div>
+  </div>
+
+  <!-- Signal H -->
+  <div class="card" style="border-left: 4px solid var(--bad);">
+    <div class="label">信号 H · Resume / 文件上传约束(消费 "upload_failed")</div>
+    <h3 style="margin-top: 4px;">"这家 ATS 限 resume &lt; 2MB,以后用压缩版"</h3>
+
+    <table style="width:100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px;">
+      <tr>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">读</b><br>
+          envelope 里 <code>strategies_tried[].result = "upload_failed"</code> 的字段:
+          <code>error_code</code> + 用户最终成功的 <code>user_file_size</code> / <code>user_filename</code>
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">算</b><br>
+          按 ATS 分组,提取 file constraint:<br><br>
+          captivation:<br>
+          · max_size 推断 ≤ 2MB(用户成功上传是 1.5MB)<br>
+          · format 接受 .pdf
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top;">
+          <b style="font-size:11px; color: var(--muted);">写</b><br>
+          adapter 的 <code>resume_constraints</code> 块:<br><br>
+          <code>resume_constraints:<br>
+          &nbsp;&nbsp;max_size_mb: 2<br>
+          &nbsp;&nbsp;accepted_formats: [pdf]</code><br><br>
+          + 03-cv-engine 渲染时按这个 hint 走压缩路径
+        </td>
+      </tr>
+    </table>
+
+    <div class="callout good" style="margin-top: 10px;">
+      <b>下次效果:</b>同 ATS 投递时 renderer 先看 adapter 的 resume_constraints → 直接产 1.5MB 的 PDF → 不再撞 "file too large"。用户不用第二次手动压缩 resume。
+    </div>
+  </div>
+
+  <!-- Signal I -->
+  <div class="card" style="border-left: 4px solid var(--bad);">
+    <div class="label">信号 I · 系统没答案的字段 → propose 进 narrative.yml(消费 "no_answer_available")</div>
+    <h3 style="margin-top: 4px;">"你这次手填了 200 字答 'Why do you want to work here?',要不要存起来?"</h3>
+
+    <table style="width:100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px;">
+      <tr>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">读</b><br>
+          envelope 里 <code>expected = null</code> + <code>final_state = "filled_by_user_manual_from_blank"</code> + <code>user_answer</code> + <code>user_time_ms &gt; 10s</code>
+          (说明是开放题,值得存)
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top; border-right: 1px solid var(--border); width: 33%;">
+          <b style="font-size:11px; color: var(--muted);">算</b><br>
+          按 label normalize 分组。出现 ≥ 2 次同类问题(e.g. "Why do you want to work here" / "Why this company" / "Tell us about yourself" 语义聚类)→ propose 一条 narrative
+        </td>
+        <td style="padding: 8px 10px; vertical-align: top;">
+          <b style="font-size:11px; color: var(--muted);">写</b><br>
+          dashboard 队列:<br><br>
+          "Add to <code>narrative.yml</code>?<br><br>
+          key: <code>why_this_company</code><br>
+          answer: &lt;你写的 200 字&gt;<br>
+          alt_labels: [why-here, motivation]"<br><br>
+          [Edit] [Promote] [Reject]
+        </td>
+      </tr>
+    </table>
+
+    <div class="callout good" style="margin-top: 10px;">
+      <b>下次效果:</b>下次 ATS 出现"Why this company / Why do you want to work here"类问题 → classifier 看 narrative.yml → 直接填上次的 200 字答案。用户不用每次手写。
+      <br><br>
+      <b>注意:</b>这是开放题,不能完全照搬(每家公司可能要求不同重点)— 所以 narrative.yml 存的是"基础模板",classifier 之后可能调 Anthropic 跑一轮"针对这家公司的微调"。但用户至少不用从 0 写。
+    </div>
+  </div>
+
+  <h2 class="section">合在一起 — 一次 Captivation 投递让 8 件事变好</h2>
+
+  <p>下面把<b>失败模式 + 成功 evidence</b> 都列上,看一眼这次 session 给系统留下了多少学习材料:</p>
+
+  <table style="width:100%; border-collapse: collapse; font-size: 13px; margin: 10px 0;">
+    <thead>
+      <tr style="background: #fff; border-bottom: 2px solid var(--border-strong);">
+        <th style="text-align: left; padding: 8px 10px;">飞轮信号</th>
+        <th style="text-align: left; padding: 8px 10px;">这次贡献</th>
+        <th style="text-align: left; padding: 8px 10px;">下次效果</th>
+      </tr>
+    </thead>
+    <tbody style="font-size: 12.5px;">
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>A</b> Strategy 重排 + 紧急路径</td>
+        <td style="padding: 8px 10px;">+9 条 select__control evidence(react_select_click 救场)<br>+ 1 条 all_strategies_failed → eng alert</td>
+        <td style="padding: 8px 10px;">桶里 strategy 排序更稳;dev 看到该补哪条 strategy 代码</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>B</b> Adapter rule propose</td>
+        <td style="padding: 8px 10px;">EEO section detect rule 候选</td>
+        <td style="padding: 8px 10px;">用户 Promote → 同 ATS EEO 段 0 LLM 自动填</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>C</b> qa-bank cache + 格式</td>
+        <td style="padding: 8px 10px;">+9 label/answer pair · +1 phone 格式教训("no dashes")</td>
+        <td style="padding: 8px 10px;">同问题跨 ATS 0 token;同字段下次直接用对的格式</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>D</b> Unlabeled pool</td>
+        <td style="padding: 8px 10px;">+7 条 unlabeled fingerprint + 用户填的 answer(可做正确标注)</td>
+        <td style="padding: 8px 10px;">触发 classifier calibration → prompt 优化</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>E</b> 手填 → identity 提议</td>
+        <td style="padding: 8px 10px;">"Preferred name=Victor" 计数 +1</td>
+        <td style="padding: 8px 10px;">Promote → identity.yml 加字段</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: var(--bad-soft);">
+        <td style="padding: 8px 10px;"><b>F</b> Submit detection</td>
+        <td style="padding: 8px 10px;">submit_detected_by="url_redirect" 成功 evidence</td>
+        <td style="padding: 8px 10px;">巩固 captivation 的 thank-you 检测规则</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: var(--bad-soft);">
+        <td style="padding: 8px 10px;"><b>G</b> 新 ATS adapter scaffolding</td>
+        <td style="padding: 8px 10px;">第 1 次 unknown captivation.com(累计 1/3 触发线)</td>
+        <td style="padding: 8px 10px;">再投 2 次 captivation → propose <code>captivation.yml</code></td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: var(--bad-soft);">
+        <td style="padding: 8px 10px;"><b>H</b> Resume 文件约束</td>
+        <td style="padding: 8px 10px;">file_too_large(3MB → 1.5MB) → captivation max_size=2MB</td>
+        <td style="padding: 8px 10px;">下次同 ATS 自动产 ≤ 2MB resume</td>
+      </tr>
+      <tr style="background: var(--bad-soft);">
+        <td style="padding: 8px 10px;"><b>I</b> 开放题 → narrative 提议</td>
+        <td style="padding: 8px 10px;">"Why work here" 200 字手填(等 ≥ 2 次同类触发 propose)</td>
+        <td style="padding: 8px 10px;">narrative.yml 加 why_this_company 模板,下次开放题秒填</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>留意:</b>红底行(F/G/H/I)<b>都是因为这次投递包含失败 / unknown 数据才产生的信号</b>。
+    如果这次是 happy path 全 verified,那 4 条信号就没有输入,飞轮只能消化 A-E,系统进步速度慢一半。
+    <b>"unknown 多 / 字段错误 / 上传失败"反而让飞轮跑得更猛。</b>
+  </div>
+
+  <h2 class="section">用户看得见的"系统在进步"</h2>
+
+  <div class="improve">
+    <h4>Captivation (Greenhouse) — your 2nd apply</h4>
+    <div class="row">
+      <div>
+        <b>第一次</b>
+        <div class="num s">5 / 14</div>
+        <div class="sub">verified · 2:34 with manual cleanup</div>
+      </div>
+      <div>
+        <b>这次</b>
+        <div class="num">13 / 14</div>
+        <div class="sub">verified · 0:45 (only CAPTCHA)</div>
+      </div>
+      <div>
+        <b>提升</b>
+        <div class="num s" style="color: #ffe6a0;">+8 fields · −1:49</div>
+        <div class="sub">自动化覆盖率 36% → 93%</div>
+      </div>
+    </div>
+    <div class="footer">
+      Powered by:&nbsp; <code style="background: rgba(255,255,255,0.15); color: #fff; padding: 2px 6px; border-radius: 3px;">greenhouse.yml eeo_section</code> rule (信号 B promoted 2026-05-26)
+      &nbsp;+&nbsp; 9 qa-bank entries(信号 C)
+      &nbsp;+&nbsp; identity.preferred_name(信号 E promoted)
+    </div>
+  </div>
+
+  <p style="margin-top: 12px;">这是 self-iteration 价值的 <b>UI 兑现</b>。用户每次投完都看见上次的失败让这次更快,飞轮闭环成立。</p>
+
+  <h2 class="section">推进顺序 · 跟现有 Room 的对接</h2>
+
+  <table style="width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px;">
+    <thead>
+      <tr style="background: #fff; border-bottom: 2px solid var(--border-strong);">
+        <th style="text-align: left; padding: 8px 10px;">Phase</th>
+        <th style="text-align: left; padding: 8px 10px;">内容</th>
+        <th style="text-align: left; padding: 8px 10px;">涉及 Room</th>
+        <th style="text-align: left; padding: 8px 10px;">估算</th>
+      </tr>
+    </thead>
+    <tbody style="font-size: 12.5px;">
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>1</b></td>
+        <td style="padding: 8px 10px;">Status board + Triage + 字段卡 + envelope schema</td>
+        <td style="padding: 8px 10px;">04-multi-step · 02-playwright · 02-data-flywheel</td>
+        <td style="padding: 8px 10px;">2 ms</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>2</b></td>
+        <td style="padding: 8px 10px;">fallback strategies + MutationObserver + strategy auto-reorder</td>
+        <td style="padding: 8px 10px;">02-playwright · 02-data-flywheel</td>
+        <td style="padding: 8px 10px;">2 ms</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>3</b></td>
+        <td style="padding: 8px 10px;">Submit gate + Submit 自动检测</td>
+        <td style="padding: 8px 10px;">04-multi-step · 06-site-adapters</td>
+        <td style="padding: 8px 10px;">1 ms</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border); background: #fff;">
+        <td style="padding: 8px 10px;"><b>4</b></td>
+        <td style="padding: 8px 10px;">EEO site rules + auto-propose + visible improvement</td>
+        <td style="padding: 8px 10px;">06-site-adapters · 01-code-calibration · 03-iteration-dashboard</td>
+        <td style="padding: 8px 10px;">2-3 ms</td>
+      </tr>
+      <tr style="background: #fff;">
+        <td style="padding: 8px 10px;"><b>5</b></td>
+        <td style="padding: 8px 10px;">qa-bank evidence + unlabeled pool + identity field proposal</td>
+        <td style="padding: 8px 10px;">02-data-flywheel · 03-iteration-dashboard</td>
+        <td style="padding: 8px 10px;">1-2 ms</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>关键依赖:</b>Phase 1 的 envelope schema 是后面所有 phase 的原料。先把数据收对了,后面的 propose / dashboard / metric 才有东西吃。
+  </div>
+
+</section>
+
+</main>
+
+<footer class="page">
+  Generated 2026-05-26 · <a href="post-fill-handoff-ux.md" style="color: var(--accent);">原文 markdown</a> · <code>META/04-career-system/07-applier/post-fill-handoff-ux.html</code>
+</footer>
+
+<script>
+  document.querySelectorAll('nav.tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tab;
+      document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === target));
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  });
+</script>
+
+</body>
+</html>
