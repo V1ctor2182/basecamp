@@ -55,8 +55,22 @@ export const PER_STEP_STATUSES = Object.freeze([
   'approved',
 ]);
 
+// m5: submit_attempts[].outcome enum. Closed set — the state machine
+// (Phase 1/m6) only ever produces one of these three.
+export const SUBMIT_OUTCOMES = Object.freeze([
+  'no_errors',          // form accepted submit, navigated to thank-you
+  'errors_returned',    // form returned inline validation errors
+  'submit_failed',      // network / timeout / unparseable response
+]);
+
 // 24 hours; sessions idle longer than this become 'abandoned' on read.
 export const ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;
+
+// m5: per-session cap on the submit_attempts[] array. The Phase 1/m6
+// state machine guards cap retries at 3 via maxSubmits guard, so 50 here
+// is a paranoid runaway-protection ceiling — a buggy machine that
+// somehow loops without firing guards is bounded, not blow up the JSON.
+export const MAX_SUBMIT_ATTEMPTS = 50;
 
 // ── Zod schemas ─────────────────────────────────────────────────────────
 
@@ -113,6 +127,58 @@ const PerStepDraftSchema = z
 const FIELD_MEMORY_MAX_ENTRIES = 500;
 const MAX_STEPS_IN_SESSION = 50;
 
+// m5: submit-attempt sub-schemas.
+//
+// A form error is what the ATS form ITSELF reports (not our verify guess).
+// `error_code` is left as a free-form string because the LLM/parser may
+// emit codes we haven't enumerated yet (some ATSes invent new copy);
+// the flywheel (Phase 5/m5) buckets the long tail downstream. `field`
+// is the form's own identifier — `name` attr OR closest label text OR
+// `aria-label` (whichever the parser picked) — and may differ from
+// classifier label.
+export const FormErrorSchema = z
+  .object({
+    field: z.string().max(400),
+    error_code: z.string().max(80),
+    error_msg: z.string().max(2000),
+  })
+  .strict();
+
+// One fill attempt the state machine tried in response to a form error.
+// `fix_name` is the strategy ladder entry (Phase 2/m4 names like
+// 'selectOption' / 'react_select_click' / 'keyboard_input') OR a
+// recovery name from Phase 4/m11 (e.g. 'resume_recompress',
+// 'alt_format_no_dashes'). `result` is again free-form because Phase 2
+// strategies may report novel outcomes — flywheel buckets.
+export const FixTriedSchema = z
+  .object({
+    field: z.string().max(400),
+    fix_name: z.string().max(120),
+    result: z.string().max(120),
+  })
+  .strict();
+
+// One round of Submit-first loop:
+//   click submit → race outcome → if errors, our fix attempts → next round.
+//
+// Invariant (enforced by appendSubmitAttempt, NOT the schema):
+//   attempt === session.submit_attempts.length + 1 at append time.
+// Stored value remains the historical index so the array is replayable
+// even if its position later drifts.
+export const SubmitAttemptSchema = z
+  .object({
+    attempt: z.number().int().min(1),
+    started_at: z.string().datetime({ offset: true }),
+    // Phase 2/m5 parseFormErrors returns [] when form accepted submit
+    // (outcome='no_errors') — the field is present but empty in that
+    // case for symmetry across attempts. Cap matches per-step field cap
+    // (a form with > 120 errors at once is broken, not our bug).
+    form_errors: z.array(FormErrorSchema).max(120).default([]),
+    fixes_tried: z.array(FixTriedSchema).max(120).default([]),
+    outcome: z.enum(SUBMIT_OUTCOMES),
+  })
+  .strict();
+
 export const ApplySessionSchema = z
   .object({
     jobId: z.string().regex(JOB_ID_RE, 'jobId must match 12-hex'),
@@ -145,6 +211,16 @@ export const ApplySessionSchema = z
     started_at: z.string().datetime({ offset: true }),
     last_activity_at: z.string().datetime({ offset: true }),
     status: z.enum(SESSION_STATUSES),
+    // m5: append-only log of submit-first error loop rounds. Defaulted
+    // to [] so sessions written by m1 (no submit_attempts field on disk)
+    // load cleanly under v2 schema without a migration script.
+    submit_attempts: z
+      .array(SubmitAttemptSchema)
+      .max(
+        MAX_SUBMIT_ATTEMPTS,
+        { message: `submit_attempts cap is ${MAX_SUBMIT_ATTEMPTS} entries` },
+      )
+      .default([]),
   })
   .strict()
   // L3 fix from review: current_step <= total_steps invariant when known
@@ -243,6 +319,10 @@ export function buildInitialSession({ jobId, jobUrl, siteAdapter, totalSteps = n
     started_at: ts,
     last_activity_at: ts,
     status: 'active',
+    // m5: explicit empty array so callers don't have to know it exists.
+    // Zod .default([]) would still cover deserialization, but explicit
+    // is cheaper than relying on Zod fallback for in-memory construction.
+    submit_attempts: [],
   };
 }
 
@@ -348,6 +428,96 @@ export async function writeSession(jobId, session, opts = {}) {
   const validated = ApplySessionSchema.parse(toWrite);
   await atomicWriteJson(sessionPath(jobId), validated);
   return validated;
+}
+
+/**
+ * m5: append one submit-first loop round to the session's
+ * `submit_attempts[]` log. Serializes through `withSessionLock(jobId, …)`
+ * so concurrent calls from m6 retry paths can't lose updates.
+ *
+ * Invariant: the `attempt` field on the passed record must equal
+ * `session.submit_attempts.length + 1` at append time. Caller knows
+ * which round this is; we cross-check here so a buggy state machine
+ * can't silently drop a round. The invariant is enforced on the
+ * snapshot-in-the-lock, NOT pre-lock — that's the whole point of the
+ * lock (avoid TOCTOU).
+ *
+ * The attempt record itself: `form_errors` and `fixes_tried` may be
+ * omitted; they default to `[]` (an outcome='no_errors' round has
+ * neither). `attempt` / `started_at` / `outcome` are required.
+ *
+ * Side effects (inherited from `writeSession`):
+ *   - Bumps `session.last_activity_at` to now (no opt-out — every
+ *     submit-first round is by definition recent activity).
+ *
+ * Status policy: intentionally **status-agnostic** — m6 owns the
+ * policy of which session statuses may append. We persist whatever
+ * the machine emits. NOTE that `writeSession`'s H3 guard (refuse to
+ * bump activity on status='abandoned') will fire if m6 tries to
+ * append to a session that was lazy-flipped to abandoned by
+ * `readSession`'s 24h check; m6 should resume (flip status back to
+ * 'active') before appending in that case.
+ *
+ * Throws:
+ *   - TypeError if jobId malformed
+ *   - Error if session doesn't exist
+ *   - Error (code='SESSION_ATTEMPT_INDEX_MISMATCH') if attempt index wrong
+ *   - Error (code='SESSION_MAX_SUBMIT_ATTEMPTS') if MAX exceeded
+ *   - Error if Array invariant violated (schema drift)
+ *   - ZodError if the attempt record fails SubmitAttemptSchema
+ *   - Bubbled writeSession error if status='abandoned' (H3 guard)
+ *
+ * @param {string} jobId — 12-hex
+ * @param {object} attempt — SubmitAttemptSchema-shaped record
+ * @returns {Promise<object>} the validated, written session
+ */
+export async function appendSubmitAttempt(jobId, attempt) {
+  if (typeof jobId !== 'string' || !JOB_ID_RE.test(jobId)) {
+    throw new TypeError(`invalid jobId: ${JSON.stringify(jobId)}`);
+  }
+  // Pre-validate attempt shape OUTSIDE the lock so we fail fast on
+  // obviously wrong inputs without holding up other writers on jobId.
+  const parsedAttempt = SubmitAttemptSchema.parse(attempt);
+  return withSessionLock(jobId, async () => {
+    const session = await readSession(jobId);
+    if (!session) {
+      throw new Error(`appendSubmitAttempt: no session for jobId ${jobId}`);
+    }
+    // HIGH-3 fix from review: schema's .default([]) guarantees this is
+    // an Array post-readSession. Assert the invariant so any future drift
+    // (e.g. schema change that drops the default) fails loud here instead
+    // of silently masking via `|| []`.
+    if (!Array.isArray(session.submit_attempts)) {
+      throw new Error(
+        `appendSubmitAttempt: invariant violation — session.submit_attempts is ` +
+          `${typeof session.submit_attempts} not Array (schema drift?)`,
+      );
+    }
+    const existing = session.submit_attempts;
+    if (existing.length >= MAX_SUBMIT_ATTEMPTS) {
+      // MEDIUM-3 fix: attach .code so endpoint.mjs can classify without
+      // string-matching the (debug-ish) message. Message stays descriptive
+      // for log digestion; clients see the code.
+      const err = new Error(
+        `appendSubmitAttempt: session ${jobId} already at MAX_SUBMIT_ATTEMPTS (${MAX_SUBMIT_ATTEMPTS}) — ` +
+          `state machine's maxSubmits guard should have escalated long before this`,
+      );
+      err.code = 'SESSION_MAX_SUBMIT_ATTEMPTS';
+      throw err;
+    }
+    const expected = existing.length + 1;
+    if (parsedAttempt.attempt !== expected) {
+      const err = new Error(
+        `appendSubmitAttempt: attempt index mismatch for ${jobId} — ` +
+          `got attempt=${parsedAttempt.attempt}, expected ${expected} ` +
+          `(existing.length=${existing.length})`,
+      );
+      err.code = 'SESSION_ATTEMPT_INDEX_MISMATCH';
+      throw err;
+    }
+    const next = { ...session, submit_attempts: [...existing, parsedAttempt] };
+    return writeSession(jobId, next);
+  });
 }
 
 /**

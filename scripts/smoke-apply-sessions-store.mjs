@@ -22,6 +22,13 @@ import {
   deleteSession,
   listSessionJobIds,
   withSessionLock,
+  // m5: envelope schema v2 — submit-first error loop persistence.
+  SUBMIT_OUTCOMES,
+  MAX_SUBMIT_ATTEMPTS,
+  FormErrorSchema,
+  FixTriedSchema,
+  SubmitAttemptSchema,
+  appendSubmitAttempt,
 } from '../src/career/applier/multistep/applySessionsStore.mjs';
 
 let passed = 0;
@@ -643,6 +650,342 @@ await test('listSessionJobIds: sorted output (L1)', async () => {
   assert.deepEqual(ourSeeds, ['caaaaaaaaa01', 'caaaaaaaaa02', 'caaaaaaaaa03']);
 
   for (const id of ids) await deleteSession(id);
+});
+
+// ── m5: envelope schema v2 + appendSubmitAttempt ─────────────────────
+
+await test('m5: SUBMIT_OUTCOMES / MAX_SUBMIT_ATTEMPTS exports + frozen', () => {
+  assert.deepEqual(SUBMIT_OUTCOMES, ['no_errors', 'errors_returned', 'submit_failed']);
+  assert.ok(Object.isFrozen(SUBMIT_OUTCOMES));
+  assert.equal(MAX_SUBMIT_ATTEMPTS, 50);
+});
+
+await test('m5: buildInitialSession includes empty submit_attempts[]', () => {
+  const s = buildInitialSession({ jobId: 'da11d0000000', jobUrl: 'https://x.com', siteAdapter: 'workday' });
+  assert.deepEqual(s.submit_attempts, []);
+});
+
+await test('m5: Zod sub-schemas accept well-formed records', () => {
+  assert.doesNotThrow(() => FormErrorSchema.parse({
+    field: 'phone',
+    error_code: 'invalid_format',
+    error_msg: 'Invalid format',
+  }));
+  assert.doesNotThrow(() => FixTriedSchema.parse({
+    field: 'phone',
+    fix_name: 'alt_format_no_dashes',
+    result: 'verified',
+  }));
+  assert.doesNotThrow(() => SubmitAttemptSchema.parse({
+    attempt: 1,
+    started_at: new Date().toISOString(),
+    form_errors: [{ field: 'phone', error_code: 'invalid_format', error_msg: 'Invalid format' }],
+    fixes_tried: [{ field: 'phone', fix_name: 'alt_format_no_dashes', result: 'verified' }],
+    outcome: 'no_errors',
+  }));
+});
+
+await test('m5: SubmitAttemptSchema enforces enum + strict + array shape', () => {
+  // outcome must be one of SUBMIT_OUTCOMES
+  assert.throws(() => SubmitAttemptSchema.parse({
+    attempt: 1,
+    started_at: new Date().toISOString(),
+    form_errors: [],
+    fixes_tried: [],
+    outcome: 'NOT_AN_OUTCOME',
+  }));
+  // form_errors must be array (not string)
+  assert.throws(() => SubmitAttemptSchema.parse({
+    attempt: 1,
+    started_at: new Date().toISOString(),
+    form_errors: 'oops',
+    fixes_tried: [],
+    outcome: 'no_errors',
+  }));
+  // attempt must be ≥ 1
+  assert.throws(() => SubmitAttemptSchema.parse({
+    attempt: 0,
+    started_at: new Date().toISOString(),
+    form_errors: [],
+    fixes_tried: [],
+    outcome: 'no_errors',
+  }));
+  // .strict() rejects extra fields
+  assert.throws(() => SubmitAttemptSchema.parse({
+    attempt: 1,
+    started_at: new Date().toISOString(),
+    form_errors: [],
+    fixes_tried: [],
+    outcome: 'no_errors',
+    extra_field: 'rejected',
+  }));
+});
+
+await test('m5: writeSession round-trips submit_attempts (nested arrays preserved)', async () => {
+  const jobId = 'aa55001100aa';
+  const s = buildInitialSession({ jobId, jobUrl: 'https://x.com', siteAdapter: 'workday' });
+  s.submit_attempts = [
+    {
+      attempt: 1,
+      started_at: '2026-05-27T10:00:00.000Z',
+      form_errors: [
+        { field: 'phone', error_code: 'invalid_format', error_msg: 'Invalid format' },
+        { field: 'email', error_code: 'required', error_msg: 'Email is required' },
+      ],
+      fixes_tried: [
+        { field: 'phone', fix_name: 'alt_format_no_dashes', result: 'verified' },
+      ],
+      outcome: 'errors_returned',
+    },
+  ];
+  await writeSession(jobId, s);
+  const read = await readSession(jobId);
+  assert.equal(read.submit_attempts.length, 1);
+  assert.equal(read.submit_attempts[0].form_errors.length, 2);
+  assert.equal(read.submit_attempts[0].fixes_tried[0].result, 'verified');
+  assert.equal(read.submit_attempts[0].outcome, 'errors_returned');
+  await deleteSession(jobId);
+});
+
+await test('m5: old session (no submit_attempts field on disk) auto-defaults to []', async () => {
+  // Simulate an m1-era session.json by writing JSON manually without the
+  // submit_attempts field. readSession's Zod parse should fill in [] via
+  // ApplySessionSchema's .default([]) — no migration script needed.
+  const jobId = 'bb55001100bb';
+  const s = buildInitialSession({ jobId, jobUrl: 'https://x.com', siteAdapter: 'workday' });
+  delete s.submit_attempts;
+  // Bypass writeSession (which would re-parse and add the field back) —
+  // write the raw JSON directly to simulate the on-disk legacy state.
+  if (!existsSync(APPLY_SESSIONS_DIR)) {
+    await fs.mkdir(APPLY_SESSIONS_DIR, { recursive: true });
+  }
+  await fs.writeFile(
+    path.join(APPLY_SESSIONS_DIR, `${jobId}.json`),
+    JSON.stringify(s, null, 2),
+  );
+  const read = await readSession(jobId);
+  assert.deepEqual(read.submit_attempts, []);
+  await deleteSession(jobId);
+});
+
+await test('m5: appendSubmitAttempt happy path — attempt 1 → 2 → 3', async () => {
+  const jobId = 'cc55001100cc';
+  await writeSession(jobId, buildInitialSession({ jobId, jobUrl: 'https://x.com', siteAdapter: 'workday' }));
+
+  for (let n = 1; n <= 3; n++) {
+    const before = await readSession(jobId);
+    const beforeActivity = before.last_activity_at;
+    // MEDIUM-5 fix from review: 15ms (was 5ms) so last_activity_at
+    // can advance reliably on contended CI hosts where two consecutive
+    // Date.now() reads can return the same millisecond.
+    await new Promise((r) => setTimeout(r, 15));
+    const updated = await appendSubmitAttempt(jobId, {
+      attempt: n,
+      started_at: new Date().toISOString(),
+      form_errors: [],
+      fixes_tried: [],
+      outcome: 'errors_returned',
+    });
+    assert.equal(updated.submit_attempts.length, n);
+    assert.equal(updated.submit_attempts[n - 1].attempt, n);
+    assert.ok(updated.last_activity_at > beforeActivity, `activity must advance round ${n}`);
+  }
+  await deleteSession(jobId);
+});
+
+await test('m5: appendSubmitAttempt rejects wrong attempt index', async () => {
+  const jobId = 'dd55001100dd';
+  await writeSession(jobId, buildInitialSession({ jobId, jobUrl: 'https://x.com', siteAdapter: 'workday' }));
+
+  // Starting fresh — attempt MUST be 1, not 2
+  await assert.rejects(
+    () => appendSubmitAttempt(jobId, {
+      attempt: 2,
+      started_at: new Date().toISOString(),
+      form_errors: [],
+      fixes_tried: [],
+      outcome: 'no_errors',
+    }),
+    /attempt index mismatch/,
+  );
+
+  // After legitimate attempt=1, trying attempt=1 again (duplicate) is rejected
+  await appendSubmitAttempt(jobId, {
+    attempt: 1,
+    started_at: new Date().toISOString(),
+    form_errors: [],
+    fixes_tried: [],
+    outcome: 'no_errors',
+  });
+  await assert.rejects(
+    () => appendSubmitAttempt(jobId, {
+      attempt: 1,
+      started_at: new Date().toISOString(),
+      form_errors: [],
+      fixes_tried: [],
+      outcome: 'no_errors',
+    }),
+    /attempt index mismatch/,
+  );
+  await deleteSession(jobId);
+});
+
+await test('m5: appendSubmitAttempt fails on missing session', async () => {
+  await assert.rejects(
+    () => appendSubmitAttempt('ee55001100ee', {
+      attempt: 1,
+      started_at: new Date().toISOString(),
+      form_errors: [],
+      fixes_tried: [],
+      outcome: 'no_errors',
+    }),
+    /no session for jobId/,
+  );
+});
+
+await test('m5: concurrent appendSubmitAttempt serialize via withSessionLock', async () => {
+  const jobId = 'ff55001100ff';
+  await writeSession(jobId, buildInitialSession({ jobId, jobUrl: 'https://x.com', siteAdapter: 'workday' }));
+
+  // Fire 5 appends at "the same time". The withSessionLock should
+  // serialize them. Each callsite hardcodes its attempt index to be
+  // sequential; without the lock, racy reads would all see length=0 and
+  // many would call attempt=1 → only one succeeds, the others throw.
+  // With the lock, they run in order and all five succeed.
+  //
+  // Note this models the EXPECTED caller pattern (each one fires with
+  // its known attempt number from the m6 state machine sequence). It
+  // does NOT test "any attempt index will work" — that's not the
+  // contract.
+  const results = await Promise.allSettled(
+    [1, 2, 3, 4, 5].map((n) =>
+      appendSubmitAttempt(jobId, {
+        attempt: n,
+        started_at: new Date().toISOString(),
+        form_errors: [],
+        fixes_tried: [],
+        outcome: 'errors_returned',
+      }),
+    ),
+  );
+  // All five should succeed because withSessionLock serializes them
+  // and each gets the attempt index it asks for in turn.
+  for (const [i, r] of results.entries()) {
+    assert.equal(r.status, 'fulfilled', `append #${i + 1} should fulfill: ${r.reason}`);
+  }
+  const final = await readSession(jobId);
+  assert.equal(final.submit_attempts.length, 5);
+  assert.deepEqual(
+    final.submit_attempts.map((a) => a.attempt),
+    [1, 2, 3, 4, 5],
+  );
+  await deleteSession(jobId);
+});
+
+await test('m5: MAX_SUBMIT_ATTEMPTS cap enforced (runaway protection)', async () => {
+  const jobId = '550055005500';
+  const s = buildInitialSession({ jobId, jobUrl: 'https://x.com', siteAdapter: 'workday' });
+  // Pre-fill 50 attempts directly so we don't have to make 50 sequential calls
+  s.submit_attempts = Array.from({ length: MAX_SUBMIT_ATTEMPTS }, (_, i) => ({
+    attempt: i + 1,
+    started_at: new Date().toISOString(),
+    form_errors: [],
+    fixes_tried: [],
+    outcome: 'errors_returned',
+  }));
+  await writeSession(jobId, s);
+
+  // The 51st should be refused with .code='SESSION_MAX_SUBMIT_ATTEMPTS'
+  await assert.rejects(
+    () => appendSubmitAttempt(jobId, {
+      attempt: MAX_SUBMIT_ATTEMPTS + 1,
+      started_at: new Date().toISOString(),
+      form_errors: [],
+      fixes_tried: [],
+      outcome: 'no_errors',
+    }),
+    (err) => err.code === 'SESSION_MAX_SUBMIT_ATTEMPTS' && /MAX_SUBMIT_ATTEMPTS/.test(err.message),
+  );
+  // MEDIUM-4 fix: confirm the rejection did NOT mutate persisted state.
+  // If a future regression reordered validation vs write, the array would
+  // have grown to 51 even though we threw — this lock prevents that.
+  const after = await readSession(jobId);
+  assert.equal(after.submit_attempts.length, MAX_SUBMIT_ATTEMPTS,
+    'rejected append must not mutate state');
+  await deleteSession(jobId);
+});
+
+await test('m5: appendSubmitAttempt index-mismatch error has .code (review MED-3)', async () => {
+  const jobId = '770077007700';
+  await writeSession(jobId, buildInitialSession({ jobId, jobUrl: 'https://x.com', siteAdapter: 'workday' }));
+  await assert.rejects(
+    () => appendSubmitAttempt(jobId, {
+      attempt: 5,  // expected 1
+      started_at: new Date().toISOString(),
+      form_errors: [],
+      fixes_tried: [],
+      outcome: 'no_errors',
+    }),
+    (err) => err.code === 'SESSION_ATTEMPT_INDEX_MISMATCH',
+  );
+  await deleteSession(jobId);
+});
+
+await test('m5: appendSubmitAttempt on lazy-abandoned session hits H3 ghost-timestamp guard', async () => {
+  // Docs the interaction at applySessionsStore.mjs:415-421:
+  // readSession synthetically returns status='abandoned' when activity
+  // is > 24h old. appendSubmitAttempt's internal readSession sees the
+  // same. The subsequent writeSession refuses to bump activity on an
+  // abandoned session (H3 guard) — caller must resume (flip status
+  // back to 'active') before appending. This test locks that behavior
+  // so future readers know it's intentional, not a bug.
+  const jobId = '880088008800';
+  const s = buildInitialSession({ jobId, jobUrl: 'https://x.com', siteAdapter: 'workday' });
+  // Backdate last_activity to 25h ago so readSession will lazy-abandon
+  s.last_activity_at = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+  // bumpActivity:false so we can persist the backdated timestamp
+  await writeSession(jobId, s, { bumpActivity: false });
+  // Confirm lazy-abandon fired on read
+  const read = await readSession(jobId);
+  assert.equal(read.status, 'abandoned',
+    'precondition: readSession should lazy-flip 25h-old session to abandoned');
+  // Now appendSubmitAttempt should throw via writeSession's H3 guard
+  await assert.rejects(
+    () => appendSubmitAttempt(jobId, {
+      attempt: 1,
+      started_at: new Date().toISOString(),
+      form_errors: [],
+      fixes_tried: [],
+      outcome: 'no_errors',
+    }),
+    /refuses to bump activity.*abandoned/,
+  );
+  await deleteSession(jobId);
+});
+
+await test('m5: SubmitAttemptSchema accepts omitted form_errors / fixes_tried (defaults to [])', () => {
+  // Documents that 'no_errors' rounds can omit both arrays — defaults fire.
+  // (Per HIGH-2 doc fix.)
+  const minimal = SubmitAttemptSchema.parse({
+    attempt: 1,
+    started_at: new Date().toISOString(),
+    outcome: 'no_errors',
+  });
+  assert.deepEqual(minimal.form_errors, []);
+  assert.deepEqual(minimal.fixes_tried, []);
+});
+
+await test('m5: schema rejects > MAX_SUBMIT_ATTEMPTS entries in array', () => {
+  const s = buildInitialSession({ jobId: '660066006600', jobUrl: 'https://x.com', siteAdapter: 'workday' });
+  // 51 entries > MAX_SUBMIT_ATTEMPTS=50
+  s.submit_attempts = Array.from({ length: MAX_SUBMIT_ATTEMPTS + 1 }, (_, i) => ({
+    attempt: i + 1,
+    started_at: new Date().toISOString(),
+    form_errors: [],
+    fixes_tried: [],
+    outcome: 'errors_returned',
+  }));
+  assert.throws(() => ApplySessionSchema.parse(s));
 });
 
 // ── Cleanup ──────────────────────────────────────────────────────────
