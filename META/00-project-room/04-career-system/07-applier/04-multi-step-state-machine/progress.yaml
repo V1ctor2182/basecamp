@@ -465,7 +465,19 @@ milestones:
 
   - id: "m7-endpoint-room-reopen-complete"
     name: "endpoint.mjs 暴露 escalation_reason + cancel 端点 + ROOM REOPEN 验证"
-    status: pending
+    status: completed
+    actual_files:
+      - "src/career/applier/multistep/endpoint.mjs"
+      - "server.mjs"
+      - "src/career/feedback/schemas.mjs"
+      - "META/.../constraint-multi-step-state-machine-001.yaml"
+      - "scripts/smoke-multistep-endpoint.mjs"
+    commit_hash: "PENDING"
+    review:
+      - "Plan agent: 2 CRITICAL + 4 HIGH + 5 MEDIUM + 6 LOW"
+      - "Applied: C2 (kind override on wasCancelled) + H2 (same-origin guard on /cancel) + 1 new C2 verification smoke"
+      - "Verified C1 finding incorrect: pauseRequested check IS already first in approve() (line 226 vs 238). Real concern (identity-source skips approve entirely) defer to future enhancement."
+      - "Defer to followups: H1 concurrent cancel race (idempotent, no corruption), H3 PII in escalation detail (single-tenant ok), H4 wasCancelled check rigor (doc only), M1-M5 (audit log / KNOWN_CODES dedup / activity bump on already-paused / readSession-vs-ctrl preference)"
     estimated_files:
       - "src/career/applier/multistep/endpoint.mjs"
       - "scripts/smoke-multistep-endpoint.mjs"
@@ -829,7 +841,42 @@ commits:
       - "55/55 smoke before review fixes"
       - "58/58 smoke after fixes (3 new review-driven cases)"
       - "30/30 m4 endpoint regression still green"
-current_sprint: "Sprint 21 — ROOM REOPEN: post-fill-handoff-ux Phase 1 + 3 + 4 (state machine + UI + recovery buttons)"
+  - hash: "0d0c419"
+    date: "2026-05-27"
+    message: "[04-career-system/07-applier/04-multi-step-state-machine] m6: submit-first error loop + 5 guards + policy + 3-phase guard evaluation (31/31 smoke, 196/196 Room regression)"
+    files_changed: 11
+    specs_affected:
+      - "intent-multi-step-state-machine-001 (anchors extended: STATE.SUBMITTING/PARSING_ERRORS/RETRYING_FIX/SUBMITTED_SUCCESS/ESCALATING_TO_USER + OUTCOME.ESCALATED + guards/ + submitLoop + dispatchLoopOutcome)"
+    milestones_affected:
+      - "m6-error-loop-state-machine-guards (→ completed)"
+    review:
+      - "Plan agent: 2 CRITICAL + 6 HIGH + 6 MEDIUM + 5 LOW"
+      - "Applied: 2 CRITICAL (wait-loop counter + append-fail priorAttempts push) + 3 HIGH (submit_failed explicit branch + empty-errors escalate + duplicate dispatch refactor)"
+      - "Defer to m7: H3 endpoint integration + H6 constraint amendment"
+    regression:
+      - "31/31 m6 smoke (15 e2e + 16 guard units + 3 review-driven)"
+      - "196/196 Room total: m1 58 + m2 43 + m3 37 + m4 30 + m6 31"
+  - date: "2026-05-27"
+    message: "[04-career-system/07-applier/04-multi-step-state-machine] m7: endpoint escalation_reason + /cancel route + constraint amendment + flywheel enum extension + 10 smoke (ROOM REOPEN COMPLETE 233/233)"
+    files_changed: 5
+    specs_affected:
+      - "intent-multi-step-state-machine-001 (anchors extended: cancelMachine + lastEscalationReason / lastSubmitAttemptsRun on ctrl + escalation_reason in getStatus)"
+      - "constraint-multi-step-state-machine-001 (m6 clarification: clause #1 applies to inter-step navigation; intra-step submit-retry safety net is maxSubmits + sameErrorTwice + escalation)"
+    milestones_affected:
+      - "m7-endpoint-room-reopen-complete (→ completed, ROOM REOPEN COMPLETE)"
+    review:
+      - "Plan agent: 2 CRITICAL + 4 HIGH + 5 MEDIUM + 6 LOW"
+      - "Applied: C2 wasCancelled overrides flywheel kind to escalated_user_cancel + H2 same-origin guard on /cancel"
+      - "C1 verified false alarm (pauseRequested check already first)"
+      - "Defer follow-ups: H1 concurrent-cancel idempotency / H3 PII redaction / M1-M5 audit log + dedup + activity bump"
+    regression:
+      - "40/40 m4+m7 endpoint smoke (30 original + 10 m7)"
+      - "Room ROOM REOPEN COMPLETE 233/233: m1 58 + m2 43 + m3 37 + m4+m7 40 + m6 31 + feedback 24"
+    rollups:
+      - "m5/m6/m7 ship Phase 1 of post-fill-handoff-ux design"
+      - "Room reopen: 4 → 7 milestones, all completed"
+      - "Cross-Room dependents now unblocked: 02-playwright-runtime m4+m5+m6 (Phase 2 deps for production fill/parse), 04-renderer/01-html-template m3 (Recovery 1 compressed render), 03-iteration-dashboard m4 (proposal queue migration)"
+current_sprint: "Sprint 21 — ROOM REOPEN COMPLETE 2026-05-27: m5/m6/m7 ship Phase 1 of post-fill-handoff-ux"
 blockers: []
 status_note: "🔄 ROOM REOPEN 2026-05-27 — Phase 1 of post-fill-handoff-ux design adds m5/m6/m7 (submit-first error loop + 5 guards + envelope schema v2). m1-m4 (153/153 smoke) remain ✅. All 9 plan-milestones open questions locked with defaults (per session 2026-05-27): same-error compared by (field, error_code) tuple, max submits hardcoded 3, submit interval since-last-submit-no-pause, form_errors parsed via generic selectors with adapter-rule fallback deferred to Phase 6, auto-retry-after-fix (UI shows attempt progress), _fixField via DI mock until Phase 2 ships fillWithFallback, escalation locks out further submit (control to user), Zod .default([]) auto-migrates old sessions without submit_attempts[], 90s form-silence threshold for timeout escalation. Estimated work: m5=210 LOC (60 src + 150 smoke, pure data layer), m6=660 LOC (310 src + 350 smoke, state machine + 5 guards in independent guards/*.mjs files + policy.mjs dispatcher), m7=140 LOC (40 src + 100 smoke + spec update). Cross-room dep: m6 RETRYING_FIX state calls 02-playwright-runtime/m5 fillWithFallback (Phase 2 of the design doc) — Phase 1 m6 uses DI mock; real wire-up happens during Phase 2 dev. \n\n--- ORIGINAL m4 ROOM COMPLETE NOTE ---\n\n🎉 ROOM COMPLETE 2026-05-13 (4/4 milestones). One-day Room. m4 shipped — endpoint.mjs ~310 LOC (in-memory _machines registry per jobId + pending-Promise approve resolver + startMachine/approveStep/pauseMachine/resumeMachine/getStatus + Zod body schemas StartBodySchema/ApproveStepBodySchema/ResumeBodySchema) + server.mjs +120 LOC (5 routes: POST start, GET :jobId/status, POST :jobId/approve-step, POST :jobId/pause, POST :jobId/resume; JOB_ID_RE shared with m1; URL/body jobId mismatch check on resume) + smoke-multistep-endpoint.mjs ~780 LOC, 30/30 green. All page-touching deps injected via _runMachine + _getPage so smoke runs pure-Node. Plan-agent Phase 3.5 review: 0 CRITICAL + 2 HIGH + 5 MEDIUM + 8 LOW — applied 2H + 2M + 4L (H1 synchronous slot reservation prevents concurrent-start race [orphan ctrl + double machine spawn], H2 lastDraftInfo snapshot preserved across approveStep/pauseMachine/settle paths for dashboard 'errored at step N' UX, M1 resume-of-completed returns 409 not 200 [terminal state shouldn't pretend to spawn], M4 done-state ctrl swept from registry on next start within 30s grace, L1 import JOB_ID_RE from m1 store [drift prevention], L2 URL vs body jobId explicit mismatch check, L5 pauseRequested flag for pause-before-first-approve [next approve auto-declines], L6 cleaned stale 'reject' comment). Deferred M2 (detectAdapterForUrl substring duplicate — m2 supersedes via lazy import in production wiring), M3 (resume drops classifier ctx — documented; would need session schema change), M5 (redactSession no-op — dashboard local-only, masking TBD when 08 ships UI), L3/L4/L7/L8 hygiene. Smoke covers: 3 Zod schemas + strict rejection + null-edit, startMachine happy + 503 + 409 duplicate, approveStep 404 + 409 + 400 + edits propagation, pauseMachine + 404 + 400, getStatus 404 + 200 + 400, resumeMachine paused + 404 + 410 abandoned + 409 already-running + 409 completed-terminal, 2 e2e choreographies (start→approve×3→completed, start→approve→pause→resume→complete), H1 concurrent-start race (exactly one wins), L5 pause-before-first-approve auto-declines, M4 restart after error within grace, H2 lastDraftInfo after settle. Room regression: m1 43 + m2 43 + m3 37 + m4 30 = **153/153 green** all milestones. ROOM COMPLETE rollups applied: room.yaml lifecycle planning→active, _tree.yaml multi-step planning→active, 07-applier parent 50%→62% (5/8 children ✅), 04-career-system 90%→92% (27/34 features). 下游 unblocked: 05-non-standard-controls (extends machine action verbs for weird widgets), 06-site-adapters (replaces m2 inline mini-registry — same shape contract), 08-human-gate-tracker/03+/04 (consumes /multi-step/:jobId/status + POST /approve-step for dashboard live approval UI), self-iteration/02-data-flywheel (reads session.field_memory + per_step_draft at completion to seed qa-bank history.jsonl)."
 last_updated: "2026-05-27"

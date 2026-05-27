@@ -23,13 +23,35 @@ export const FIELD_CLASSES = Object.freeze(['hard', 'legal', 'open', 'file', 'un
 export const CONFIDENCE_TIERS = Object.freeze(['high', 'medium', 'low', 'manual']);
 
 /** Site-failure error classification. Maps Playwright errors + classifier
- *  failures into a small closed set so m2's induction can groupBy. */
+ *  failures into a small closed set so m2's induction can groupBy.
+ *
+ *  m7 (post-fill-handoff-ux Phase 1) adds 'escalated_*' codes — submit-
+ *  first error loop gave up. Phase 5 signal F (submit detection
+ *  accuracy / adapter thank-you rules) buckets per ATS to propose
+ *  adapter rules. Kept as separate enum values (not "other") so
+ *  groupBy can show "Captivation: 80% escalated_all_strategies_failed"
+ *  vs "Lever: 60% escalated_timeout" without parsing error_message. */
 export const ERROR_KINDS = Object.freeze([
   'timeout',          // ACTION_TIMEOUT / fill / click / select timed out
   'stale_ref',        // STALE_REF from RefTable invalidation
   'element_gone',     // ELEMENT_GONE / iframe detached / option not found
   'classifier_error', // classifier threw or returned 'unknown' for all
   'machine_error',    // state-machine internal (writeSession fail, etc.)
+  // m7: submit-first error loop escalation reasons (mirror submitLoop's
+  // escalation_reason.code with 'escalated_' prefix so flywheel buckets
+  // separately from generic errors).
+  'escalated_parse_failure',
+  'escalated_parse_failure_empty',
+  'escalated_all_strategies_failed',
+  'escalated_same_error',
+  'escalated_max_submits',
+  'escalated_timeout',
+  'escalated_submit_failed',
+  'escalated_unexpected_next_step',
+  'escalated_user_cancel',
+  'escalated_wait_loop_stuck',
+  'escalated_hard_cap',
+  'escalated_unknown',  // fallback for future-added codes
   'other',            // catch-all
 ]);
 

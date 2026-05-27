@@ -5,7 +5,7 @@ room:
   type: feature
   lifecycle: active
   created_at: "2026-04-22"
-  updated_at: "2026-05-13"
+  updated_at: "2026-05-27"
   owner: backend
   contributors: []
   prompt_test:

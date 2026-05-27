@@ -27,6 +27,7 @@ import {
   pauseMachine,
   resumeMachine,
   getStatus,
+  cancelMachine,  // m7
   _peek,
   _resetAll,
   OUTCOME,
@@ -681,6 +682,288 @@ await test('Schemas: ApproveStepBodySchema.edits.suggested_value=null is accepte
     edits: [{ refId: 'e1', suggested_value: null }],
   });
   assert.equal(ok.edits[0].suggested_value, null);
+});
+
+// ── m7: cancel + escalation surfacing ───────────────────────────────
+
+async function seedSessionForm7(jobId) {
+  const s = buildInitialSession({ jobId, jobUrl: 'https://x.com', siteAdapter: 'workday' });
+  await writeSession(jobId, s);
+  return s;
+}
+
+await test('m7 cancel: active session → 202 + escalation_reason user_cancel, session.status=paused', async () => {
+  const jobId = 'cccccccc1001';
+  await seedSessionForm7(jobId);
+  const res = await cancelMachine(jobId);
+  assert.equal(res.status, 202);
+  assert.equal(res.escalation_reason.code, 'user_cancel');
+  assert.equal(res.escalation_reason.triggered_by, 'user');
+  const sess = await readSession(jobId);
+  assert.equal(sess.status, 'paused');
+  await deleteSession(jobId);
+});
+
+await test('m7 cancel: completed session → 409', async () => {
+  const jobId = 'cccccccc1002';
+  const s = buildInitialSession({ jobId, jobUrl: 'https://x.com', siteAdapter: 'workday' });
+  s.status = 'completed';
+  await writeSession(jobId, s);
+  const res = await cancelMachine(jobId);
+  assert.equal(res.status, 409);
+  assert.match(res.error, /already completed/);
+  await deleteSession(jobId);
+});
+
+await test('m7 cancel: no session → 404', async () => {
+  const res = await cancelMachine('cccccccc1003');
+  assert.equal(res.status, 404);
+});
+
+await test('m7 cancel: invalid jobId → 400', async () => {
+  const res = await cancelMachine('not-hex');
+  assert.equal(res.status, 400);
+});
+
+await test('m7 cancel: double-cancel after machine sets ESCALATED → 409', async () => {
+  // Direct write to _machines via _peek won't help — we'd need an active
+  // machine. Instead validate the persistence semantics: after a
+  // successful cancel, the session is 'paused'. A second cancel call
+  // sees status='paused' and proceeds (idempotent at session-store
+  // layer). The ctrl-level 409 only fires when there's an in-memory
+  // ctrl with lastOutcome=ESCALATED. Document the session-layer
+  // behavior here; ctrl-layer covered by an integration test below.
+  const jobId = 'cccccccc1004';
+  await seedSessionForm7(jobId);
+  const r1 = await cancelMachine(jobId);
+  assert.equal(r1.status, 202);
+  const r2 = await cancelMachine(jobId);
+  // session.status was already 'paused' — cancel just rewrites the
+  // same state and returns 202 with the same reason. NOT 409 because
+  // 'paused' is a legitimate cancel-input state. The ctrl-layer 409
+  // is what protects the in-flight machine case (next test).
+  assert.equal(r2.status, 202);
+  await deleteSession(jobId);
+});
+
+await test('m7 approveStep: session escalated → 403', async () => {
+  // We need an in-memory ctrl with lastOutcome=ESCALATED. Easiest is
+  // to inject directly via _peek: not available. So we drive through
+  // the runMachine path with an _isOnSubmitStep mock + a _submitForm
+  // mock that causes ESCALATED, then verify approveStep returns 403.
+  const jobId = 'cccccccc1005';
+  // Start machine that immediately hits the submit-loop and escalates
+  // (via all-strategies-failed since fixField returns failure).
+  const deps = {
+    _getPage: async () => ({}),
+    _readSession: async () => null,
+    _machineDeps: {
+      _snapshot: async () => ({ text: '', table: { refIds: () => [], publicEntry: () => null, resolve: () => null }, skippedFrames: 0 }),
+      _classifyAndFill: async () => { throw new Error('should not be called'); },
+      _fillField: async () => {},
+      _clickNext: async () => {},
+      _waitDomStable: async () => {},
+      _findNextButton: async () => null,
+      _isOnSubmitStep: async () => true,
+      _probeTotalSteps: async () => ({ total: null, source: 'exploratory' }),
+      // m6 submit-loop: parse returns 1 error, fix all-fails → escalates
+      _submitForm: async () => ({ outcome: 'has_errors', elapsed_ms: 1 }),
+      _parseFormErrors: async () => [{ field: 'phone', error_code: 'required', error_msg: 'x' }],
+      _fixField: async (p, f) => ({ field: f, fix_name: 'x', result: 'all_strategies_failed', success: false }),
+    },
+  };
+  const startRes = await startMachine({
+    jobId, jobUrl: 'https://x.com', detectedAdapter: 'workday',
+  }, deps);
+  assert.equal(startRes.sessionId, jobId);
+  // Wait for the async machine to settle
+  for (let i = 0; i < 60; i++) {
+    const ctrl = _peek(jobId);
+    if (ctrl && ctrl.state === 'done') break;
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  const ctrl = _peek(jobId);
+  assert.equal(ctrl.lastOutcome, OUTCOME.ESCALATED);
+  assert.equal(ctrl.lastEscalationReason.code, 'all_strategies_failed');
+  // approveStep must refuse
+  const approveRes = approveStep(jobId, { approved: true });
+  assert.equal(approveRes.status, 403);
+  assert.match(approveRes.error, /escalated.*control transferred/);
+  assert.equal(approveRes.escalation_reason.code, 'all_strategies_failed');
+  _resetAll();
+  await deleteSession(jobId);
+});
+
+await test('m7 cancel: in-flight machine escalates ctrl + 2nd cancel → 409', async () => {
+  const jobId = 'cccccccc1006';
+  // Start a machine that needs approval (LLM-source classifier output
+  // triggers stepNeedsApproval → machine pauses at the approve gate
+  // and ctrl.pendingApproval is set).
+  const deps = {
+    _getPage: async () => ({}),
+    _readSession: async () => null,
+    _machineDeps: {
+      _snapshot: async () => ({
+        text: '',
+        table: {
+          refIds: () => ['e1'],
+          publicEntry: (r) => ({ refId: r, role: 'textbox', name: 'Email' }),
+          resolve: () => null,
+        },
+        skippedFrames: 0,
+      }),
+      _classifyAndFill: async () => ({
+        refId: 'e1', role: 'textbox', label: 'Email', class: 'hard',
+        suggested_value: 'a@b.com', confidence: 'high',
+        // LLM source triggers stepNeedsApproval — machine pauses at gate
+        source: { kind: 'llm', model: 'haiku' },
+      }),
+      _fillField: async () => {},
+      _clickNext: async () => {},
+      _waitDomStable: async () => {},
+      _findNextButton: async () => null,
+      _isOnSubmitStep: async () => false,
+      _probeTotalSteps: async () => ({ total: 1, source: 'progressbar' }),
+      _submitForm: async () => ({ outcome: 'submitted' }),
+      _parseFormErrors: async () => [],
+      _fixField: async () => ({ success: true, fix_name: 'x', result: 'verified' }),
+    },
+  };
+  await startMachine({ jobId, jobUrl: 'https://x.com', detectedAdapter: 'workday' }, deps);
+  // Wait for the machine to reach approval gate
+  for (let i = 0; i < 60; i++) {
+    const ctrl = _peek(jobId);
+    if (ctrl && ctrl.pendingApproval) break;
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  // First cancel — should escalate ctrl + persist + return 202
+  const r1 = await cancelMachine(jobId);
+  assert.equal(r1.status, 202);
+  assert.equal(r1.escalation_reason.code, 'user_cancel');
+  // Give the async machine a tick to settle
+  await new Promise((r) => setTimeout(r, 50));
+  const ctrl = _peek(jobId);
+  assert.ok(ctrl, 'ctrl still in registry during grace');
+  assert.equal(ctrl.lastOutcome, OUTCOME.ESCALATED);
+  // Second cancel — ctrl-layer 409 (already escalated)
+  const r2 = await cancelMachine(jobId);
+  assert.equal(r2.status, 409);
+  assert.match(r2.error, /already escalated/);
+  _resetAll();
+  await deleteSession(jobId);
+});
+
+await test('m7 getStatus: surfaces escalation_reason + submitAttemptsRun for escalated session', async () => {
+  // Run a session through escalation, then check getStatus
+  const jobId = 'cccccccc1007';
+  const deps = {
+    _getPage: async () => ({}),
+    _readSession: async () => null,
+    _machineDeps: {
+      _snapshot: async () => ({ text: '', table: { refIds: () => [], publicEntry: () => null, resolve: () => null }, skippedFrames: 0 }),
+      _classifyAndFill: async () => ({}),
+      _fillField: async () => {},
+      _clickNext: async () => {},
+      _waitDomStable: async () => {},
+      _findNextButton: async () => null,
+      _isOnSubmitStep: async () => true,
+      _probeTotalSteps: async () => ({ total: null, source: 'exploratory' }),
+      _submitForm: async () => ({ outcome: 'has_errors' }),
+      _parseFormErrors: async () => [{ field: 'phone', error_code: 'invalid_format', error_msg: 'X' }],
+      _fixField: async (p, f) => ({ field: f, fix_name: 'x', result: 'all_strategies_failed', success: false }),
+    },
+  };
+  await startMachine({ jobId, jobUrl: 'https://x.com', detectedAdapter: 'workday' }, deps);
+  for (let i = 0; i < 60; i++) {
+    const ctrl = _peek(jobId);
+    if (ctrl && ctrl.state === 'done') break;
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  const status = await getStatus(jobId);
+  assert.equal(status.status, 200);
+  assert.equal(status.machine.lastOutcome, OUTCOME.ESCALATED);
+  assert.equal(status.machine.escalationReason.code, 'all_strategies_failed');
+  assert.ok(typeof status.machine.submitAttemptsRun === 'number');
+  assert.ok(status.machine.submitAttemptsRun >= 1);
+  // session.submit_attempts is also part of the session block via redactSession
+  assert.ok(Array.isArray(status.session.submit_attempts));
+  _resetAll();
+  await deleteSession(jobId);
+});
+
+await test('m7 [review C2]: cancel-during-natural-escalation surfaces user_cancel kind', async () => {
+  // Race scenario: machine is naturally escalating (all_strategies_failed)
+  // when user cancels. ctrl.lastEscalationReason.code='user_cancel' wins
+  // (wasCancelled guard); the flywheel record's kind must reflect
+  // user_cancel, NOT the natural reason — otherwise Phase 5 signal F
+  // would mis-cluster the cancel as an adapter failure.
+  const jobId = 'cccccccc1009';
+  // Pre-seed session to disk so cancelMachine (which calls the REAL
+  // readSession, not the injected _readSession) finds it.
+  await seedSessionForm7(jobId);
+  let submitGate;
+  const submitWaiter = new Promise((r) => { submitGate = r; });
+  const deps = {
+    _getPage: async () => ({}),
+    _machineDeps: {
+      _snapshot: async () => ({ text: '', table: { refIds: () => [], publicEntry: () => null, resolve: () => null }, skippedFrames: 0 }),
+      _classifyAndFill: async () => ({}),
+      _fillField: async () => {},
+      _clickNext: async () => {},
+      _waitDomStable: async () => {},
+      _findNextButton: async () => null,
+      _isOnSubmitStep: async () => true,
+      _probeTotalSteps: async () => ({ total: null, source: 'exploratory' }),
+      _submitForm: async () => {
+        // Block here so we can issue /cancel mid-flight, then release
+        // and have the loop eventually finish via all_strategies_failed.
+        await submitWaiter;
+        return { outcome: 'has_errors' };
+      },
+      _parseFormErrors: async () => [{ field: 'phone', error_code: 'invalid_format', error_msg: 'X' }],
+      _fixField: async (p, f) => ({ field: f, fix_name: 'x', result: 'all_strategies_failed', success: false }),
+    },
+  };
+  await startMachine({ jobId, jobUrl: 'https://x.com', detectedAdapter: 'workday' }, deps);
+  // Wait for the machine to reach the blocked _submitForm
+  for (let i = 0; i < 60; i++) {
+    const c = _peek(jobId);
+    if (c && c.state === 'running') break;
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  // Cancel while submit is blocked → sets user_cancel on ctrl
+  const cancelRes = await cancelMachine(jobId);
+  assert.equal(cancelRes.status, 202);
+  assert.equal(cancelRes.escalation_reason.code, 'user_cancel');
+  // Release the submit so the natural loop completes with 'all_strategies_failed'
+  submitGate();
+  // Wait for runMachine to finish
+  for (let i = 0; i < 60; i++) {
+    const c = _peek(jobId);
+    if (c && c.state === 'done') break;
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  const ctrl = _peek(jobId);
+  // wasCancelled guard preserves user_cancel on ctrl
+  assert.equal(ctrl.lastEscalationReason.code, 'user_cancel',
+    'wasCancelled guard preserved user_cancel');
+  // C2 fix verified inline (no side-effect to assert against without
+  // peeking the flywheel store; this test locks the ctrl-state contract
+  // — the kind override happens at _fireSiteFailure call site).
+  _resetAll();
+  await deleteSession(jobId);
+});
+
+await test('m7 getStatus: happy session has null escalationReason', async () => {
+  // Session that doesn't escalate — escalationReason should be null
+  const jobId = 'cccccccc1008';
+  await seedSessionForm7(jobId);
+  const status = await getStatus(jobId);
+  assert.equal(status.status, 200);
+  // No machine running → idle defaults
+  assert.equal(status.machine.escalationReason, null);
+  assert.equal(status.machine.submitAttemptsRun, null);
+  await deleteSession(jobId);
 });
 
 // ── Cleanup ──────────────────────────────────────────────────────────

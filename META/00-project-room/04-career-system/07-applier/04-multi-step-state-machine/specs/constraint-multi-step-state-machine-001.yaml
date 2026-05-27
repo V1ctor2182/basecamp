@@ -5,6 +5,34 @@ intent:
   summary: "每步独立批准 + field_memory 跨步复用 + 30 分钟 session 保留"
   detail: |
     (1) Multi-step 流程的每一步 MUST 独立让用户批准（不允许"一键完成所有步骤"—— 每步中间 DOM 状态不一样，漏 review 一步可能全盘错）；(2) field_memory 跨步复用 MUST 实现：Step 1 填的 firstName，Step 5 再出现 firstName-confirm 字段时直接用 memory 的值，不重复调 LLM 起草、不二次打扰用户；(3) 用户 30 分钟不操作 MUST 保留 session state（per_step_status / field_memory 写到 data/career/apply-sessions/{jobId}.json），下次 resume 能从 step N 继续；session > 24h 自动归档为 abandoned；(4) 每步 FILL 前 MUST 等 DOM 稳定（networkidle 或 selector present），不能盲填；(5) MutationObserver 观察到依赖字段出现后 MUST 重跑当前 step 的 classifier + 补一次批准（不能偷偷填新字段）。
+
+    m6 clarification (2026-05-27, post-fill-handoff-ux Phase 1):
+      Clause (1) "每步独立批准" governs INTER-step navigation transitions
+      (Step 1 → Step 2 → ... → Submit page). It does NOT cover INTRA-step
+      submit-retry rounds that m6's submit-first error loop introduces:
+      once the operator has approved the final step's fill, the machine
+      itself clicks Submit and — if the form returns inline errors —
+      may auto-retry up to MAX_SUBMIT_ATTEMPTS_PER_SESSION (=3) times
+      WITHOUT re-prompting for approval between retries.
+
+      Rationale: the constraint's stated risk ("每步中间 DOM 状态不一样，
+      漏 review 一步可能全盘错") targets navigation changes. Intra-step
+      retries operate on THE SAME DOM page that the operator already
+      reviewed; the only mutations are the targeted error-field fixes.
+      m6's guards substitute for explicit approval as the safety net:
+        - sameErrorTwice guard escalates immediately on `(field, code)`
+          repetition — meaning the fix did NOT change anything, which
+          IS the constraint's "全盘错" failure mode
+        - maxSubmits cap of 3 bounds blind divergence at ≤ 2 unreviewed
+          fix rounds
+        - allStrategiesFailed escalates when no strategy works
+        - parseFailure escalates when we can't even see the errors
+
+      Escalation hands FULL control to the operator (P1-OQ7): the
+      submit-loop refuses further automatic action, approveStep returns
+      403, the operator finishes in the browser and POSTs to mark
+      applied via Phase 3 Apply.tsx. This preserves the constraint's
+      core invariant — no unbounded unreviewed mutation.
 constraints: []
 indexing:
   type: constraint
@@ -19,4 +47,4 @@ provenance:
 relations: []
 anchors: []
 created_at: "2026-04-22"
-updated_at: "2026-04-22"
+updated_at: "2026-05-27"

@@ -97,6 +97,8 @@ import {
   pauseMachine as multiStepPause,
   resumeMachine as multiStepResume,
   getStatus as multiStepGetStatus,
+  // m7: user-driven escalation route (post-fill-handoff-ux §4.5/4.6)
+  cancelMachine as multiStepCancel,
 } from './src/career/applier/multistep/endpoint.mjs';
 import { JOB_ID_RE as APPLY_SESSIONS_JOB_ID_RE } from './src/career/applier/multistep/applySessionsStore.mjs';
 // 07-applier/07-self-iteration/02-data-flywheel m3 — approve/reject seam
@@ -410,7 +412,7 @@ function serializeConfigWrite(task) {
 // Guard PUT specifically with an Origin/Host same-origin check. Direct
 // tools (curl, the smoke harness) don't send Origin and fall through
 // untouched; browsers always send it on cross-origin fetches.
-function isSameOriginConfigWrite(req) {
+function isSameOriginWrite(req) {
   const origin = req.get('origin');
   if (!origin) return true; // non-browser caller (curl, smoke, fetch from node)
   let parsed;
@@ -434,7 +436,7 @@ function isSameOriginConfigWrite(req) {
 
 app.put('/api/config', async (req, res) => {
   try {
-    if (!isSameOriginConfigWrite(req)) {
+    if (!isSameOriginWrite(req)) {
       return res.status(403).json({
         error: 'cross-origin config write rejected (same-origin policy)',
       });
@@ -5687,6 +5689,43 @@ app.post('/api/career/applier/multi-step/:jobId/pause', (req, res) => {
       return res.status(result.status || 500).json({ error: result.error });
     }
     res.status(202).json({ sessionId: result.sessionId });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+// m7: user-driven escalation. Distinct from /pause — /cancel marks
+// the session ESCALATED (no further auto-submit, control to user).
+// Operator finishes in browser, then POSTs to mark applied.
+//
+// CSRF protection [review H2]: /cancel is state-changing and persists
+// session.status='paused' with an in-memory ESCALATED flag. Without
+// origin check, a cross-origin page could mass-cancel any in-flight
+// apply if it could guess the 12-hex jobId. Same-origin guard reuses
+// the isSameOriginWrite helper from /api/config (allowlist incl
+// vite dev origin). Curl / smoke (no Origin header) fall through.
+// NOTE: other applier routes (/pause, /approve-step, /resume) carry
+// the same risk and should be guarded in a follow-up; m7 ships /cancel
+// with the guard so the new attack surface is covered.
+app.post('/api/career/applier/multi-step/:jobId/cancel', async (req, res) => {
+  try {
+    if (!isSameOriginWrite(req)) {
+      return res.status(403).json({
+        error: 'cross-origin cancel rejected (same-origin policy)',
+      });
+    }
+    const { jobId } = req.params;
+    if (!MULTI_STEP_JOB_ID_RE.test(jobId)) {
+      return res.status(400).json({ error: 'jobId must match 12-hex' });
+    }
+    const result = await multiStepCancel(jobId);
+    if (result.error) {
+      return res.status(result.status || 500).json({ error: result.error });
+    }
+    res.status(result.status || 202).json({
+      sessionId: result.sessionId,
+      escalation_reason: result.escalation_reason,
+    });
   } catch (err) {
     res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
   }

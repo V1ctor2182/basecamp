@@ -22,6 +22,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import {
   readSession,
+  writeSession,        // m7: cancel persists session.status='paused'
+  withSessionLock,     // m7: serialize cancel persist
   deleteSession,
   JOB_ID_RE,
   SITE_ADAPTERS,
@@ -348,7 +350,22 @@ export async function startMachine(body, deps = {}) {
         },
         machineDeps,
       );
-      ctrl.lastOutcome = result.outcome;
+      // m7: if cancelMachine already escalated this ctrl, runMachine's
+      // PAUSED return must NOT overwrite that. The user's intent wins.
+      const wasCancelled = ctrl.lastOutcome === OUTCOME.ESCALATED
+        && ctrl.lastEscalationReason?.code === 'user_cancel';
+      if (!wasCancelled) {
+        ctrl.lastOutcome = result.outcome;
+        // m7: surface submit-loop diagnostics from runMachine's return
+        // (m6 attaches these on OUTCOME.ESCALATED + on timeout-mapped
+        // OUTCOME.ERROR via dispatchLoopOutcome). Endpoint.getStatus
+        // includes them in the machine block so the UI (Phase 3
+        // Apply.tsx) can render the right escalation card.
+        ctrl.lastEscalationReason = result.escalation_reason || null;
+        ctrl.lastSubmitAttemptsRun = typeof result.submit_attempts_run === 'number'
+          ? result.submit_attempts_run
+          : null;
+      }
       ctrl.lastError = result.error || null;
       ctrl.state = 'done';
       // REVIEW C1 (adv) fix CRITICAL: runMachine reports MOST internal
@@ -357,8 +374,34 @@ export async function startMachine(body, deps = {}) {
       // this branch, the site-failure flywheel would record almost
       // nothing in production — the smoke only passed because the mock
       // literally throws.
+      // m7 [review H3]: also fire on ESCALATED — flywheel signal F
+      // (Phase 5/m5 submit-detection accuracy) needs the per-ATS
+      // escalation rate to propose new adapter rules. error_kind is
+      // prefixed so flywheel can bucket separately from generic errors.
       if (result.outcome === OUTCOME.ERROR) {
         _fireSiteFailure(jobId, ctrl, { message: result.error || 'unknown machine error' });
+      } else if (result.outcome === OUTCOME.ESCALATED) {
+        // m7 [review C2]: if the user cancelled mid-flight, prefer the
+        // user-cancel reason over the natural-loop escalation reason.
+        // Otherwise the flywheel would mis-bucket: an actual user-cancel
+        // session would record as e.g. 'escalated_all_strategies_failed'
+        // (the reason the natural loop ultimately reported), polluting
+        // Phase 5 signal F's adapter-rule induction with phantom failures.
+        const codeRaw = wasCancelled
+          ? 'user_cancel'
+          : (result.escalation_reason?.code || 'unknown');
+        const detailRaw = wasCancelled
+          ? (ctrl.lastEscalationReason?.detail || 'user cancelled')
+          : (result.escalation_reason?.detail || 'submit-loop escalated');
+        // Map code → flywheel error_kind enum. Unknown codes fall back
+        // to 'escalated_unknown' so the Zod write doesn't reject silently.
+        const KNOWN_CODES = new Set([
+          'parse_failure', 'parse_failure_empty', 'all_strategies_failed',
+          'same_error', 'max_submits', 'timeout', 'submit_failed',
+          'unexpected_next_step', 'user_cancel', 'wait_loop_stuck', 'hard_cap',
+        ]);
+        const kind = `escalated_${KNOWN_CODES.has(codeRaw) ? codeRaw : 'unknown'}`;
+        _fireSiteFailure(jobId, ctrl, { message: detailRaw, kind });
       }
     } catch (err) {
       ctrl.lastOutcome = OUTCOME.ERROR;
@@ -408,7 +451,10 @@ export async function startMachine(body, deps = {}) {
 
 /**
  * Resolve a pending approval. Returns 404 if no machine; 409 if no
- * pending approval (machine is busy filling / clicking Next).
+ * pending approval (machine is busy filling / clicking Next); 403 if
+ * the session has escalated (m6 submit-first loop) — control is fully
+ * transferred to the operator per P1-OQ7 + post-fill-handoff-ux §4.6,
+ * no further auto-approval is accepted.
  */
 export function approveStep(jobId, body) {
   if (!JOB_ID_RE.test(jobId)) {
@@ -417,6 +463,16 @@ export function approveStep(jobId, body) {
   const ctrl = _machines.get(jobId);
   if (!ctrl) {
     return { status: 404, error: `no machine running for jobId ${jobId}` };
+  }
+  // m7 [review H3 / OQ7]: refuse approve on escalated sessions — the
+  // m6 submit-loop already gave up; further machine work would violate
+  // the "control to user" contract. Operator finishes in browser.
+  if (ctrl.lastOutcome === OUTCOME.ESCALATED) {
+    return {
+      status: 403,
+      error: 'session escalated; control transferred to user — finish in browser, then mark applied',
+      escalation_reason: ctrl.lastEscalationReason || null,
+    };
   }
   const pending = ctrl.pendingApproval;
   if (!pending) {
@@ -489,6 +545,104 @@ export function pauseMachine(jobId) {
     ctrl.pauseRequested = true;
   }
   return { status: 202, sessionId: jobId };
+}
+
+/**
+ * m7: user-driven escalation. Force the machine to give up — sets
+ * `lastEscalationReason` to a user_cancel code, marks the in-memory
+ * controller as escalated, persists session.status='paused' so the
+ * operator can finish in the browser.
+ *
+ * Distinct from pauseMachine:
+ *   - pauseMachine declines a pending approval, leaves session active
+ *   - cancelMachine ESCALATES (no further approve allowed per OQ7)
+ *
+ * Idempotency:
+ *   - already escalated → 409 (don't double-cancel)
+ *   - session.status='completed' → 409 (terminal)
+ *   - session.status='abandoned' → 410 (gone)
+ *
+ * @param {string} jobId
+ * @returns {Promise<{ status, sessionId?, escalation_reason?, error? }>}
+ */
+export async function cancelMachine(jobId) {
+  if (!JOB_ID_RE.test(jobId)) {
+    return { status: 400, error: 'invalid jobId' };
+  }
+  // Read session first — cancel must work even when no in-memory ctrl
+  // (e.g. user starts apply, server restarts, user wants to cancel).
+  let session;
+  try {
+    session = await readSession(jobId);
+  } catch (err) {
+    return { status: 500, error: `readSession failed: ${String(err?.message ?? err).slice(0, 200)}` };
+  }
+  if (!session) {
+    return { status: 404, error: `no session found for jobId ${jobId}` };
+  }
+  if (session.status === 'completed') {
+    return { status: 409, error: 'session already completed; cannot cancel' };
+  }
+  if (session.status === 'abandoned') {
+    return { status: 410, error: 'session abandoned (>24h idle); cannot cancel' };
+  }
+
+  const ctrl = _machines.get(jobId);
+  const escalationReason = {
+    code: 'user_cancel',
+    detail: 'operator cancelled via /cancel endpoint — control transferred to user',
+    triggered_by: 'user',
+  };
+
+  if (ctrl) {
+    // already-escalated guard — both for racing /cancel calls AND for
+    // ESCALATED-from-submit-loop sessions (the loop already escalated,
+    // user clicking cancel again is redundant).
+    if (ctrl.lastOutcome === OUTCOME.ESCALATED) {
+      return { status: 409, error: 'session already escalated; no further cancellation needed' };
+    }
+    // Mark the controller as escalated so subsequent approveStep / status
+    // see the cancel state. The async machine loop may still be in flight;
+    // by resolving any pending approval as declined we make it bail out
+    // cleanly (runMachine's reconciliation will then map to OUTCOME.PAUSED
+    // but we OVERRIDE that here since the operator's intent is escalate).
+    ctrl.lastOutcome = OUTCOME.ESCALATED;
+    ctrl.lastEscalationReason = escalationReason;
+    if (ctrl.pendingApproval) {
+      ctrl.lastDraftInfo = ctrl.pendingApproval.draftInfo;
+      try {
+        ctrl.pendingApproval.resolve({ approved: false });
+      } catch {}
+      ctrl.pendingApproval = null;
+    } else {
+      // No pending approval — set pauseRequested so the next approval
+      // gate (if reached before the async loop notices) auto-declines.
+      ctrl.pauseRequested = true;
+    }
+  }
+
+  // Persist session.status='paused' even without ctrl (cold-cancel path)
+  if (session.status !== 'paused') {
+    session.status = 'paused';
+    try {
+      await withSessionLock(jobId, async () => {
+        await writeSession(jobId, session);
+      });
+    } catch (err) {
+      // Best-effort persist; state is still in ctrl (if any) for the
+      // remainder of this server process.
+      return {
+        status: 500,
+        error: `cancel persist failed: ${String(err?.message ?? err).slice(0, 200)}`,
+      };
+    }
+  }
+
+  return {
+    status: 202,
+    sessionId: jobId,
+    escalation_reason: escalationReason,
+  };
 }
 
 /**
@@ -565,6 +719,11 @@ export async function getStatus(jobId) {
         // H2: surface lastDraftInfo so dashboard can show "errored at step N"
         // after the machine has settled and pendingApproval was wiped.
         lastDraftInfo: ctrl.lastDraftInfo || null,
+        // m7: surface m6 submit-loop diagnostics. UI (Phase 3 Apply.tsx)
+        // selects the escalation card template by reason.code; submit
+        // attempts history powers the per-attempt timeline view.
+        escalationReason: ctrl.lastEscalationReason || null,
+        submitAttemptsRun: ctrl.lastSubmitAttemptsRun ?? null,
         // Auto-approve audit — counts + per-step log of refIds resolved
         // without operator review. Empty + 0 when the feature is off.
         autoApprove: {
@@ -579,6 +738,8 @@ export async function getStatus(jobId) {
         lastError: null,
         pending: null,
         lastDraftInfo: null,
+        escalationReason: null,
+        submitAttemptsRun: null,
         autoApprove: { enabled: false, count: 0, log: [] },
       };
 
@@ -669,6 +830,12 @@ function _fireSiteFailure(jobId, ctrl, err) {
       domain = 'unknown';
     }
   }
+  // m7: callers can override the auto-classified kind (e.g. ESCALATED
+  // branch passes `escalated_<code>` so the flywheel buckets it
+  // separately from network/parser errors).
+  const error_kind = (err && typeof err === 'object' && typeof err.kind === 'string')
+    ? err.kind
+    : classifyError(err);
   recordSiteFailure({
     ts: new Date().toISOString(),
     jobId,
@@ -677,7 +844,7 @@ function _fireSiteFailure(jobId, ctrl, err) {
     // REVIEW H4 fix: null when error preceded any approval rather than
     // defaulting to 0 (which m2 would mis-cluster as "step-0 failures").
     step_idx: ctrl.lastDraftInfo?.stepIdx ?? null,
-    error_kind: classifyError(err),
+    error_kind,
     error_message: String(err?.message ?? err).slice(0, 400),
   }).catch((recErr) => {
     console.warn('feedback: recordSiteFailure failed:', recErr.message);
