@@ -388,7 +388,7 @@ milestones:
       - "src/career/applier/multistep/guards/submitInterval.mjs"
       - "scripts/smoke-error-loop-machine.mjs"
       - "scripts/smoke-multistep-machine.mjs (2 旧 test 更新接 m6 行为)"
-    commit_hash: "PENDING"
+    commit_hash: "0d0c419"
     deferred_to_m7:
       - "[H3] endpoint.mjs 消费 OUTCOME.ESCALATED + surface escalation_reason via /status — m7 endpoint scope"
       - "[H6] constraint-multi-step-state-machine-001.yaml 加 clarification — 每步独立批准只对 inter-step,intra-step submit-retry 用 maxSubmits + sameErrorTwice 兜底"
