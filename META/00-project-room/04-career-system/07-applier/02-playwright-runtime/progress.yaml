@@ -244,7 +244,22 @@ milestones:
 
   - id: "m4-fill-with-fallback-strategy-ladder"
     name: "fillWithFallback + 5 strategy ladder(独立 file)"
-    status: pending
+    status: completed
+    actual_files:
+      - "src/career/applier/runtime/fillWithFallback.mjs"
+      - "src/career/applier/runtime/strategies/shared.mjs"
+      - "src/career/applier/runtime/strategies/selectOption.mjs"
+      - "src/career/applier/runtime/strategies/reactSelectClick.mjs"
+      - "src/career/applier/runtime/strategies/keyboardInput.mjs"
+      - "src/career/applier/runtime/strategies/roleLocatorClick.mjs"
+      - "src/career/applier/runtime/strategies/ariaCombobox.mjs"
+      - "scripts/smoke-applier-fill-with-fallback.mjs"
+    commit_hash: "PENDING"
+    review:
+      - "Plan agent: 3 CRITICAL + 6 HIGH + 5 MEDIUM + 4 LOW"
+      - "Applied: C1 (doc adapter pattern) + C2 (null-class soft + hard reclass) + C3 (Promise.race outer timeout) + H1 (multi-select reset guard) + H2 (sanitize keyboard input) + H4 (NFC normalize verifier) + H5 (listbox visibility wait) + H6 (conditional Enter) + M1 (preserve err.code) + M5 (exact:true → fallback fuzzy)"
+      - "Defer: H3 (custom reseter try-catch — done inline as part of fix), M2-M4, L1-L4 nits"
+      - "Followup: m6 envelope.fixes_tried needs to preserve strategies_tried[] for Phase 5/m5 signal A — open as a m6-followup OR Phase 5 ingestion concern"
     estimated_files:
       - "src/career/applier/runtime/fillWithFallback.mjs"            # NEW
       - "src/career/applier/runtime/strategies/selectOption.mjs"     # NEW
