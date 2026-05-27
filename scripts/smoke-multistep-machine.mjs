@@ -592,12 +592,20 @@ await test('runMachine: no Next button on last step → completed', async () => 
 
 // ── 9. isOnSubmitStep before run → immediate completion ──────────────
 
-await test('runMachine: isOnSubmitStep true on entry → completes without filling', async () => {
+await test('runMachine: isOnSubmitStep true on entry → completes without filling (m6: + submitLoop mocks land submit)', async () => {
+  // m6 changed this scenario's machinery:
+  //   m3 era — "isSubmit on entry" → no fill, just mark completed
+  //   m6 era — "isSubmit on entry" → runStep (no fields to fill in this
+  //   empty-table case) → runSubmitLoop → mock submitForm returns
+  //   {outcome:'submitted'} → COMPLETED
+  // Same observable outcome (completed, no fills), but submitLoop is now
+  // exercised. Test injects mock submit deps to make this happen.
   const jobId = '222222222222';
   await writeSession(jobId, buildInitialSession({
     jobId, jobUrl: 'https://x.com', siteAdapter: 'workday',
   }));
   let fillCalls = 0;
+  let submitCalls = 0;
 
   const result = await runMachine(
     { jobId, page: {}, approve: async () => ({ approved: true }) },
@@ -610,11 +618,16 @@ await test('runMachine: isOnSubmitStep true on entry → completes without filli
       _findNextButton: async () => null,
       _isOnSubmitStep: async () => true, // already at submit
       _probeTotalSteps: async () => ({ total: null, source: 'exploratory' }),
+      // m6 submit-loop deps
+      _submitForm: async () => { submitCalls++; return { outcome: 'submitted', elapsed_ms: 1 }; },
+      _parseFormErrors: async () => { throw new Error('should not be called on submitted path'); },
+      _fixField: async () => { throw new Error('should not be called on submitted path'); },
     },
   );
 
   assert.equal(result.outcome, 'completed');
   assert.equal(fillCalls, 0);
+  assert.equal(submitCalls, 1, 'm6 submitLoop should click submit once');
 
   await deleteSession(jobId);
 });
@@ -1002,7 +1015,11 @@ await test('H1: resume preserves pending draft user edits', async () => {
   await deleteSession(jobId);
 });
 
-await test('H3: isOnSubmitStep re-checked after Next click prevents auto-submit', async () => {
+await test('H3: isOnSubmitStep re-checked after Next click prevents auto-submit (m6: + submitLoop click)', async () => {
+  // m6 update: same scenario — step 0 fills, Next → step 1 detects
+  // Submit page. Now the machine RUNS submitLoop on the submit step
+  // (per m6 design). The fill assertion still holds: submit-step
+  // checkbox NOT filled (the bulk was filled on step 0).
   const jobId = 'aaaaaaaaa005';
   await writeSession(jobId, buildInitialSession({
     jobId, jobUrl: 'https://x.com', siteAdapter: 'workday', totalSteps: 2,
@@ -1013,6 +1030,7 @@ await test('H3: isOnSubmitStep re-checked after Next click prevents auto-submit'
   ]);
   let fillCalls = 0;
   let submitChecks = 0;
+  let submitClicks = 0;
 
   const result = await runMachine(
     { jobId, page: {}, approve: async () => ({ approved: true }) },
@@ -1033,15 +1051,20 @@ await test('H3: isOnSubmitStep re-checked after Next click prevents auto-submit'
         return emul.state.stepIdx >= 1;
       },
       _probeTotalSteps: async () => ({ total: 2, source: 'progressbar' }),
+      // m6 submit-loop deps
+      _submitForm: async () => { submitClicks++; return { outcome: 'submitted', elapsed_ms: 1 }; },
+      _parseFormErrors: async () => [],
+      _fixField: async () => ({ success: true, fix_name: 'noop', result: 'verified' }),
     },
   );
 
   assert.equal(result.outcome, 'completed');
   // H3 fix: after step 0 + click Next + reach step 1 (which isOnSubmitStep
   // detects as submit), we exit WITHOUT filling step 1's checkbox.
+  // m6: instead of just exiting, we now click submit ONCE via submitLoop.
   assert.equal(fillCalls, 1, 'only step 0 fills; submit step skipped');
-  // Submit was checked at top of iteration 0 AND iteration 1
-  assert.ok(submitChecks >= 2);
+  assert.ok(submitChecks >= 2, 'submit checked at top of iter 0 AND iter 1');
+  assert.equal(submitClicks, 1, 'm6 submitLoop clicks submit exactly once');
 
   await deleteSession(jobId);
 });

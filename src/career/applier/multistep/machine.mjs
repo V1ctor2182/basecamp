@@ -40,6 +40,10 @@ import {
   isOnSubmitStep as realIsOnSubmitStep,
 } from './stepProbe.mjs';
 import { applyMemoryHit, recordToMemory, normalizeLabel } from './fieldMemory.mjs';
+// m6: submit-first error loop. runSubmitLoop is the helper invoked when
+// the form is filled + final step approved; it owns submit → parse →
+// fix → retry / escalate.
+import { runSubmitLoop as runSubmitLoopHelper } from './submitLoop.mjs';
 
 /** State machine node ids — for telemetry and error diagnostics. */
 export const STATE = Object.freeze({
@@ -55,6 +59,16 @@ export const STATE = Object.freeze({
   COMPLETE: 'COMPLETE',
   PAUSED: 'PAUSED',
   ERROR: 'ERROR',
+  // m6: submit-first error loop states (entered when isSubmit detected
+  // AND prior steps have been filled+approved). These are internal to
+  // runSubmitLoop in submitLoop.mjs — runMachine only sees the result
+  // (an outcome enum) and doesn't track per-state transitions here.
+  // Kept on STATE for documentation + future telemetry.
+  SUBMITTING: 'SUBMITTING',
+  PARSING_ERRORS: 'PARSING_ERRORS',
+  RETRYING_FIX: 'RETRYING_FIX',
+  SUBMITTED_SUCCESS: 'SUBMITTED_SUCCESS',
+  ESCALATING_TO_USER: 'ESCALATING_TO_USER',
 });
 
 /** Terminal outcomes of runMachine. */
@@ -62,6 +76,13 @@ export const OUTCOME = Object.freeze({
   COMPLETED: 'completed',
   PAUSED: 'paused',
   ERROR: 'error',
+  // m6: submit-first error loop exhausted retries / hit a fatal guard.
+  // The machine successfully filled the form and clicked submit ≥ 1
+  // time, but never reached a thank-you page. UI shows the post-fill
+  // fallback (Phase 3 Apply.tsx cards) so the operator can finish in
+  // the browser. Endpoint.mjs (Phase 1/m7) surfaces escalation_reason
+  // alongside this outcome.
+  ESCALATED: 'escalated',
 });
 
 export const DEFAULT_MAX_STEPS = 20;
@@ -1039,6 +1060,12 @@ export async function runMachine(args, deps = {}) {
     _isOnSubmitStep: deps._isOnSubmitStep || realIsOnSubmitStep,
     _readSession: deps._readSession || readSession,
     _writeSession: deps._writeSession || writeSession,
+    // m6: submit-first error loop deps. Defaults THROW (Phase 2/m4+m5
+    // primitives ship later). Smoke MUST inject mocks. Production code
+    // wires the real Phase 2 helpers via endpoint.mjs.
+    _submitForm: deps._submitForm || defaultSubmitForm,
+    _parseFormErrors: deps._parseFormErrors || defaultParseFormErrors,
+    _fixField: deps._fixField || defaultFixField,
   };
 
   // INIT — load or bootstrap session
@@ -1103,6 +1130,11 @@ export async function runMachine(args, deps = {}) {
   let stepsRun = 0;
   let outcome = null;
   let errorMsg;
+  // m6: transient diagnostics from runSubmitLoop. NOT persisted (m1
+  // session schema is .strict()) — attached only to the runMachine
+  // return object so endpoint.mjs (Phase 1/m7) can surface
+  // escalation_reason in GET /:jobId/status.
+  let loopOutcomeMeta = null;
 
   try {
     for (let i = 0; i < maxSteps; i++) {
@@ -1122,8 +1154,15 @@ export async function runMachine(args, deps = {}) {
         isSubmit = await resolved._isOnSubmitStep(page, session.site_adapter);
       } catch {}
       if (isSubmit && session.current_step > 0) {
-        session.status = 'completed';
-        outcome = OUTCOME.COMPLETED;
+        // m6: multi-step Submit page. runSubmitLoop owns submit + errors.
+        const loopRes = await runSubmitLoopHelper({
+          jobId, session, page, siteAdapter: session.site_adapter, deps: resolved,
+        });
+        const d = dispatchLoopOutcome(loopRes);
+        session = d.session;
+        outcome = d.outcome;
+        if (d.errorMsg) errorMsg = d.errorMsg;
+        if (d.loopOutcomeMeta) loopOutcomeMeta = d.loopOutcomeMeta;
         break;
       }
 
@@ -1150,11 +1189,21 @@ export async function runMachine(args, deps = {}) {
         break;
       }
 
-      // Single-page form: the form is now filled and the Submit button is
-      // right here → done. The operator reviews and submits in the browser.
+      // Single-page form: the form is now filled and the Submit button
+      // is right here. m6: the machine itself runs the submit-first
+      // error loop instead of handing off to the operator. If the loop
+      // can land submit, COMPLETED. If guards trip, ESCALATED (operator
+      // takes over in browser).
       if (isSubmit) {
-        session.status = 'completed';
-        outcome = OUTCOME.COMPLETED;
+        // m6: single-page form post-runStep. Same dispatch as multi-step.
+        const loopRes = await runSubmitLoopHelper({
+          jobId, session, page, siteAdapter: session.site_adapter, deps: resolved,
+        });
+        const d = dispatchLoopOutcome(loopRes);
+        session = d.session;
+        outcome = d.outcome;
+        if (d.errorMsg) errorMsg = d.errorMsg;
+        if (d.loopOutcomeMeta) loopOutcomeMeta = d.loopOutcomeMeta;
         break;
       }
 
@@ -1202,13 +1251,15 @@ export async function runMachine(args, deps = {}) {
   // C4 fix from review: reconcile session.status with the final outcome
   // BEFORE the persist. status='active' must not be the disk state for an
   // error/completed/paused outcome. Map: completed→completed, paused→
-  // paused (already set in runStep), error→paused (so resume can retry).
+  // paused (already set in runStep), error→paused (so resume can retry),
+  // m6: escalated→paused (operator continues in browser; session is
+  // resumable but the machine is done auto-submitting per OQ7).
   // We add a transient `last_error` field to the session for diagnostics
   // (m1 schema is .strict() so we DON'T persist that — we attach it to
   // the returned object only).
   if (outcome === OUTCOME.COMPLETED) {
     session.status = 'completed';
-  } else if (outcome === OUTCOME.ERROR) {
+  } else if (outcome === OUTCOME.ERROR || outcome === OUTCOME.ESCALATED) {
     session.status = 'paused';
   }
   // (PAUSED was already set by runStep on declined approval)
@@ -1231,6 +1282,10 @@ export async function runMachine(args, deps = {}) {
     session,
     steps_run: stepsRun,
     ...(errorMsg ? { error: errorMsg } : {}),
+    // m6: include submit-loop diagnostics if the loop ran. Caller
+    // (endpoint.mjs Phase 1/m7) merges escalation_reason into GET
+    // /:jobId/status responses.
+    ...(loopOutcomeMeta ? loopOutcomeMeta : {}),
   };
 }
 
@@ -1306,6 +1361,73 @@ async function defaultWaitDomStable(page) {
     return;
   }
   await new Promise((r) => setTimeout(r, 200));
+}
+
+// m6 dispatch helper — translates runSubmitLoop result into the
+// {session, outcome, errorMsg, loopOutcomeMeta} that the step-loop
+// integration uses. Extracted (review H7) so both isSubmit branches
+// in runMachine apply the same mapping; previous duplication was a
+// bug multiplier (any future change to the mapping needs one edit).
+//
+// Mapping:
+//   loopRes.outcome === 'submitted' → OUTCOME.COMPLETED, session.status='completed'
+//   loopRes.outcome === 'escalated' → OUTCOME.ESCALATED, session.status='paused'
+//                                       (loopOutcomeMeta carries escalation_reason
+//                                        for endpoint Phase 1/m7 to surface)
+//   loopRes.outcome === 'timeout'   → OUTCOME.ERROR, errorMsg includes detail
+//                                       AND loopOutcomeMeta carries reason
+//                                       (review L4 — was lost previously)
+function dispatchLoopOutcome(loopRes) {
+  const session = loopRes.final_session;
+  let outcome;
+  let errorMsg;
+  let loopOutcomeMeta = null;
+  if (loopRes.outcome === 'submitted') {
+    if (session) session.status = 'completed';
+    outcome = OUTCOME.COMPLETED;
+  } else if (loopRes.outcome === 'escalated') {
+    if (session) session.status = 'paused';
+    outcome = OUTCOME.ESCALATED;
+    loopOutcomeMeta = {
+      escalation_reason: loopRes.escalation_reason,
+      submit_attempts_run: loopRes.attempts_run,
+    };
+  } else {
+    // 'timeout' or unexpected — log diag both as errorMsg AND structured
+    if (session) session.status = 'paused';
+    outcome = OUTCOME.ERROR;
+    errorMsg = `submitLoop ${loopRes.outcome}: ${loopRes.escalation_reason?.detail || 'no detail'}`;
+    if (loopRes.escalation_reason) {
+      loopOutcomeMeta = {
+        escalation_reason: loopRes.escalation_reason,
+        submit_attempts_run: loopRes.attempts_run,
+      };
+    }
+  }
+  return { session, outcome, errorMsg, loopOutcomeMeta };
+}
+
+// m6 default DIs — throw with a clear hint. Phase 2/m5 ships the real
+// implementations (submitForm + parseFormErrors + detectSubmitSuccess in
+// 02-playwright-runtime/submitFlow.mjs; fixField via fillWithFallback
+// in 02-playwright-runtime/fillWithFallback.mjs). Until then production
+// wiring in endpoint.mjs must inject deps explicitly OR runMachine will
+// throw on the submit-first path. Smoke ALWAYS injects mocks.
+async function defaultSubmitForm() {
+  throw new Error(
+    '_submitForm not injected — Phase 2/m5 02-playwright-runtime/submitFlow.mjs is not yet wired; ' +
+      'endpoint.mjs must pass _submitForm in deps until then',
+  );
+}
+async function defaultParseFormErrors() {
+  throw new Error(
+    '_parseFormErrors not injected — Phase 2/m5 02-playwright-runtime/submitFlow.mjs is not yet wired',
+  );
+}
+async function defaultFixField() {
+  throw new Error(
+    '_fixField not injected — Phase 2/m4 02-playwright-runtime/fillWithFallback.mjs is not yet wired',
+  );
 }
 
 // Re-export internals that smoke + m4 need

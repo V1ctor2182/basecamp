@@ -376,7 +376,22 @@ milestones:
 
   - id: "m6-error-loop-state-machine-guards"
     name: "machine.mjs 加 error_loop states + 5 guards(独立 file)+ policy"
-    status: pending
+    status: completed
+    actual_files:
+      - "src/career/applier/multistep/machine.mjs"
+      - "src/career/applier/multistep/submitLoop.mjs"
+      - "src/career/applier/multistep/guards/policy.mjs"
+      - "src/career/applier/multistep/guards/parseFailure.mjs"
+      - "src/career/applier/multistep/guards/allStrategiesFailed.mjs"
+      - "src/career/applier/multistep/guards/sameErrorTwice.mjs"
+      - "src/career/applier/multistep/guards/maxSubmits.mjs"
+      - "src/career/applier/multistep/guards/submitInterval.mjs"
+      - "scripts/smoke-error-loop-machine.mjs"
+      - "scripts/smoke-multistep-machine.mjs (2 旧 test 更新接 m6 行为)"
+    commit_hash: "PENDING"
+    deferred_to_m7:
+      - "[H3] endpoint.mjs 消费 OUTCOME.ESCALATED + surface escalation_reason via /status — m7 endpoint scope"
+      - "[H6] constraint-multi-step-state-machine-001.yaml 加 clarification — 每步独立批准只对 inter-step,intra-step submit-retry 用 maxSubmits + sameErrorTwice 兜底"
     estimated_files:
       - "src/career/applier/multistep/machine.mjs"
       - "src/career/applier/multistep/guards/policy.mjs"             # NEW
