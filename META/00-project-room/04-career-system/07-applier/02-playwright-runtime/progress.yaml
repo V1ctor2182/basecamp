@@ -307,7 +307,16 @@ milestones:
 
   - id: "m5-submit-flow-error-parse-success-detect"
     name: "submitForm + parseFormErrors + detectSubmitSuccess(submit-first loop 三件套)"
-    status: pending
+    status: completed
+    files:
+      - "src/career/applier/runtime/submitFlow.mjs"
+      - "scripts/smoke-applier-submit-flow.mjs"
+    commit_hash: "PENDING"
+    review:
+      - "Plan agent: 2 CRITICAL + 5 HIGH + 7 MEDIUM + 7 LOW"
+      - "Applied: C1 (clearTimeout on race resolve) + C2 (snapshot errorCountBefore — pre-existing visible errors do NOT pre-resolve has_errors race; uses page.waitForFunction with computedStyle visibility check) + H1 (aria-describedby reverse-lookup preferred in Method 1 to align dedup keys with Method 2) + H2 (date-trio/phone-trio multi-input groups → join names with '+') + H3 (inferErrorCode tightened: bare 'too long' no longer routes to too_large; unit/size-words/size-bound required) + H4 (attachSubmitNetworkSignal.reset() for between-attempts use) + H5 (detectSubmitSuccess iterates ALL text matches and returns true on first VISIBLE — not first().isVisible() which lands on hidden modals) + M3 (attribute selector [id=...] instead of #id — Workday IDs may lead with digits) + M4 (POST status 2xx only — 3xx redirects to /login were false-positive success) + M5 (dispose() wraps page.off in try/catch — TargetClosedError on disposed pages) + M7 (real smoke for POST + framenavigated trigger + 302 redirect NOT success)"
+      - "Defer: H2 partial (group ID heuristic landed; aria-labelledby join deferred) + M1 (race CPU waste — inherent), M2 (90s default path not unit-tested — cost/benefit), M6 (about:blank quirks — acceptable), L1-L7 nits"
+      - "Followup: per L6, submitForm can throw on obscured/non-clickable buttons (humanClick visibility wait) — m6's catch chain treats this as a soft error; consider distinguishing 'submit_button_obscured' from 'timeout' in Phase 6 telemetry"
     estimated_files:
       - "src/career/applier/runtime/submitFlow.mjs"       # NEW
       - "scripts/smoke-applier-submit-flow.mjs"           # NEW
