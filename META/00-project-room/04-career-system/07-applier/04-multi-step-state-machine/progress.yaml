@@ -472,7 +472,7 @@ milestones:
       - "src/career/feedback/schemas.mjs"
       - "META/.../constraint-multi-step-state-machine-001.yaml"
       - "scripts/smoke-multistep-endpoint.mjs"
-    commit_hash: "PENDING"
+    commit_hash: "a1def5b"
     review:
       - "Plan agent: 2 CRITICAL + 4 HIGH + 5 MEDIUM + 6 LOW"
       - "Applied: C2 (kind override on wasCancelled) + H2 (same-origin guard on /cancel) + 1 new C2 verification smoke"
@@ -856,7 +856,8 @@ commits:
     regression:
       - "31/31 m6 smoke (15 e2e + 16 guard units + 3 review-driven)"
       - "196/196 Room total: m1 58 + m2 43 + m3 37 + m4 30 + m6 31"
-  - date: "2026-05-27"
+  - hash: "a1def5b"
+    date: "2026-05-27"
     message: "[04-career-system/07-applier/04-multi-step-state-machine] m7: endpoint escalation_reason + /cancel route + constraint amendment + flywheel enum extension + 10 smoke (ROOM REOPEN COMPLETE 233/233)"
     files_changed: 5
     specs_affected:
