@@ -254,7 +254,7 @@ milestones:
       - "src/career/applier/runtime/strategies/roleLocatorClick.mjs"
       - "src/career/applier/runtime/strategies/ariaCombobox.mjs"
       - "scripts/smoke-applier-fill-with-fallback.mjs"
-    commit_hash: "PENDING"
+    commit_hash: "b6b95fe"
     review:
       - "Plan agent: 3 CRITICAL + 6 HIGH + 5 MEDIUM + 4 LOW"
       - "Applied: C1 (doc adapter pattern) + C2 (null-class soft + hard reclass) + C3 (Promise.race outer timeout) + H1 (multi-select reset guard) + H2 (sanitize keyboard input) + H4 (NFC normalize verifier) + H5 (listbox visibility wait) + H6 (conditional Enter) + M1 (preserve err.code) + M5 (exact:true → fallback fuzzy)"
