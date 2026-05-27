@@ -324,7 +324,7 @@ milestones:
     actual_files:
       - "src/career/applier/multistep/applySessionsStore.mjs"
       - "scripts/smoke-apply-sessions-store.mjs"
-    commit_hash: "PENDING"  # filled after commit lands
+    commit_hash: "cbdeff2"
     estimated_files:
       - "src/career/applier/multistep/applySessionsStore.mjs"
       - "scripts/smoke-apply-sessions-store.mjs"
@@ -798,7 +798,8 @@ commits:
       - "_tree.yaml 04-multi-step-state-machine: planning → active"
       - "07-applier parent: 50% → 62% (5/8 children ✅)"
       - "04-career-system: 90% → 92% (27/34 features)"
-  - date: "2026-05-27"
+  - hash: "cbdeff2"
+    date: "2026-05-27"
     message: "[04-career-system/07-applier/04-multi-step-state-machine] m5: envelope schema v2 — submit_attempts[] + appendSubmitAttempt + Zod migration (58/58 smoke)"
     files_changed: 2
     specs_affected:
