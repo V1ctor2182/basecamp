@@ -92,8 +92,81 @@ milestones:
       (acceptance f). README documents capture → annotate → tune → review → commit loop.
       Lifecycle → done, ROOM COMPLETE rollup to parent + grandparent progress.
 
-current_sprint: null
+  # ─────────────────────────────────────────────────────────────────────
+  # ROOM REOPEN 2026-05-27 — Phase 6 of post-fill-handoff-ux design
+  # 新增 m5 — adapter rule replay,Phase 5 飞轮 propose 落 promote-queue 后
+  # 自动用 saved DOM snapshot replay 验证,合格才进 dashboard 队列让用户 review。
+  # 永远不 auto-commit(沿用 m3 EH5)。
+  # 全部 6 个 P6-OQ default 锁定(per 2026-05-27 plan-milestones):
+  #   P6-OQ1 replay fixtures: 同 ATS 全部 saved fixtures
+  #   P6-OQ2 regression 阈值: ≤ 2pp(沿用 m3 EH2 ≤5% 的更严版本)
+  #   P6-OQ3 多 proposal review: timestamp 排序,每条独立 review
+  #   P6-OQ4 adapter YAML 版本号: 不加,新字段全 .optional() 兼容
+  #   P6-OQ5 strategy_priority 落点: adapter YAML 内的 strategy_priority 块
+  #   P6-OQ6 异常 proposal: 标 'replay_failed' + reason,不进 validated 列表
+  # ─────────────────────────────────────────────────────────────────────
+
+  - id: "m5-adapter-rule-replay-auto-validate"
+    name: "Adapter rule replay — Phase 5 proposal 在 saved snapshots 上 replay,自动算 verify 率提升"
+    status: pending
+    estimated_files:
+      - "src/career/eval/adapterRuleReplay.mjs"           # NEW ~200
+      - "src/career/eval/runner.mjs"                      # +~30 LOC integration
+      - "scripts/smoke-adapter-rule-replay.mjs"           # NEW ~250
+      - "src/career/eval/README.md"                       # +~20 LOC
+    estimated_lines: 500  # 250 src + 250 smoke
+    depends_on:
+      # 跨 Room:Phase 5/m6 写 proposal 进 promote-queue
+      # 跨 Room:06-site-adapters/m4 提供 schema v2(本 Phase 同时落,顺序 m4 → m5)
+    complexity_flags:
+      - "error_handling_heavy"
+      - "first_of_kind"
+    open_questions: []
+    description: |
+      Phase 5 飞轮 propose 的 adapter rule 在落 dashboard 队列前,自动 replay 验证:
+      这条 rule 真能提高 verify 率吗? ≥ 30pp 提升 + ≤ 2pp 个别 regression 才标 'validated'。
+
+      流程:
+        1. 读 data/career/eval-fixtures/promote-queue/*.yaml
+        2. 对每条 proposal:
+           a. 解析 proposal 类型(eeo_section / strategy_priority / submit_detection /
+              resume_constraints / new ATS adapter scaffold)
+           b. 找该 ATS 的 saved fixtures(P6-OQ1 同 ATS 全部)
+           c. 加载 baseline adapter + 应用 proposal patch
+           d. 用 m2 eval runner 跑 patched adapter:
+              - eeo_section/strategy_priority: 调 fillWithFallback 用新 hints
+              - submit_detection: 模拟 submit + detect call
+              - new ATS scaffold: 跑完整 classifier + fill pipeline
+           e. 算 verify 率 before vs after(coverage 维度)
+           f. validation:
+              - 提升 ≥ 30pp + 无个别 regression > 2pp(P6-OQ2)→ 'validated'
+              - 提升 < 30pp 但 > 0 + 无 regression → 'marginal'
+              - 任一 fixture regression > 2pp → 'rejected'(写 reason)
+              - 异常(snapshot 损坏 / schema 不匹配 / 跑失败)→ 'replay_failed'(P6-OQ6)
+        3. 把 validation 元数据写回 proposal yaml(eval_result 字段):
+           status / baseline_verify_pct / proposed_verify_pct / improvement_pp /
+           fixtures_tested / worst_regression_pp / replayed_at
+        4. 03-iteration-dashboard 按 status filter:
+           validated 显眼,rejected 折叠,marginal 中性
+
+      关键设计:**永远不 auto-commit**(沿用 m3 EH5)— 即使 validated 也必须人工 promote。
+      m5 角色是"给 review 加上数字证据",不绕过 review。
+
+      smoke 11 case:
+        1. eeo_section proposal,3 fixtures,36% → 95% → validated
+        2. strategy_priority proposal,2 fixtures,均无变化 → marginal
+        3. submit_detection proposal,fallback 率 80% → 10% → validated
+        4. resume_constraints proposal,只能间接验证 → marginal
+        5. proposal fixture 1 提升 50pp 但 fixture 2 regression 5pp → rejected
+        6. proposal 引用 fixture 不存在 → replay_failed
+        7. proposal schema 不匹配 06-site-adapters v2 → replay_failed
+        8. 新 ATS scaffold fixtures pool 为空 → marginal(无法证明)
+        9. 同一 proposal replay 第二次 → idempotent
+        10. CLI: npm run replay:proposals → 批量跑 promote-queue 所有 pending
+        11. CI: npm run test:adapter-replay-smoke → 11/11 green
+
+current_sprint: "Sprint 21 — ROOM REOPEN: post-fill-handoff-ux Phase 6 (adapter rule replay)"
 blockers: []   # 08-snapshot-refs-layer ROOM COMPLETE; snapshot.mjs INTERACTIVE_ROLES is the tune target
-completion: 100  # 🎉 ROOM COMPLETE 2026-05-18 (4/4 milestones)
+completion: 100  # 🎉 ROOM COMPLETE 2026-05-18 (4/4 milestones); m5 reopen pending
 status_note: "🔄 in_dev. m3 shipped 2026-05-18 — tuner.mjs + candidates.mjs + iterationLog.mjs + tune-snapshot CLI + 33-assert smoke. End-to-end: 1 iteration accepted (remove `link` from INTERACTIVE_ROLES), aggregate min 0% → 57.14%, converged, no regressions. Phase 3.5 dual review applied 2 CRITICAL (NaN/undefined baseline bypassed EH2 gate → perFixtureDeltas returns -Infinity; CLI --out/--log path traversal → could overwrite snapshot.mjs, EH5 violation → output paths validated under data/career/eval-fixtures with explicit --allow-external-out opt-in) + 4 HIGH (triedKeys now tracks rejected candidates so they're not infinitely re-evaluated; convergence vs stalled distinguished with `stalled` flag; rejected_candidates list captures every rejection per iteration, not just one example; MAX_CANDIDATES_PER_ITER=50 caps DoS via adversarial truth.yml) + 3 MEDIUM (CLI exit code 2 on non-convergence/stall for m4 CI gate; tuner outputs gitignored as ephemeral artifacts; rename proposed-allowlist.diff→.txt since not a real unified diff) + 2 smoke gaps (rejected_no_improvement, multiple rejection reasons per iter). Next: m4 npm scripts + CI smoke + ROOM COMPLETE."
-last_updated: "2026-05-18"
+last_updated: "2026-05-27"

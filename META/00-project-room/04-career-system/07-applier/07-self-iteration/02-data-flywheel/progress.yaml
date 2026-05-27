@@ -282,6 +282,192 @@ milestones:
           mocked Haiku returns rule → Learning tab shows it → Approve
           → classifyField routes the new label correctly (in-process)
 
+  # ─────────────────────────────────────────────────────────────────────
+  # ROOM REOPEN 2026-05-27 — Phase 5 of post-fill-handoff-ux design
+  # 新增 m5/m6/m7 实现 9 个飞轮信号(A-I)消费 envelope v2 + 3 个全新信号
+  # (G/H/I)处理 unknown ATS / resume 文件约束 / 开放题 narrative seed。
+  # 全部 7 个 P5-OQ default 锁定(per 2026-05-27 plan-milestones):
+  #   P5-OQ1 现有 induce*.mjs vs 新模块: 共存
+  #   P5-OQ2 聚合 cadence: on-demand at session close + dashboard 手动按钮
+  #   P5-OQ3 rolling window: 7 days
+  #   P5-OQ4 min evidence: G=3, B/H=2, E=3
+  #   P5-OQ5 strategy_priority write: merge(保留 manual)
+  #   P5-OQ6 proposal 落盘: data/career/eval-fixtures/promote-queue/(沿用)
+  #   P5-OQ7 qa-bank format: jsonl
+  # ─────────────────────────────────────────────────────────────────────
+
+  - id: "m5-envelope-v2-schema-direct-signals"
+    name: "feedback schema 消费 envelope v2 + 信号 A/C/F(strategies + label-answer + submit-detection)"
+    status: pending
+    estimated_files:
+      - "src/career/feedback/schemas.mjs"                # +~60 LOC
+      - "src/career/feedback/stores.mjs"                 # +~40 LOC
+      - "src/career/feedback/induceStrategyRank.mjs"     # NEW ~100(信号 A)
+      - "src/career/feedback/induceQaBankEntry.mjs"      # NEW ~80(信号 C)
+      - "src/career/feedback/induceSubmitDetection.mjs"  # NEW ~80(信号 F)
+      - "src/career/feedback/induce.mjs"                 # +~30 LOC
+      - "scripts/smoke-flywheel-direct-signals.mjs"      # NEW ~280
+    estimated_lines: 670  # 390 src + 280 smoke
+    depends_on:
+      # 跨 Room:Phase 1/m5 envelope v2 schema(submit_attempts / control_fingerprint / format_lesson)
+      # 跨 Room:Phase 4/m11 user_hints + Recovery 写入
+    complexity_flags:
+      - "design_decisions"
+    open_questions: []
+    description: |
+      让 feedback 飞轮消费 envelope v2 新字段,实现 3 条"读 envelope → 算 → 写"
+      直接信号。EnvelopeIngestor 从 history.jsonl 读,不重复存。
+
+      qa-bank 新 store(per P5-OQ7):
+        data/career/qa-bank/known-answers.jsonl(append-only)
+
+      信号 A(Strategy ladder rerank):
+        读: 所有 envelope.fields[].strategies_tried + control_fingerprint.class
+        算: 按 fingerprint_class 分桶,7-day rolling(P5-OQ3);每条 strategy 成功率
+            <5% 自动 demote 到最后
+        写: adapter <ats>.yml 的 strategy_priority 块(merge,P5-OQ5)
+        trigger: at session close,evidence ≥ 3 才跑(默认 cadence per P5-OQ2)
+
+      信号 C(qa-bank fuzzy cache):
+        读: envelope.fields[] final_state=verified* + label + expected + format_lesson
+        算: label_hash(normalize:lower + 去标点 + 提关键词)
+            同 hash ≥ 2 次不同 session + answer 一致 → high confidence
+        写: known-answers.jsonl 一行 {label_hash, answer, accepted_format,
+            confidence, evidence: [session_ids]}
+
+      信号 F(Submit detection accuracy):
+        读: envelope.submit_detected_by(strong vs user_fallback)
+        算: 按 ATS 分桶 fallback 率;>70% 说明 thank-you 规则不灵
+        写: proposal 进 promote-queue:adapter.submit_detection.thank_you_patterns
+            新增 selector(用户 fallback 时的最后 URL/text pattern)
+
+      smoke 8 case:
+        1. A: 9 个 select__control evidence → propose demote selectOption
+        2. A: < 3 evidence 不触发
+        3. A: strategy_priority merge(manual 配置不覆盖)
+        4. C: 同 hash 2 次 + answer 一致 → high confidence
+        5. C: 同 hash + answer 不一致 → 不写(冲突)
+        6. C: format_lesson 一起存
+        7. F: Greenhouse 100% strong → 不动
+        8. F: Lever 80% fallback → propose thank-you selector
+
+  - id: "m6-cluster-signals-adapter-proposals"
+    name: "信号 B + G + H(基于 N-evidence 聚类的 adapter rule / scaffold / constraint propose)"
+    status: pending
+    estimated_files:
+      - "src/career/feedback/induceEeoSection.mjs"        # NEW ~150(信号 B)
+      - "src/career/feedback/induceAtsScaffold.mjs"       # NEW ~180(信号 G — first of kind)
+      - "src/career/feedback/induceResumeConstraints.mjs" # NEW ~100(信号 H)
+      - "src/career/feedback/clusterByFingerprint.mjs"    # NEW ~80 共用 helper
+      - "src/career/feedback/induce.mjs"                  # +~20 LOC
+      - "scripts/smoke-flywheel-cluster-signals.mjs"      # NEW ~300
+    estimated_lines: 830  # 530 src + 300 smoke
+    depends_on:
+      - "m5-envelope-v2-schema-direct-signals"
+    complexity_flags:
+      - "design_decisions"
+      - "first_of_kind"
+    open_questions: []
+    description: |
+      3 条聚类信号,达到 evidence 阈值(P5-OQ4)自动 propose。
+
+      共用 helper · clusterByFingerprint(envelopes, key_fn) → Map<key, evidences[]>
+
+      信号 B(EEO section adapter rule):
+        读: 同 ats + 同 ancestors[0]='.application-question--eeo' + strategies 失败
+        算: ≥ 2 个 session 同 ancestor + react_select_click 救场 → candidate rule
+        replay: 加载 saved DOM snapshot(02-playwright/screenshot.mjs)用
+                candidate rule 跑 fillWithFallback → 算 verify 率提升
+        写: proposal 进 promote-queue,提升 ≥ 30pp 才 enqueue
+
+      信号 G(Unknown ATS scaffolding — first of kind):
+        读: ats_detected='unknown' 的 envelope,按 host 分组
+        算: 同 host ≥ 3 次(P5-OQ4)→ 提取共有 URL pattern + form selector
+            + submit button selector(取 3 个 envelope control_fingerprint 共性)
+        写: proposal 一份带 detect rules + 部分已知 selector 的 adapter 骨架,
+            data/career/eval-fixtures/promote-queue/<host>-adapter-<date>.yaml
+        promote 后: 进 data/career/adapters/<host>.yml,下次该 host 直接走它
+
+      信号 H(Resume file constraints):
+        读: envelope.fields[].error_code='file_too_large' + user_file_size
+        算: 按 ATS 分桶,max_acceptable_size_mb = min(用户成功上传 size)
+        写: proposal:adapter 加 resume_constraints { max_size_mb, accepted_formats }
+            ≥ 2 次 evidence(P5-OQ4)才 propose
+
+      smoke 9 case:
+        B: 1. 4 sessions × 9 EEO + react 救 87% → propose
+           2. replay verify 率 36% → 95% → enqueue
+           3. 3 sessions 但 ATS 不同 → 不 propose
+        G: 4. captivation.com 3 次 unknown → propose adapter
+           5. 2 次 unknown → 不 propose
+           6. 3 次但 form selector 不共享 → 不 propose
+        H: 7. file_too_large 2 次 + 1.5MB/1.7MB → max_size=2MB
+           8. 用户没成功重传 → 不 propose
+           9. 跨 ATS 同时 fail → 各自 propose
+
+  - id: "m7-pool-threshold-signals-room-reopen-complete"
+    name: "信号 D + E + I(unlabeled 池 / 手填模式 / 开放题 narrative)+ ROOM REOPEN 验证"
+    status: pending
+    estimated_files:
+      - "src/career/feedback/induceUnlabeledPool.mjs"     # NEW ~120(信号 D)
+      - "src/career/feedback/induceIdentityField.mjs"     # NEW ~100(信号 E)
+      - "src/career/feedback/induceNarrativeSeed.mjs"     # NEW ~130(信号 I)
+      - "src/career/feedback/induce.mjs"                  # +~25 LOC
+      - "scripts/smoke-flywheel-pool-signals.mjs"         # NEW ~280
+      - "META/.../02-data-flywheel/spec.md"               # Phase 5 章节
+    estimated_lines: 655  # 375 src + 280 smoke
+    depends_on:
+      - "m6-cluster-signals-adapter-proposals"
+    complexity_flags:
+      - "design_decisions"
+    open_questions: []
+    description: |
+      3 条 pool/threshold 信号,累积到阈值 propose。
+
+      信号 D(Unlabeled → classifier retrain):
+        读: envelope.fields[].label='(unlabeled)' + fingerprint + surrounding_html
+            + user_answer
+        算: 累积进 data/career/eval-fixtures/unlabeled-pool/(每 session 一行 jsonl)
+            ≥ 50 条触发"建议跑 classifier calibration"dashboard 提示
+        写: 仅累积 + 触发提示;真 calibration 由 01-code-calibration 跑
+
+      信号 E(Identity field proposal):
+        读: envelope.fields[].final_state='filled_by_user_manual' + label + user_answer
+        算: 同 label_hash 最近 N 次 ≥ 3(P5-OQ4)+ user_answer 一致
+            (stddev < 0.1)→ 稳定个人信息
+        写: proposal 进 promote-queue:add identity.<key>
+            例:"Preferred name" → identity.preferred_name='Victor'
+        跨 Room 写:不直接动 identity.yml(那是 02-profile 域),proposal 让
+            dashboard promote 流程负责;commit-sync 跨 Room conflict 检测会提示
+
+      信号 I(Narrative seed):
+        读: envelope.fields[] expected=null + final_state='filled_by_user_manual_from_blank'
+            + user_answer + user_time_ms > 10s
+        算: label normalize → fuzzy match against "why/motivation/passion/interest"
+            keyword set;出现 ≥ 2 次同类 → 候选
+        写: proposal:add narrative.<key>
+            例:"why_this_company" → 用户答案 + alt_labels: [why-here, motivation]
+        promote → 写 data/career/narrative.yml(02-profile/02-narrative 域)
+
+      ROOM REOPEN rollups(本 m7 完成时):
+        - spec.md 加 Phase 5 章节
+        - 02-data-flywheel room.yaml updated_at = 完成日期
+        - lifecycle 保持 active(原 active)
+        - completion 字段策略:沿用之前的 100(reopen 性质,新工作以 milestones 状态
+          显式追踪;parent 02-data-flywheel completion 不下调)
+          → 让 commit-sync 在 dev m5 时按需调整,plan-milestones 不破坏既有完成度
+
+      smoke 9 case:
+        D: 1. 累积 50 个 → 提示
+           2. < 50 不提示
+           3. user_answer 为空的 unlabeled 不进 pool
+        E: 4. "Preferred name=Victor" 出现 3 次 → propose identity.preferred_name
+           5. 3 次但 answer 各异(Victor/Vic/V)→ 不 propose
+           6. < 3 次不 propose
+        I: 7. "Why work here?" + 200 字 + 32s → 候选
+           8. 2 次同类 → propose narrative.why_this_company
+           9. answer < 5s → 排除(可能复制粘贴)
+
 commits:
   - hash: "bd1295b"
     date: "2026-05-17"
@@ -321,9 +507,9 @@ commits:
       - "self-iteration parent: 0% → 33% (1/3 子 Rooms ✅)"
       - "07-applier: 88% → 91%"
       - "04-career-system: 97% → 98%"
-current_sprint: "Sprint 19 — Data Flywheel"
+current_sprint: "Sprint 21 — ROOM REOPEN: post-fill-handoff-ux Phase 5 (9 signals A-I)"
 blockers: []
 status_note: "🎉 ROOM COMPLETE 2026-05-18 (4/4 milestones, 97/97 smoke green = m1 24 + m2 26 + m3 25 + m4 12 stats backend + UI build-verified via tsc + vite build). m4 shipped: server.mjs +110 LOC extended /api/career/feedback/stats with 14-day error_series (local-day bucketing per REVIEW C1 — pre-fix UTC caused off-by-one near midnight) + heavy-edit threshold (>50 chars) excluding small typo-fix edits + Number.isFinite guard per REVIEW M1; new /api/career/feedback/site-coverage joins recent failures with bundled-adapter detection (deterministic tiebreak alpha + 50-row limit per REVIEW H2 + lowercase domain Map key per REVIEW H3). Learning.tsx (~400 LOC) 4 collapsible cards: 30d flywheel stats / classifier error signals chart (Nivo line, 14d, lower=better) / pending suggestions with Approve+Reject buttons & inline regex/YAML preview / site adapter coverage table; AbortController + mountedRef guard on action fetch (REVIEW C4); actionBusyRef gates auto-refresh during in-flight POST (REVIEW C3 — pre-fix race could yield ghost 409); sanitizeForDisplay strips control + bidi + zero-width chars from LLM-emitted regex/rationale/YAML before render (REVIEW H4 social-engineering vector — react escapes HTML but doesn't address spoofing). learning.css ~260 LOC c-learning-* tokens matching c-resumes / ov-* style — no new palette. CareerNav.tsx + CareerApp.tsx wired Learning tab + route + VALID_TABS entry (REVIEW #1 Plan). Plan-agent + adversarial review: 4 CRITICAL + 5 HIGH + 1 MEDIUM applied — every fix has REVIEW-named regression. Regression: 04-multi-step 153/153 + 05 nonstandard 157/157 + 06 site-adapters 81/81 + 03 field-classifier 95/95 + feedback m1/m2/m3 = 75/75 still green. vite build clean (6.17s). ROOM COMPLETE rollups: room.yaml lifecycle planning→active, _tree.yaml planning→active, self-iteration parent 0%→33% (1/3 子 Rooms ✅), 07-applier 88%→91%, 04-career-system 97%→98%. 下游 unblocked: self-iteration/01-code-calibration (consumes site-failures + field-misclassified as fixture corpus for the code-fix loop), self-iteration/03-iteration-dashboard (extends Learning tab with code-fix escalation queue + 02↔01 escalation contract visualization)."
 
 
-last_updated: "2026-05-18"
+last_updated: "2026-05-27"

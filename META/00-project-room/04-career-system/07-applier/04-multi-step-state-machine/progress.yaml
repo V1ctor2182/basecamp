@@ -299,6 +299,460 @@ milestones:
         - Resume e2e: kill machine mid-flow, restart, advance to
           completion
 
+  # ─────────────────────────────────────────────────────────────────────
+  # ROOM REOPEN 2026-05-27 — Phase 1 of post-fill-handoff-ux design
+  # (META/.../07-applier/post-fill-handoff-ux.md).
+  # 新增 3 个 milestone(m5/m6/m7)实现 submit-first error loop + 5 guards
+  # + envelope schema v2。原 m1-m4 全部保留 completed,新工作叠加。
+  # 全部 OQ 用 default 锁定(2026-05-27 plan-milestones session):
+  #   OQ1 same-error 比较:按 (field, error_code) tuple
+  #   OQ2 max submit attempts: 硬编码 3
+  #   OQ3 submit 间隔: since-last-submit(escalation 期间不暂停)
+  #   OQ4 form_errors parse: 跨 ATS 通用 selectors + per-adapter rule 兜底
+  #        (adapter rule defer Phase 6)
+  #   OQ5 修完 error: 自动 retry submit(UI 显示 attempt 进度)
+  #   OQ6 _fixField Phase 2 之前: DI mock 注入测试
+  #   OQ7 escalation 之后: 系统不再 submit,控制权完全交用户
+  #   OQ8 老 session 没 submit_attempts: Zod .default([]) 自动迁移
+  #   OQ9 form 沉默 60s: 不算 escalate;90s 才视作 escalation
+  # ─────────────────────────────────────────────────────────────────────
+
+  - id: "m5-envelope-schema-v2-submit-attempts"
+    name: "Envelope schema v2: ApplySessionSchema 加 submit_attempts[] + Zod 迁移"
+    status: pending
+    estimated_files:
+      - "src/career/applier/multistep/applySessionsStore.mjs"
+      - "scripts/smoke-apply-sessions-store.mjs"
+    estimated_lines: 210  # 60 src + 150 smoke
+    depends_on: []
+    complexity_flags:
+      - "design_decisions"
+    open_questions: []  # all 9 OQs locked above
+    description: |
+      纯数据层:扩 ApplySessionSchema 加 submit_attempts[] 数组,
+      每条记录一次 Submit 尝试 + 表单回的 errors + 我们试的 fixes + outcome。
+
+      Schema 增量:
+        submit_attempts: z.array(z.object({
+          attempt: z.number().int().min(1),
+          started_at: z.string().datetime(),
+          form_errors: z.array(z.object({
+            field: z.string(),       // form 标的字段名(可能 != classifier label)
+            error_code: z.string(),  // 'required' | 'invalid_format' | 'too_large' | 'custom'
+            error_msg: z.string(),   // form 原文(可能国际化,作 evidence)
+          })),
+          fixes_tried: z.array(z.object({
+            field: z.string(),
+            fix_name: z.string(),    // strategy name
+            result: z.string(),      // 'verified' | 'no_effect' | 'validation_rejected' | ...
+          })),
+          outcome: z.enum(['no_errors', 'errors_returned', 'submit_failed']),
+        })).default([])  // 老 session 自动迁移
+
+      Files:
+        - applySessionsStore.mjs +~60 LOC:
+          · ApplySessionSchema.submit_attempts 字段 + sub-schemas
+          · 老 session 读取 backwards compat 验证(无字段 → default [])
+          · 一个 helper:appendSubmitAttempt(session, attempt) 写入并刷 last_activity_at
+        - smoke-apply-sessions-store.mjs +~150 LOC:
+          · 新增 5 case:
+            1. 写 submit_attempts 后 round-trip 验证
+            2. 老 session(无字段)读取 → 自动 default []
+            3. appendSubmitAttempt 原子写 + last_activity_at 刷新
+            4. submit_attempts 序列化跨 read/write 不丢精度
+            5. invalid attempt 数据 → Zod 拒绝
+
+      验收:
+        - 5 个新 smoke + 12 个 m1 老 smoke 全绿(17/17)
+        - 不动 machine.mjs / endpoint.mjs
+
+      Locked design (per OQ8):
+        - Zod .default([]) 兜底:Phase 1 不写迁移脚本,读时自动补字段
+
+  - id: "m6-error-loop-state-machine-guards"
+    name: "machine.mjs 加 error_loop states + 5 guards(独立 file)+ policy"
+    status: pending
+    estimated_files:
+      - "src/career/applier/multistep/machine.mjs"
+      - "src/career/applier/multistep/guards/policy.mjs"             # NEW
+      - "src/career/applier/multistep/guards/sameErrorTwice.mjs"     # NEW
+      - "src/career/applier/multistep/guards/maxSubmits.mjs"         # NEW
+      - "src/career/applier/multistep/guards/allStrategiesFailed.mjs"# NEW
+      - "src/career/applier/multistep/guards/submitInterval.mjs"     # NEW
+      - "src/career/applier/multistep/guards/parseFailure.mjs"       # NEW
+      - "scripts/smoke-error-loop-machine.mjs"                       # NEW
+    estimated_lines: 660  # 310 src + 350 smoke
+    depends_on:
+      - "m5-envelope-schema-v2-submit-attempts"
+    complexity_flags:
+      - "error_handling_heavy"
+      - "design_decisions"
+      - "first_of_kind"
+    open_questions: []  # all locked
+    description: |
+      Submit-first error loop 的核心。state machine 加 5 个新 state +
+      policy 模块编排 5 个 guard,任一触发 → ESCALATING_TO_USER。
+
+      新 states:
+        SUBMITTING / PARSING_ERRORS / RETRYING_FIX / SUBMITTED_SUCCESS / ESCALATING_TO_USER
+
+      Transitions:
+        (final step approved) → submitting
+        submitting → submitted_success         (无 error)
+        submitting → parsing_errors            (form 返 inline errors)
+        parsing_errors → retrying_fix          (policy.evaluate() → can_fix)
+        parsing_errors → escalating_to_user    (policy.evaluate() → escalate, reason)
+        retrying_fix → submitting              (loop 回去)
+
+      Guards(每个独立 file ≤ 25 LOC,policy 按下列优先级 evaluate):
+        1. parseFailure        — form_errors 解析失败 → escalate(最高优,因为后续 guard 没数据可用)
+        2. allStrategiesFailed — 任一 field final_state = 'all_strategies_failed' → escalate
+        3. sameErrorTwice      — 同 (field, error_code) tuple 出现 ≥ 2 次 → escalate
+        4. maxSubmits          — submit_attempts.length ≥ 3 → escalate(per OQ2 硬编码)
+        5. submitInterval      — last_submit_at < now - 5s → wait(per OQ3 不暂停)
+
+      policy.mjs:
+        evaluateGuards(session, currentErrors) → {
+          action: 'fix' | 'escalate' | 'wait',
+          reason?: string,            // 必填 when escalate
+          wait_until?: ISO datetime,  // 必填 when wait
+        }
+        按上面优先级跑,first-match 决定。
+
+      RETRYING_FIX 调 _fixField DI(per OQ6,Phase 2 ship 前用 mock):
+        _machineDeps.fixField(page, field, error) → { result, strategy_used }
+        smoke 默认用 always-fail mock,逐 guard 路径测;一个 case 用 always-succeed mock 验证 happy loop。
+
+      smoke 10 个 case:
+        1. happy: 1 次 submit 无 error → submitted_success
+        2. 1 次 fix 后 submit 成功(attempt 2)
+        3. sameErrorTwice trigger → escalate
+        4. maxSubmits trigger → escalate(同一 fingerprint 反复失败但不同 error code)
+        5. allStrategiesFailed trigger → escalate(_fixField 返 all_strategies_failed)
+        6. parseFailure trigger → escalate(mock parser 抛错)
+        7. submitInterval wait → 真等 5s 后才 submit(用 fake timer)
+        8. escalation 之后再调 step → 拒绝(per OQ7,403)
+        9. 老 session(无 submit_attempts)加载后 loop 正常工作
+        10. form 沉默 90s → escalate(per OQ9 timeout)
+
+      Locked design:
+        - guards/ 独立 file:每个 guard ≤ 25 LOC + 自己单测;
+          以后 site-specific guard(e.g. workday-rate-limit)只是新加 file。
+        - policy 优先级 hard-coded(per OQ2 简单优先),adapter override defer Phase 6。
+        - escalation_reason 是结构化 enum + free-text:
+          { code: 'same_error' | 'max_submits' | ..., detail: string, field?: string }
+          UI(Phase 3 Apply.tsx)按 code 选展示模板,detail 给上下文。
+
+  - id: "m7-endpoint-room-reopen-complete"
+    name: "endpoint.mjs 暴露 escalation_reason + cancel 端点 + ROOM REOPEN 验证"
+    status: pending
+    estimated_files:
+      - "src/career/applier/multistep/endpoint.mjs"
+      - "scripts/smoke-multistep-endpoint.mjs"
+      - "META/.../04-multi-step-state-machine/spec.md"
+      - "META/.../04-multi-step-state-machine/room.yaml"
+    estimated_lines: 140  # 40 src + 100 smoke + spec update
+    depends_on:
+      - "m6-error-loop-state-machine-guards"
+    complexity_flags: []
+    open_questions: []
+    description: |
+      endpoint.mjs 增量:
+        - GET /:jobId/status 现在返 escalation_reason(when outcome='escalated')
+          + submit_attempts(整段历史 — UI 渲染时间线用)
+        - POST /:jobId/cancel — 用户主动停 loop,强制 escalate
+          (per OQ7,escalation 之后不能继续 — 这是兜底 endpoint)
+
+      smoke 增量(原 30 + 新 8 = 38,Room 总 161/161):
+        1. status 返 escalation_reason + submit_attempts(escalated session)
+        2. status 返 submit_attempts(happy session,无 escalation_reason 字段)
+        3. POST /cancel → escalate + 后续 status 显示 reason='user_cancel'
+        4. POST /cancel on already-completed → 409
+        5. POST /cancel on already-escalated → 409(不可重复 cancel)
+        6. POST /approve-step on escalated session → 403(per OQ7)
+        7. 老 session 通过 GET /status 读取 → 自动迁移字段 → 200
+        8. e2e: start → approve ×N → submit → 1 error → fix → submit → done
+          全程通过 endpoint 走,验证 envelope 完整持久化
+
+      ROOM REOPEN rollups:
+        - spec.md 加一段 "Phase 1 reopen(2026-05-27)" 说明 submit-first loop
+          (m5-m7 总览 + 跟 post-fill-handoff-ux.md 的对应)
+        - room.yaml updated_at = 2026-05-27;不动 lifecycle(仍 active)
+        - _tree.yaml 不动
+        - 07-applier 父 completion 暂时下调 ?% → 等 Phase 2+ 算完一起重算
+        - 04-career-system overall completion: 等所有 7 个 phase plan 完一起评估
+
+      验收:
+        - 8 新 smoke + 30 原 smoke = 38/38
+        - Room regression: m1 43 + m2 43 + m3 37 + m4 30 + m5 17 + m6 10 + m7 38 = 218/218
+        - end-to-end browser test (manual, off-CI): 真投一个 Greenhouse 岗
+          看 submit-first loop 真跑通
+
+  # ─────────────────────────────────────────────────────────────────────
+  # ROOM REOPEN extension — Phase 3 of post-fill-handoff-ux design
+  # (m8/m9/m10 — Apply.tsx UI for Mode 2 submit-first loop)
+  # 跨 Room anchor:Apply.tsx 主 anchor 在 01-mode1-simplify-hybrid m5,
+  # 这里加 Mode 2 view layer。也是 plan-milestones 2026-05-27 session 一起锁定。
+  # 全部 7 个 P3-OQ default 锁定(per 2026-05-27 session):
+  #   P3-OQ1 status board: Mode 2 only,Mode 1 保留现有 UI
+  #   P3-OQ2 同根检测: shared ancestor selector(简单版,LLM clustering defer)
+  #   P3-OQ3 Skip 二次确认: 否(用户已选,可逆)
+  #   P3-OQ4 Submit gate: 灰 disabled + hover tooltip,不隐藏
+  #   P3-OQ5 Auto-Mark: 强信号(URL/redirect/text)直接 mark + 跳页;fallback "我点了" 二次确认
+  #   P3-OQ6 progress 拉取: long-polling 2s(简单,SSE defer)
+  #   P3-OQ7 卡片排序: required > optional,内按字段顺序
+  # ─────────────────────────────────────────────────────────────────────
+
+  - id: "m8-status-board-triage-view"
+    name: "Apply.tsx 顶部 Status board + Triage view(envelope-driven render)"
+    status: pending
+    estimated_files:
+      - "src/career/Apply.tsx"                          # +~280 LOC
+      - "src/career/apply.css"                          # +~80 LOC
+      - "scripts/smoke-apply-ui-status-triage.mjs"      # NEW ~150
+    estimated_lines: 510  # 360 src + 150 smoke
+    depends_on:
+      - "m5-envelope-schema-v2-submit-attempts"
+    complexity_flags: []
+    open_questions: []
+    description: |
+      顶部加 status board(永久,实时刷新 verified count),下面加 triage
+      view(same-root 字段折叠成组)。
+
+      Status board:
+        - 顶部 sticky:job title + elapsed + 进度条
+        - verified / total 数字(读 envelope.counters 实时)
+        - 3 类分组 chip:to_retry / unlabeled / manual(captcha)
+        - 3 按钮:[Start clean-up] [Pause] [Cancel]
+        - polling /api/career/apply/:jobId/status 每 2s(per P3-OQ6)
+        - 只对 source='mode2' session 显示(per P3-OQ1)
+
+      Triage view(点 Start clean-up 后展开):
+        - 同根分组(per P3-OQ2 shared ancestor):
+          按 control_fingerprint.ancestors[0] 分组,≥ 2 个共享祖先 + 都 fail → 折叠
+        - 组卡片显示推测同根因 + Batch retry 按钮
+        - 单一字段 → 独立卡片(m9 渲染)
+
+      Sort:per P3-OQ7 required > optional,内按 form 顺序
+
+      smoke 8 case(用 envelope fixture 渲染,不调真后端):
+        1. 5/14 verified 渲染数字 + 进度条 36%
+        2. polling 2s 后 envelope 更新 → UI 实时跳
+        3. 9 个共享 ancestor fail → 折叠 1 组 + Batch retry
+        4. 单 unlabeled fail → 独立卡片
+        5. 全 verified → status board 绿色 ready
+        6. Pause → POST /pause
+        7. Cancel → POST /cancel(per m7)
+        8. required 排在前
+
+  - id: "m9-per-field-card-actions-observer-glue"
+    name: "Per-field card(4 actions)+ SSE observer callback → 卡片自动 re-verify"
+    status: pending
+    estimated_files:
+      - "src/career/Apply.tsx"                          # +~250 LOC
+      - "src/career/apply.css"                          # +~40 LOC
+      - "scripts/smoke-apply-ui-field-cards.mjs"        # NEW ~150
+    estimated_lines: 440  # 290 src + 150 smoke
+    depends_on:
+      - "m7-endpoint-room-reopen-complete"
+      # 跨 Room:Phase 2/m6 (02-playwright-runtime/observer + focusField + resetField)
+      # 必须 ship 之后 m9 才能真 wire,期间 UI 用 stub event source 开发
+    complexity_flags:
+      - "design_decisions"
+    open_questions: []
+    description: |
+      字段卡 + 4 个动作 + Active observation glue。
+
+      Card 结构(per design UI 组件 3):
+        Header: ✗/⚠/✓ icon + label
+        KV row: Expected: "Yes"   Form has: (empty)
+        KV row: Control: <div role=combobox class=select__control>
+        Tried row: ✗selectOption ✗click ⏸keyboard ⏸role-locator
+        Actions(per P3-OQ3 Skip 不二次确认):
+          [📋 Copy "Yes"] [🎯 Focus] [🔁 Try keyboard] [✋ Skip]
+        Status footer: ⏸ awaiting / ✓ filled / ✗ failed
+
+      Actions wire:
+        Copy → navigator.clipboard.writeText(expected)
+        Focus → POST /focus-field { ref }
+                  (m7 提供路由,内部调 Phase 2/m6 focusField)
+        Retry → POST /retry-field { ref, strategy }
+                  (调下一条 ladder,via Phase 2/m4 fillWithFallback)
+        Skip  → POST /skip-field { ref } → final_state='skipped_by_user'
+
+      Active observation glue:
+        Apply.tsx 启动 subscribe SSE /api/career/apply/:jobId/events
+        (后端转发 Phase 2/m6 observer callback;m7 路由需要加 SSE 端点)
+        收 {field_ref, value} → 找卡片 → re-verify(value === expected?)
+        匹配 → 卡片翻绿 + 折叠;不匹配但非空 → 黄(stale expected)
+
+      smoke 8 case:
+        1. 卡片显示 Tried ladder 4 步状态
+        2. Copy → clipboard 内容
+        3. Focus → POST + UI loading
+        4. Retry → POST + Tried 更新
+        5. Skip → POST + 折叠 + status='skipped_by_user'
+        6. SSE 事件 → 对应卡片 verify + 翻绿
+        7. SSE value 不匹配 → 卡片黄
+        8. SSE 无对应卡片(unlabeled)→ 不崩 + log
+
+  - id: "m10-submit-gate-auto-detect-loop-progress"
+    name: "Submit gate + auto-Mark-applied + 错误循环进度 UI"
+    status: pending
+    estimated_files:
+      - "src/career/Apply.tsx"                          # +~200 LOC
+      - "src/career/apply.css"                          # +~40 LOC
+      - "scripts/smoke-apply-ui-submit-gate-loop.mjs"   # NEW ~150
+    estimated_lines: 390  # 240 src + 150 smoke
+    depends_on:
+      - "m6-error-loop-state-machine-guards"
+      # 跨 Room:Phase 2/m5 (submitForm + detectSubmitSuccess) ship 后 m10 才完整
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Submit gate + error loop progress + auto-Mark-applied(完整 hand-off 体验)。
+
+      Submit gate(per design 4.5):
+        灰(per P3-OQ4 灰 + hover):
+          "⛔ 还有 N 个必填字段没好"
+          [Mark applied] disabled,hover tooltip 显示具体差几个
+        绿(all required verified):
+          "✓ All required fields verified."
+          "切到浏览器,点 Submit。我会自动检测页面跳转。"
+          [🔵 Open Chromium]  [我已点 Submit,手动 Mark]
+
+      Loop progress(submit_attempts[] 有 ≥ 1 条且未 finalized 时):
+        "Submit attempt 2 of 3 · 正在修 Phone format..."
+        Horizontal stepper:
+          ● Auto-fill (done)
+          ● Submit attempt 1 (error: Phone invalid)
+          ◐ Auto-fix in progress (fixing 2 fields)
+          ○ Submit attempt 2 (pending)
+        [⏸ Pause] [🚪 Cancel]
+
+      Auto-Mark-applied(per P3-OQ5):
+        polling /status 收 outcome='applied' + submit_detected_by 强信号 →
+          自动跳 /career/applied + toast "Applied!"
+        收 submit_detected_by='user_fallback' →
+          fallback 提示二次确认(用户在自己浏览器点的,可能没真 submit)
+        收 outcome='escalated' →
+          显示 escalation_reason + 引导用 m9 字段卡片 fallback 收尾
+          不再 auto submit(per Phase 1/OQ7)
+
+      smoke 9 case:
+        1. required 全 verified 前 gate 灰 + tooltip
+        2. 最后 required verified → gate 翻绿
+        3. submit_attempts[0]='has_errors' → 显示 attempt 2 progress stepper
+        4. submit_attempts 累计 3 + 'escalated' → 切 escalation 视图
+        5. polling 收 'applied' + 强信号 → 自动跳 /applied
+        6. polling 收 'user_fallback' → 二次确认 modal
+        7. Pause → POST /pause
+        8. Cancel → POST /cancel → escalated
+        9. escalation 中 Mark applied 可点(用户真 submit 了)+ 二次确认
+
+  # ─────────────────────────────────────────────────────────────────────
+  # ROOM REOPEN extension — Phase 4 of post-fill-handoff-ux design
+  # (m11 — 4 个 Recovery 按钮 + envelope.user_hints[])
+  # Recovery 1 跨 Room dep:04-renderer/01-html-template m3(compressed render)
+  # Recovery 2 跨 Room dep:02-playwright-runtime m4(fillWithFallback 加 value_alternatives 参数)
+  # 全部 5 个 P4-OQ default 锁定(per 2026-05-27):
+  #   P4-OQ1 alt formats 实现:02-playwright/m4 fillWithFallback 扩展 value_alternatives
+  #   P4-OQ2 PDF 压缩:scale 0.8 + 紧版 margin/font(简单)
+  #   P4-OQ3 ATS 识别按钮:Greenhouse / Lever / Workday / iCIMS + I don't know + Skip
+  #   P4-OQ4 user_hints 处理:存 envelope,能解析则试新 strategy,不能 → recorded_only
+  #   P4-OQ5 Recovery 按钮显示:仅 error_code/state 匹配时显示
+  # ─────────────────────────────────────────────────────────────────────
+
+  - id: "m11-recovery-buttons-ui-endpoints"
+    name: "4 个 Recovery 按钮(resume-compress / try-formats / identify-ats / user-hint)"
+    status: pending
+    estimated_files:
+      - "src/career/Apply.tsx"                              # +~300 LOC
+      - "src/career/apply.css"                              # +~30 LOC
+      - "src/career/applier/multistep/endpoint.mjs"         # +~150 LOC(4 新路由)
+      - "src/career/applier/multistep/applySessionsStore.mjs" # +~30 LOC(user_hints[])
+      - "scripts/smoke-apply-recovery.mjs"                  # NEW ~220
+    estimated_lines: 730  # 510 src + 220 smoke
+    depends_on:
+      - "m9-per-field-card-actions-observer-glue"
+      # 跨 Room:02-playwright/m4 (fillWithFallback +value_alternatives 参数)
+      # 跨 Room:04-renderer/01-html-template/m3 (?quality=low render option)
+    complexity_flags:
+      - "design_decisions"
+    open_questions: []
+    description: |
+      4 个 Recovery 按钮 — 让用户少切 Chromium,系统替他修。
+      per-field card 根据 error_code 条件渲染按钮(per P4-OQ5)。
+
+      Recovery 1 · Resume too large(error_code='too_large'):
+        UI: [⚡ Re-render compressed (1.5MB) + retry]
+        Wire: POST /:jobId/recover/resume-compress { ref }
+        Backend:
+          1. GET /api/career/resumes/{default_id}/render?quality=low
+             (调 04-renderer/01-html-template/m3 提供的低质量 render)
+          2. setInputFiles(ref, blob)
+          3. submit retry
+        显示 attempted_size + 期望 size
+
+      Recovery 2 · Phone format rejected(error_code='invalid_format'):
+        UI: [⚡ Try alternative formats]
+        Wire: POST /retry-field { ref, value_alternatives: [...] }
+        Backend(per P4-OQ1 走 02-playwright/m4 fillWithFallback 的 value_alternatives 扩展):
+          hardcoded ladder per field type:
+            phone: ["9292353841", "(929) 235-3841", "+19292353841", "1-929-235-3841"]
+            date:  ["YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY"]
+            其他 default 暂不试
+
+      Recovery 3 · Unknown ATS(ats_detected='unknown'):
+        UI(显示在 status board 顶部):
+          [🌱 Greenhouse] [🔵 Lever] [🟣 Workday] [⚙ iCIMS]
+          [❓ I don't know] [✋ Skip]
+          (per P4-OQ3 4 + 2 = 6 个按钮)
+        Wire: POST /:jobId/recover/identify-ats { ats }
+        Backend:
+          1. session.ats_detected = ats
+          2. 加载对应 adapter
+          3. 重跑 Mode 2 auto-fill(从当前已 verified 状态恢复,不重 fill verified)
+        "I don't know" → 不动 adapter,继续 generic
+
+      Recovery 4 · All strategies failed(final_state='all_strategies_failed'):
+        UI: free-text input "Tell me what worked for you..." + [📤 Send hint]
+        Wire: POST /:jobId/recover/user-hint { ref, hint }
+        Backend(per P4-OQ4):
+          1. envelope.user_hints.push({ field_ref, hint, timestamp })
+          2. 尝试解析:
+             - "scroll/dropdown" → keyboardInput strategy + scroll preamble
+             - "click first" → role_locator_click with first match
+             - 其他 → recorded_only(Phase 6 给 classifier 当 evidence)
+          3. 不强行试新策略,解析不出 → 直接返"recorded, please try in browser"
+
+      envelope schema 增量(在 Phase 1/m5 之上):
+        user_hints: z.array(z.object({
+          field_ref: z.string(),
+          hint: z.string().max(500),
+          timestamp: z.string().datetime(),
+          attempted_strategy: z.string().optional(),
+          result: z.enum(['recorded_only', 'strategy_tried_ok', 'strategy_tried_fail']),
+        })).default([])
+
+      smoke 12 case(fixture 驱动):
+        Resume compress:
+          1. error_code='too_large' → 按钮显示
+          2. 点击 → POST /resume-compress + 后端调 renderer quality=low
+          3. 重传成功 → 卡片翻绿
+        Phone format:
+          4. error_code='invalid_format' + field=phone → 按钮显示
+          5. 点击 → POST /retry-field with value_alternatives
+          6. 第 2 个 alternative 成功 → final='no-dashes'
+        Unknown ATS:
+          7. ats_detected='unknown' → status board 显示 6 个按钮
+          8. 点 Greenhouse → POST /identify-ats → adapter 加载 + 重跑
+          9. 点 I don't know → 不动 adapter
+        User hint:
+          10. all_strategies_failed → 文本框显示
+          11. hint 含 "scroll dropdown" → 后端解析 keyboardInput+scroll → 试 → 成功
+          12. hint 无解析模式 → recorded_only
+
 commits:
   - hash: "778a7aa"
     date: "2026-05-13"
@@ -339,7 +793,7 @@ commits:
       - "_tree.yaml 04-multi-step-state-machine: planning → active"
       - "07-applier parent: 50% → 62% (5/8 children ✅)"
       - "04-career-system: 90% → 92% (27/34 features)"
-current_sprint: "Sprint 16 — Mode 2 Multi-Step State Machine"
+current_sprint: "Sprint 21 — ROOM REOPEN: post-fill-handoff-ux Phase 1 + 3 + 4 (state machine + UI + recovery buttons)"
 blockers: []
-status_note: "🎉 ROOM COMPLETE 2026-05-13 (4/4 milestones). One-day Room. m4 shipped — endpoint.mjs ~310 LOC (in-memory _machines registry per jobId + pending-Promise approve resolver + startMachine/approveStep/pauseMachine/resumeMachine/getStatus + Zod body schemas StartBodySchema/ApproveStepBodySchema/ResumeBodySchema) + server.mjs +120 LOC (5 routes: POST start, GET :jobId/status, POST :jobId/approve-step, POST :jobId/pause, POST :jobId/resume; JOB_ID_RE shared with m1; URL/body jobId mismatch check on resume) + smoke-multistep-endpoint.mjs ~780 LOC, 30/30 green. All page-touching deps injected via _runMachine + _getPage so smoke runs pure-Node. Plan-agent Phase 3.5 review: 0 CRITICAL + 2 HIGH + 5 MEDIUM + 8 LOW — applied 2H + 2M + 4L (H1 synchronous slot reservation prevents concurrent-start race [orphan ctrl + double machine spawn], H2 lastDraftInfo snapshot preserved across approveStep/pauseMachine/settle paths for dashboard 'errored at step N' UX, M1 resume-of-completed returns 409 not 200 [terminal state shouldn't pretend to spawn], M4 done-state ctrl swept from registry on next start within 30s grace, L1 import JOB_ID_RE from m1 store [drift prevention], L2 URL vs body jobId explicit mismatch check, L5 pauseRequested flag for pause-before-first-approve [next approve auto-declines], L6 cleaned stale 'reject' comment). Deferred M2 (detectAdapterForUrl substring duplicate — m2 supersedes via lazy import in production wiring), M3 (resume drops classifier ctx — documented; would need session schema change), M5 (redactSession no-op — dashboard local-only, masking TBD when 08 ships UI), L3/L4/L7/L8 hygiene. Smoke covers: 3 Zod schemas + strict rejection + null-edit, startMachine happy + 503 + 409 duplicate, approveStep 404 + 409 + 400 + edits propagation, pauseMachine + 404 + 400, getStatus 404 + 200 + 400, resumeMachine paused + 404 + 410 abandoned + 409 already-running + 409 completed-terminal, 2 e2e choreographies (start→approve×3→completed, start→approve→pause→resume→complete), H1 concurrent-start race (exactly one wins), L5 pause-before-first-approve auto-declines, M4 restart after error within grace, H2 lastDraftInfo after settle. Room regression: m1 43 + m2 43 + m3 37 + m4 30 = **153/153 green** all milestones. ROOM COMPLETE rollups applied: room.yaml lifecycle planning→active, _tree.yaml multi-step planning→active, 07-applier parent 50%→62% (5/8 children ✅), 04-career-system 90%→92% (27/34 features). 下游 unblocked: 05-non-standard-controls (extends machine action verbs for weird widgets), 06-site-adapters (replaces m2 inline mini-registry — same shape contract), 08-human-gate-tracker/03+/04 (consumes /multi-step/:jobId/status + POST /approve-step for dashboard live approval UI), self-iteration/02-data-flywheel (reads session.field_memory + per_step_draft at completion to seed qa-bank history.jsonl)."
-last_updated: "2026-05-13"
+status_note: "🔄 ROOM REOPEN 2026-05-27 — Phase 1 of post-fill-handoff-ux design adds m5/m6/m7 (submit-first error loop + 5 guards + envelope schema v2). m1-m4 (153/153 smoke) remain ✅. All 9 plan-milestones open questions locked with defaults (per session 2026-05-27): same-error compared by (field, error_code) tuple, max submits hardcoded 3, submit interval since-last-submit-no-pause, form_errors parsed via generic selectors with adapter-rule fallback deferred to Phase 6, auto-retry-after-fix (UI shows attempt progress), _fixField via DI mock until Phase 2 ships fillWithFallback, escalation locks out further submit (control to user), Zod .default([]) auto-migrates old sessions without submit_attempts[], 90s form-silence threshold for timeout escalation. Estimated work: m5=210 LOC (60 src + 150 smoke, pure data layer), m6=660 LOC (310 src + 350 smoke, state machine + 5 guards in independent guards/*.mjs files + policy.mjs dispatcher), m7=140 LOC (40 src + 100 smoke + spec update). Cross-room dep: m6 RETRYING_FIX state calls 02-playwright-runtime/m5 fillWithFallback (Phase 2 of the design doc) — Phase 1 m6 uses DI mock; real wire-up happens during Phase 2 dev. \n\n--- ORIGINAL m4 ROOM COMPLETE NOTE ---\n\n🎉 ROOM COMPLETE 2026-05-13 (4/4 milestones). One-day Room. m4 shipped — endpoint.mjs ~310 LOC (in-memory _machines registry per jobId + pending-Promise approve resolver + startMachine/approveStep/pauseMachine/resumeMachine/getStatus + Zod body schemas StartBodySchema/ApproveStepBodySchema/ResumeBodySchema) + server.mjs +120 LOC (5 routes: POST start, GET :jobId/status, POST :jobId/approve-step, POST :jobId/pause, POST :jobId/resume; JOB_ID_RE shared with m1; URL/body jobId mismatch check on resume) + smoke-multistep-endpoint.mjs ~780 LOC, 30/30 green. All page-touching deps injected via _runMachine + _getPage so smoke runs pure-Node. Plan-agent Phase 3.5 review: 0 CRITICAL + 2 HIGH + 5 MEDIUM + 8 LOW — applied 2H + 2M + 4L (H1 synchronous slot reservation prevents concurrent-start race [orphan ctrl + double machine spawn], H2 lastDraftInfo snapshot preserved across approveStep/pauseMachine/settle paths for dashboard 'errored at step N' UX, M1 resume-of-completed returns 409 not 200 [terminal state shouldn't pretend to spawn], M4 done-state ctrl swept from registry on next start within 30s grace, L1 import JOB_ID_RE from m1 store [drift prevention], L2 URL vs body jobId explicit mismatch check, L5 pauseRequested flag for pause-before-first-approve [next approve auto-declines], L6 cleaned stale 'reject' comment). Deferred M2 (detectAdapterForUrl substring duplicate — m2 supersedes via lazy import in production wiring), M3 (resume drops classifier ctx — documented; would need session schema change), M5 (redactSession no-op — dashboard local-only, masking TBD when 08 ships UI), L3/L4/L7/L8 hygiene. Smoke covers: 3 Zod schemas + strict rejection + null-edit, startMachine happy + 503 + 409 duplicate, approveStep 404 + 409 + 400 + edits propagation, pauseMachine + 404 + 400, getStatus 404 + 200 + 400, resumeMachine paused + 404 + 410 abandoned + 409 already-running + 409 completed-terminal, 2 e2e choreographies (start→approve×3→completed, start→approve→pause→resume→complete), H1 concurrent-start race (exactly one wins), L5 pause-before-first-approve auto-declines, M4 restart after error within grace, H2 lastDraftInfo after settle. Room regression: m1 43 + m2 43 + m3 37 + m4 30 = **153/153 green** all milestones. ROOM COMPLETE rollups applied: room.yaml lifecycle planning→active, _tree.yaml multi-step planning→active, 07-applier parent 50%→62% (5/8 children ✅), 04-career-system 90%→92% (27/34 features). 下游 unblocked: 05-non-standard-controls (extends machine action verbs for weird widgets), 06-site-adapters (replaces m2 inline mini-registry — same shape contract), 08-human-gate-tracker/03+/04 (consumes /multi-step/:jobId/status + POST /approve-step for dashboard live approval UI), self-iteration/02-data-flywheel (reads session.field_memory + per_step_draft at completion to seed qa-bank history.jsonl)."
+last_updated: "2026-05-27"

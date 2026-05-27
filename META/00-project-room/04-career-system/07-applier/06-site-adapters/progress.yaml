@@ -265,6 +265,102 @@ milestones:
         - 8 ATS YAMLs + _common + default validate against schema
           (5 from m1 + 3 from m3)
 
+  # ─────────────────────────────────────────────────────────────────────
+  # ROOM REOPEN 2026-05-27 — Phase 6 of post-fill-handoff-ux design
+  # 新增 m4 — schema 升级支持 Phase 5 飞轮 propose 的 4 类新 rule
+  # (eeo_section / submit_detection / resume_constraints / strategy_priority)。
+  # 全部 .optional() 字段,8 个 existing ATS YAML 仍能 load。
+  # P6-OQ4 + P6-OQ5 default 锁定(per 2026-05-27 plan-milestones):
+  #   P6-OQ4 不加 version bump,新字段全 .optional() 兼容
+  #   P6-OQ5 strategy_priority 落 adapter YAML 内 strategy_priority 块
+  # ─────────────────────────────────────────────────────────────────────
+
+  - id: "m4-schema-v2-flywheel-rule-types"
+    name: "SiteAdapter schema v2 — 接 Phase 5 飞轮 propose 的 4 类新 rule"
+    status: pending
+    estimated_files:
+      - "src/career/applier/adapter/schema.mjs"               # +~100 LOC
+      - "src/career/applier/multistep/siteAdapter.mjs"        # +~30 LOC consume
+      - "data/career/adapters/greenhouse.yml"                 # +示例 rule 块
+      - "data/career/adapters/_common.yml"                    # +默认 strategy_priority
+      - "scripts/smoke-site-adapter-schema-v2.mjs"            # NEW ~220
+    estimated_lines: 350  # 130 src + 220 smoke
+    depends_on: []
+    complexity_flags:
+      - "design_decisions"
+    open_questions: []
+    description: |
+      schema 加 4 类新 block,Phase 5 飞轮 propose 后 promote 写进 adapter YAML。
+      全部 .optional() 让现有 8 ATS YAML 仍然 load(P6-OQ4 无 version bump)。
+
+      Schema 增量(在 m1 SiteAdapterSchema 之上):
+
+      1) eeo_section(信号 B 产物):
+         z.object({
+           detect: z.object({
+             css_contains: z.string().optional(),
+             role_contains: z.string().optional(),
+             label_matches: z.string().optional(),  // regex
+           }),
+           control_hints: z.object({
+             primary_strategy: StrategyNameSchema,
+             expected_class: z.string().optional(),
+           }),
+           known_options: z.record(z.array(z.string())).optional(),
+         }).optional()
+
+      2) submit_detection(信号 F 产物):
+         z.object({
+           thank_you_patterns: z.array(z.object({
+             url_contains: z.string().optional(),
+             text_contains: z.string().optional(),
+             selector: z.string().optional(),
+           })).default([]),
+           success_url_patterns: z.array(z.string()).default([]),
+         }).optional()
+
+      3) resume_constraints(信号 H 产物):
+         z.object({
+           max_size_mb: z.number().min(0.1).max(50).optional(),
+           accepted_formats: z.array(z.enum(['pdf', 'docx', 'rtf', 'txt'])).optional(),
+         }).optional()
+
+      4) strategy_priority(信号 A 产物,P6-OQ5 放 adapter YAML 内):
+         z.record(
+           z.string(),  // fingerprint class key(e.g. "select__control")
+           z.array(StrategyNameSchema)
+         ).optional()
+
+      Consumer 路径变化:
+        - 04-multi-step/m6 RETRYING_FIX:先查 adapter.eeo_section + strategy_priority
+        - 04-multi-step/m11 Recovery 1:查 adapter.resume_constraints
+        - 02-playwright/m5 detectSubmitSuccess:查 adapter.submit_detection
+        - 02-playwright/m4 fillWithFallback:查 adapter.strategy_priority[fingerprint_class]
+
+      示例(为 m11 / Phase 6 fixture 用):
+        # data/career/adapters/greenhouse.yml(append 块,m1 既有内容不动)
+        eeo_section:
+          detect:
+            css_contains: ".application-question--eeo"
+          control_hints:
+            primary_strategy: react_select_click
+          known_options:
+            decline: ["Decline To Self Identify", "I don't wish to answer"]
+        strategy_priority:
+          "select__control":
+            - react_select_click
+            - keyboard_input
+
+      smoke 8 case:
+        1. 8 个 existing ATS YAML 仍能 load(回归 m1+m3)
+        2. eeo_section 完整字段 load + activate 后能命中 detect rule
+        3. submit_detection.thank_you_patterns 注入 02-playwright m5
+        4. resume_constraints 注入 04-multi-step m11 Recovery 1
+        5. strategy_priority 优先于 default ladder(02-playwright m4)
+        6. .optional() 兼容:adapter 全没新字段 → default 行为
+        7. 类型错误(max_size_mb 是 string)→ Zod reject
+        8. 跨多个新 block 同时配置 → 互不冲突 + 都生效
+
 commits:
   - hash: "cb5bc3e"
     date: "2026-05-15"
@@ -295,7 +391,7 @@ commits:
       - "_tree.yaml 06-site-adapters: planning → active"
       - "07-applier parent: 75% → 88% (7/8 children ✅)"
       - "04-career-system: 94% → 97% (29/34 features)"
-current_sprint: "Sprint 18 — Site Adapters"
+current_sprint: "Sprint 21 — ROOM REOPEN: post-fill-handoff-ux Phase 6 (schema v2 for flywheel rule types)"
 blockers: []
 status_note: "🎉 ROOM COMPLETE 2026-05-16 (3/3 milestones, 81/81 smoke green = 29 loader + 23 activate + 29 migration). m3 shipped: multistep/siteAdapter.mjs rewritten as thin facade (~250 LOC) over m1 loader with try/catch + minimal fallback registry per REVIEW C3 (top-level await failure no longer brings down endpoint.mjs/server.mjs); 3 multi-step YAMLs (workday/icims/successfactors) replacing the pre-m3 inline registry; endpoint.mjs.startMachine activates adapter via getCompiledAdapter(jobUrl) before runMachine + reverts in finally (try/finally atomic — survives runMachine throw); __SMOKE_skipAdapterActivation harness flag (REVIEW M2/H3: renamed from _skipAdapterActivation to avoid production exposure). workday.yml known_fields corrected to point at real legal.yml keys (work_authorization.authorized_us_yes_no / work_authorization.requires_sponsorship_now) per REVIEW C1; workday.yml controls.date_picker REMOVED per REVIEW C2 (MuiPickersDay is MUI not Workday); _common.yml Forward removed per REVIEW C4 (was leaking to workday/icims via merge); getCompiledAdapter URL heuristic tightened to `://` per REVIEW C5; activate.mjs class_contains startsWith now requires hyphen-prefix per REVIEW H3 adv. Plan-agent + adversarial review across 3 milestones: 11 CRITICAL + 5 HIGH + 4 MEDIUM applied — every fix has REVIEW-named regression. Regression: 04-multi-step 153/153 + 05 nonstandard 157/157 + 03 field-classifier 95/95 + 02-playwright-runtime/apply-sessions 43/43 + 06 (this Room) 81/81 = 529/529 green. Room totals: schema.mjs ~250 LOC + loader.mjs ~190 + detector.mjs ~80 + activate.mjs ~225 + multistep/siteAdapter.mjs ~250 (facade rewrite) + regexRules.mjs +95 LOC seam + endpoint.mjs +35 LOC + 8 bundled YAMLs (5 single-step from m1 + 3 multi-step from m3) = ~1125 LOC production + ~1400 smoke. ROOM COMPLETE rollups: room.yaml planning→active, _tree.yaml planning→active, 07-applier 75%→88% (7/8 children ✅), 04-career-system 94%→97% (29/34 features). 下游 unblocked: self-iteration/02-data-flywheel (累积同 domain 失败 propose 新 adapter YAML); 08-human-gate-tracker/03+/04 (consumes adapter id + per-ATS quirks for interview prep + followup cadence)."
-last_updated: "2026-05-15"
+last_updated: "2026-05-27"

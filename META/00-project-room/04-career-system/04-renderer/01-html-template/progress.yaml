@@ -220,6 +220,57 @@ milestones:
         - 04-renderer/03-renderer-pluggable (deferred per plan) 一旦做就把
           htmlToPdf 实现注册成 default renderer
 
+  # ─────────────────────────────────────────────────────────────────────
+  # ROOM REOPEN 2026-05-27 — Phase 4 of post-fill-handoff-ux design
+  # 新增 m3 — render endpoint 加 ?quality=low 选项,给 Resume too large
+  # recovery 路径用(04-multi-step/m11 Recovery 1 调它)。
+  # 此前 2026-05-25 的 LaTeX template 重写没用 milestone 形式,只通过
+  # commits[] 记录,本次 reopen 才是 Room 首次添加新 milestone。
+  # P4-OQ2 default 锁定:PDF 压缩方案 = scale 0.8 + 紧版 margin/font(简单)
+  # ─────────────────────────────────────────────────────────────────────
+
+  - id: "m3-compressed-render-option"
+    name: "render endpoint 加 ?quality=low 选项(Resume too large recovery 用)"
+    status: pending
+    estimated_files:
+      - "src/career/lib/cvTemplate.mjs"                     # +~30 LOC(quality-aware CSS)
+      - "server.mjs"                                        # +~30 LOC(/render?quality= 参数)
+      - "scripts/smoke-render-compressed.mjs"               # NEW ~120
+    estimated_lines: 200  # 80 src + 120 smoke
+    depends_on: []
+    complexity_flags:
+      - "design_decisions"
+    open_questions: []
+    description: |
+      04-multi-step/m11 Recovery 1 依赖的"低质量 PDF"原料 —
+      /api/career/resumes/:id/render 加 ?quality=low|high 选项
+      (default high,保持向后兼容)。
+
+      Quality=low 策略(per P4-OQ2 简单做):
+        - htmlToPdf(html, { ...defaults, scale: 0.8 })  # Playwright page.pdf scale
+        - @page margin: 0.35in × 0.45in(减 30%,版面更紧)
+        - body font-size: 9pt(原 10.5pt)
+        - line-height: 1.2(原 1.3)
+        - 不动 font / 颜色 / accent
+
+      目标:1.5-2.0 MB(典型 base resume 在 quality=high 时 ~3MB,
+      scale 0.8 + 紧版 → ~1.7MB)。
+      若实际测下来仍超 2MB,m11 Recovery 1 失败时降级到"用户自己上传"。
+
+      API 增量:
+        GET /api/career/resumes/:id/render?quality=high|low
+        default high
+
+      cvTemplate.mjs:
+        composeCvHtml({ identity, body_html, options: { accent_color, quality } })
+        quality === 'low' 时 buildCss 走压缩分支
+
+      smoke 4 case:
+        1. quality=high(default)→ PDF 跟 m2 一样 byte-for-byte(回归)
+        2. quality=low → PDF 大小 ≤ 2MB(fixture identity + 1000 字 base.md)
+        3. ?quality=invalid → 400 error
+        4. low quality 仍带 Times New Roman + accent color(只缩 size 不换 font)
+
 commits:
   - hash: "289cc52"
     date: "2026-04-28"
@@ -247,8 +298,8 @@ commits:
       - "change-2026-05-25-classic-latex-template (created — visual rewrite, anchors preserved)"
     milestones_affected: []
 
-current_sprint: "Sprint 3 — Renderer + CV Engine"
+current_sprint: "Sprint 21 — ROOM REOPEN: post-fill-handoff-ux Phase 4 (compressed render for Recovery 1)"
 blockers: []
 completion: 100
-status_note: "🎉 ROOM 完成 (2/2 milestones, 353 行 net) + 🎉 04-renderer sub-epic DONE (2 ROOMs ✅). 真实 CV PDF 生成跑通。下一个 Sprint 3 子任务: 03-cv-engine。"
-last_updated: "2026-04-28"
+status_note: "🔄 ROOM REOPEN 2026-05-27 — Phase 4 of post-fill-handoff-ux 加 m3(compressed render option ?quality=low),04-multi-step/m11 Recovery 1 调用。P4-OQ2 锁定:scale 0.8 + 紧版 margin/font(简单方案,目标 PDF ≤ 2MB)。m1+m2 (353 行) 保留 ✅。\n\n--- ORIGINAL ROOM COMPLETE NOTE ---\n\n🎉 ROOM 完成 (2/2 milestones, 353 行 net) + 🎉 04-renderer sub-epic DONE (2 ROOMs ✅). 真实 CV PDF 生成跑通。下一个 Sprint 3 子任务: 03-cv-engine。"
+last_updated: "2026-05-27"

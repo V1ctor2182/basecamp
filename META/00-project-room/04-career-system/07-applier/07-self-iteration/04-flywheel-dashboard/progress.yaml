@@ -1,18 +1,157 @@
-milestones: []
-current_sprint: null
-blockers:
-  - "Plan-milestones not yet run — run the plan-milestones skill before dev m1."
-completion: 0
-status_note: >
-  🔄 planning. Created 2026-05-22. One dedicated page that surfaces the
-  whole data flywheel in one place — today it is all backend (JSONL
-  stores + suggested/*.json) with no consolidated UI, and the new
-  verification layer (07-applier M1–M4: verify-failures store + the
-  applier self-test harness) has no UI surface at all. Scope: the 3
-  feedback stores (field-edits / site-failures / verify-failures), the
-  pending induced proposals awaiting approve/reject, applied + rejected
-  rule history, and the self-test reports with verified/mismatch/
-  not_seen verification stats. Consolidates what is currently scattered
-  across the Learning tab + Iteration.tsx. Milestones to be locked by
-  plan-milestones.
-last_updated: "2026-05-22"
+milestones:
+  # ─────────────────────────────────────────────────────────────────────
+  # ROOM INITIALIZATION via plan-milestones 2026-05-27.
+  # Phase 7 of post-fill-handoff-ux design lives entirely in this Room +
+  # a small m4 collar in 03-iteration-dashboard.
+  # 全部 6 个 P7-OQ default 锁定(per 2026-05-27 plan-milestones):
+  #   P7-OQ1 04 vs 03 分工: 04 主导(信号 + proposal queue + 进步指标);
+  #                          03 保留 code-calibration 专属
+  #   P7-OQ2 hero metric 维度: per job_id("Captivation #2 vs #1")
+  #   P7-OQ3 polling 间隔: 30s(dashboard 慢节奏)
+  #   P7-OQ4 ATS coverage 可视化: 简单 table,不做 fancy map
+  #   P7-OQ5 fresh user hero: "Apply your first job to see metrics here"
+  #   P7-OQ6 signal stream 保留: 90 天(对齐 envelope rotate Phase 1/OQ9)
+  # ─────────────────────────────────────────────────────────────────────
+
+  - id: "m1-flywheel-aggregator-backend"
+    name: "Backend aggregator + 4 endpoint(per-job-improvement / signal-stream / proposal-queue / unlabeled-pool-status)"
+    status: pending
+    estimated_files:
+      - "src/career/iteration/flywheel-aggregator.mjs"   # NEW ~250
+      - "server.mjs"                                      # +~80 LOC routes
+      - "scripts/smoke-flywheel-aggregator.mjs"          # NEW ~200
+    estimated_lines: 530  # 330 src + 200 smoke
+    depends_on:
+      # 跨 Room:Phase 1/m5 envelope schema v2 落盘
+      # 跨 Room:Phase 5/m5-m7 写 promote-queue + 9 信号
+      # 跨 Room:Phase 6/m5 写 eval_result 元数据
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Aggregator 从多个 source 聚合,4 个 endpoint 返回 dashboard 需要的形状。
+
+      GET /api/career/flywheel/per-job-improvement?job_id=...
+        { current: {verified, total, elapsed_ms},
+          previous: {...} | null,
+          improvement_pp,
+          time_saved_ms,
+          powered_by: [ "greenhouse.yml eeo_section (promoted 2026-05-26)", ... ] }
+        fresh user 无历史 → previous=null + message="first apply"
+
+      GET /api/career/flywheel/signal-stream?days=7&ats=greenhouse
+        { signals: [{ type: 'A'..'I', triggered_at, evidence_count, outcome }] }
+        sources:9 个 induce*.mjs 写的 history → 按时间归并
+
+      GET /api/career/flywheel/proposal-queue?status=validated|marginal|rejected|pending
+        promote-queue/*.yaml enriched view,带 Phase 6/m5 写的 eval_result
+
+      GET /api/career/flywheel/unlabeled-pool-status
+        { count: 47, threshold: 50, calibration_recommended: false }
+
+      smoke 9 case:
+        1-2. per-job-improvement happy path + fresh user empty state
+        3-4. signal-stream 7d / 30d 切换
+        5-6. proposal-queue filter validated/rejected
+        7. unlabeled-pool < 50 不推荐 calibration
+        8. unlabeled-pool ≥ 50 推荐
+        9. 各 endpoint 错误处理(invalid params → 400)
+
+  - id: "m2-flywheel-dashboard-page-ui"
+    name: "/career/flywheel route + 5 sections layout(hero / signal stream / proposal queue / unlabeled pool / ATS coverage)"
+    status: pending
+    estimated_files:
+      - "src/career/FlywheelDashboard.tsx"           # NEW ~400
+      - "src/career/flywheel.css"                    # NEW ~150
+      - "src/career/CareerNav.tsx"                   # +~10 LOC(Flywheel tab)
+      - "src/career/CareerApp.tsx"                   # +~5 LOC(route)
+      - "scripts/smoke-flywheel-dashboard-ui.mjs"    # NEW ~150
+    estimated_lines: 715  # 565 src + 150 smoke
+    depends_on:
+      - "m1-flywheel-aggregator-backend"
+    complexity_flags:
+      - "design_decisions"
+    open_questions: []
+    description: |
+      独立 dashboard page 把 self-iteration 的"系统在进步"信号合到一页。
+
+      Sections:
+        1. Hero metric card(per design 系统在进步):
+           "Captivation Greenhouse — your 2nd apply:5/14 → 13/14,−1:49"
+           Powered by:greenhouse.yml eeo_section + 3 qa-bank entries
+           fresh user → "Apply your first job to see improvement metrics here"
+           (P7-OQ5)
+
+        2. Signal stream timeline:
+           过去 7 天 9 信号,横向时间轴,每个信号一个 chip 标 type + evidence_count
+           hover 显示 detail
+
+        3. Proposal queue(per Phase 6/m5 eval_result 富化):
+           Filter:validated(默认显眼)/ marginal / rejected / pending replay
+           每行:proposal 类型 + ATS + before→after pp + [Review] [Promote] [Reject]
+           从 03-iteration-dashboard 迁过来(03/m4 同步删冗余)
+
+        4. Unlabeled pool status:
+           counter "47/50",threshold 触发时高亮 + [Run classifier calibration] 按钮
+           调 01-code-calibration eval runner
+
+        5. ATS coverage map(per P7-OQ4 简单 table):
+           8 known adapter + N unknown w/ pending proposal
+           每行:ATS name + verify rate 7d + proposal status + last_updated
+
+      smoke 7 case:
+        1. 5 sections 渲染(无数据 empty state)
+        2. hero metric per_job_id 显示正确
+        3. signal stream 按时间排序
+        4. proposal queue filter 切换
+        5. unlabeled pool ≥ 50 高亮 + 按钮可点
+        6. ATS coverage 显示 8 known + 1 unknown
+        7. CareerNav Flywheel tab 高亮当前 route
+
+  - id: "m3-realtime-polling-filters-room-complete"
+    name: "30s polling + 时间/ATS filter + ROOM COMPLETE"
+    status: pending
+    estimated_files:
+      - "src/career/FlywheelDashboard.tsx"           # +~200 LOC
+      - "src/career/flywheel.css"                    # +~30 LOC
+      - "scripts/smoke-flywheel-realtime.mjs"        # NEW ~150
+      - "META/.../04-flywheel-dashboard/spec.md"     # ROOM COMPLETE 总结
+    estimated_lines: 380  # 230 src + 150 smoke
+    depends_on:
+      - "m2-flywheel-dashboard-page-ui"
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Polling 30s 刷 hero + signal stream + unlabeled-pool-status(per P7-OQ3)
+      AbortController 守 navigation,unmount 清理。
+
+      Filters:
+        时间 — today / 7d(default)/ 30d / 90d
+        ATS — all / Greenhouse / Lever / Workday / iCIMS / Ashby / ...
+                (从 adapter loader 拉 known + 历史出现过的 unknown host)
+
+      ROOM COMPLETE rollups:
+        - 04-flywheel-dashboard lifecycle planning → active
+        - _tree.yaml 同步
+        - 07-self-iteration 父 Room completion 重算:
+          75% (3/4 ✅) → 100% (4/4 ✅)
+        - 07-applier 父 Room 重算(在原 100% 基础上,reopen 后会重新计算)
+        - 04-career-system overall 重算
+
+      和 03-iteration-dashboard 关系(per P7-OQ1):
+        03 保留:code-calibration 结果展示(fixture pool / tuner status / promote modal)
+        03 迁出:proposal queue → 04
+        03/m4 完成"收口"(独立 milestone)
+
+      smoke 6 case:
+        1. polling 30s 后 hero 数据更新
+        2. polling unmount 后停止(AbortController)
+        3. 时间 filter 切到 30d → endpoint days=30
+        4. ATS filter 切到 Greenhouse → endpoint ats=greenhouse
+        5. 同时切两个 filter → 都传递
+        6. polling 中切 filter → AbortController 中断 + 用新 params 重发
+
+current_sprint: "Sprint 21 — ROOM INIT: post-fill-handoff-ux Phase 7 (flywheel dashboard)"
+blockers: []  # plan-milestones run 2026-05-27
+completion: 0  # m1-m3 pending
+status_note: "📝 ROOM INIT 2026-05-27 — plan-milestones run for post-fill-handoff-ux Phase 7. 3 milestones locked: m1 backend aggregator + 4 endpoints (530 LOC), m2 FlywheelDashboard.tsx page with 5 sections (715 LOC), m3 polling + filters + ROOM COMPLETE (380 LOC). All 6 P7-OQs locked with defaults: 04 主导(信号+proposal+进步指标),03 保留 code-calibration 专属;hero metric per_job_id;polling 30s;ATS coverage 简单 table;fresh user empty state;signal stream 保留 90 天对齐 envelope rotate。跨 Room dep:Phase 1/m5 envelope schema, Phase 5/m5-m7 写信号 + promote-queue, Phase 6/m5 写 eval_result。 完成后 07-self-iteration 父 Room 100%(原 75% 3/4 → 4/4)。"
+last_updated: "2026-05-27"

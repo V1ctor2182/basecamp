@@ -84,8 +84,46 @@ milestones:
       counts + leaked-roles diagnostics. Smoke covers modal mount + confirm
       flow + the promote endpoint integration. ROOM COMPLETE rollup.
 
-current_sprint: null
+  # ─────────────────────────────────────────────────────────────────────
+  # ROOM REOPEN 2026-05-27 — Phase 7 of post-fill-handoff-ux design
+  # 加 m4 收口 — 把 proposal queue + signal stream 部分迁到新建的
+  # 04-flywheel-dashboard 页;Iteration.tsx 保留 code-calibration 专属内容。
+  # 跨 Room dep:04-flywheel-dashboard m3(必须先 ship 才能迁)
+  # ─────────────────────────────────────────────────────────────────────
+
+  - id: "m4-migrate-proposal-queue-link-flywheel"
+    name: "Iteration.tsx 收口:删冗余 proposal queue + signal stream,链接到 /flywheel"
+    status: pending
+    estimated_files:
+      - "src/career/Iteration.tsx"                   # 净 -120 LOC(-150 删 + ~30 link)
+      - "src/career/iteration.css"                   # -~50 LOC 清理冗余
+      - "scripts/smoke-iteration-page-migration.mjs" # NEW ~80
+    estimated_lines: 150  # 实际新增 src/smoke ~110(净减)
+    depends_on:
+      # 跨 Room:04-flywheel-dashboard/m3 ship 之后才能迁
+    complexity_flags: []
+    open_questions: []
+    description: |
+      Iteration.tsx 现有 4 张 collapsible 卡片中,proposal queue 卡片 + 部分
+      signal 卡片迁到 /career/flywheel(04 m2/m3 已做)。
+
+      保留:
+        - 30d flywheel stats(简略,详细在 /flywheel)
+        - Classifier error signals chart(code-calibration 专属)
+        - Site adapter coverage table 短表(详细在 /flywheel)
+
+      proposal queue 那块替换成:
+        "Pending proposals migrated to [Flywheel Dashboard](/career/flywheel)"
+        + [Open Flywheel] 按钮
+
+      smoke 4 case:
+        1. Iteration.tsx 不再渲染 proposal queue 卡片
+        2. "Moved" 提示 + 链接到 /flywheel
+        3. 保留的 3 张卡片仍然渲染
+        4. code-calibration 错误信号 chart 仍然可见(独占于 03)
+
+current_sprint: "Sprint 21 — ROOM REOPEN: post-fill-handoff-ux Phase 7 (collar — migrate proposal queue to /flywheel)"
 blockers: []   # 01 + 02 ROOM COMPLETE — data sources all in place
-completion: 100  # 🎉 ROOM COMPLETE 2026-05-18 (3/3 milestones)
+completion: 100  # 🎉 ROOM COMPLETE 2026-05-18 (3/3 milestones); m4 reopen pending
 status_note: "🔄 in_dev. Plan locked 2026-05-18 — 3 milestones, ~1040 LOC (spec ~620 under-counted by 1.7× for 5-store event normalization + multi-step promote flow). All 3 spec OQs + 2 new milestone-level OQs locked with the following SPEC OVERRIDES (user-approved): (1) Q2 event store → real-time aggregate over existing JSONL stores instead of new events.jsonl (avoids modifying frozen 01+02 emit-event paths; <500 records → perf fine). (2) Promote action writes a STUB truth.yml only (url + reason + vendor); operator runs capture-fixture.mjs manually to fill HTML (snapshot_excerpt schema cap = 400 chars insufficient for full fixture). (3) Tier 2/3 backlog displays placeholder (0) with tooltip in V1 — pattern clustering not in scope; descope acceptance (c) to a future room. Spec acceptance (a)(b)(d)(e) all achievable; (c) descoped. Reuses Learning.tsx visual tokens (no new palette per D1). All locked: D1 (STATUS_COLORS reuse), D2 (30s polling + AbortController), D3 (promote modal review gate), D4 (no [Run Tuner] button), D5 (0 LLM on render)."
-last_updated: "2026-05-18"
+last_updated: "2026-05-27"
