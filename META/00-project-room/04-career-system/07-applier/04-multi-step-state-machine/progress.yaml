@@ -600,7 +600,7 @@ milestones:
       - "src/career/apply.css"                          # +~150 LOC FieldCard styles
       - "server.mjs"                                    # +~80 LOC 4 routes (3 POST + 1 SSE GET) via _handleFieldAction
       - "scripts/smoke-apply-ui-field-cards.mjs"        # NEW (25 fixture asserts)
-    commit_hash: "PENDING"
+    commit_hash: "257bc9b"
     review:
       - "Plan agent: 1 CRITICAL + 2 HIGH + 4 MEDIUM + 9 LOW"
       - "Applied: C1 (skipField read+write now INSIDE withSessionLock — concurrent skip vs machine.mjs persist no longer last-write-wins on stale snapshot; smoke case 6d locks 2-concurrent-skip-on-distinct-fields-both-persist) + H2/M2 (overlay precedence — overlay defers when polled session is in TERMINAL_VERIFY_STATES verified/skipped_by_user, prevents stuck-stale after operator fixes through other path) + H3 (optimistic skip overlay reverts on POST failure — captures previous overlay value before mutate, restores in catch block) + M4 (sseSubscribe /events route passes replay:false — fresh tabs don't receive stale 10-min-old field_input replays that would corrupt overlay) + M7 (observer events with no statusRef.current are DROPPED — would otherwise verify against suggested_value='' and force a false 'stale'; action broadcasts pass through since they carry new_status directly)"
