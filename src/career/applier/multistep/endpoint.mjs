@@ -124,6 +124,25 @@ export const ResumeBodySchema = z
   })
   .strict();
 
+// m9: per-field action body schemas. `ref` is the DraftField.refId
+// the operator clicked on; the server resolves it via the session.
+export const FieldActionBodySchema = z
+  .object({
+    ref: z.string().min(1).max(64),
+  })
+  .strict();
+
+// Retry takes an optional strategy name (one of the 5 ladder names
+// from Phase 2/m4 DEFAULT_LADDER_NAMES). When omitted the server runs
+// the full ladder. Free-form string because Phase 6 adapters may add
+// new strategies — validation belongs in the runner, not here.
+export const RetryFieldBodySchema = z
+  .object({
+    ref: z.string().min(1).max(64),
+    strategy: z.string().max(64).optional(),
+  })
+  .strict();
+
 // ── Public API ──────────────────────────────────────────────────────
 
 /**
@@ -852,6 +871,180 @@ function _fireSiteFailure(jobId, ctrl, err) {
 }
 
 // ── Test hooks ──────────────────────────────────────────────────────
+
+// ── m9: per-field actions (focus / retry / skip) ─────────────────────
+//
+// All three accept a refId from a DraftField. Resolution to a live
+// Playwright Locator goes through the state machine's refTable, which
+// is populated during the snapshot phase. focusField + retryField are
+// CURRENTLY THIN — they validate the request and acknowledge, but the
+// underlying live-runtime wiring (Phase 2/m6 focusField + Phase 2/m4
+// fillWithFallback) is a future cross-Room glue milestone. skipField
+// is fully wired: it persists session.per_step_draft[..].fields[i]
+// with verify_status='skipped_by_user'.
+//
+// Same-origin guard is applied at the route layer (server.mjs), not
+// here, mirroring /cancel.
+
+/**
+ * Find a field across all per-step drafts by refId. Returns the
+ * (mutable) field reference plus its stepIdx — caller must writeSession
+ * to persist. Null when not found.
+ *
+ * @param {object} session
+ * @param {string} refId
+ * @returns {{ field: object, stepIdx: number } | null}
+ */
+function _locateField(session, refId) {
+  if (!session?.per_step_draft) return null;
+  for (const [k, entry] of Object.entries(session.per_step_draft)) {
+    const fields = entry?.fields;
+    if (!Array.isArray(fields)) continue;
+    for (const f of fields) {
+      if (f && f.refId === refId) {
+        return { field: f, stepIdx: entry.step_idx ?? Number(k) };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Acknowledge a "focus this field" request. The live wiring (Phase
+ * 2/m6 focusField against the active Playwright Page) lands in a
+ * future cross-Room milestone — m9 ships the contract + telemetry
+ * trail.
+ *
+ * @param {string} jobId
+ * @param {{ ref: string }} body
+ * @returns {Promise<{ status, sessionId?, ref?, queued?, error? }>}
+ */
+export async function focusField(jobId, body) {
+  if (!JOB_ID_RE.test(jobId)) {
+    return { status: 400, error: 'invalid jobId' };
+  }
+  let session;
+  try { session = await readSession(jobId); }
+  catch (err) {
+    return { status: 500, error: `readSession failed: ${String(err?.message ?? err).slice(0, 200)}` };
+  }
+  if (!session) return { status: 404, error: `no session found for jobId ${jobId}` };
+
+  const located = _locateField(session, body.ref);
+  if (!located) return { status: 404, error: `ref ${body.ref} not found in any step draft` };
+
+  // Future wiring: _machines.get(jobId)?.refTable.resolve(body.ref) →
+  // Locator, then call Phase 2/m6 focusField(page, locator). For now
+  // we return 202 acknowledged + the resolved field metadata so the
+  // UI can show "Focus requested" feedback and the operator can find
+  // it in the browser themselves.
+  return {
+    status: 202,
+    sessionId: jobId,
+    ref: body.ref,
+    stepIdx: located.stepIdx,
+    label: located.field.label ?? null,
+    queued: true,
+    // Mark the live-wiring gap explicitly so the UI can render an
+    // honest "scroll to field manually" hint until cross-Room glue lands.
+    pending_wire: true,
+  };
+}
+
+/**
+ * Acknowledge a "retry this field with strategy X" request. Live
+ * wiring to Phase 2/m4 fillWithFallback is a future milestone; m9
+ * ships the contract.
+ *
+ * @param {string} jobId
+ * @param {{ ref: string, strategy?: string }} body
+ * @returns {Promise<{ status, sessionId?, ref?, strategy?, queued?, error? }>}
+ */
+export async function retryField(jobId, body) {
+  if (!JOB_ID_RE.test(jobId)) {
+    return { status: 400, error: 'invalid jobId' };
+  }
+  let session;
+  try { session = await readSession(jobId); }
+  catch (err) {
+    return { status: 500, error: `readSession failed: ${String(err?.message ?? err).slice(0, 200)}` };
+  }
+  if (!session) return { status: 404, error: `no session found for jobId ${jobId}` };
+
+  const located = _locateField(session, body.ref);
+  if (!located) return { status: 404, error: `ref ${body.ref} not found in any step draft` };
+
+  return {
+    status: 202,
+    sessionId: jobId,
+    ref: body.ref,
+    strategy: body.strategy ?? null,
+    stepIdx: located.stepIdx,
+    label: located.field.label ?? null,
+    queued: true,
+    pending_wire: true,
+  };
+}
+
+/**
+ * Mark a field as skipped by the operator. Mutates session draft
+ * and persists. Subsequent /status reads (and Apply.tsx polling)
+ * pick up the new verify_status.
+ *
+ * @param {string} jobId
+ * @param {{ ref: string }} body
+ * @returns {Promise<{ status, sessionId?, ref?, prev_status?, error? }>}
+ */
+export async function skipField(jobId, body) {
+  if (!JOB_ID_RE.test(jobId)) {
+    return { status: 400, error: 'invalid jobId' };
+  }
+  // [review C1] Read-modify-write must be inside the lock. The
+  // outer state machine ALSO holds the same lock during step
+  // transitions (machine.mjs); a concurrent unlocked read here would
+  // operate on a stale snapshot and last-write-wins would clobber
+  // the machine's mid-step persistence.
+  let located = null;
+  let prevStatus = null;
+  let lockErr = null;
+  try {
+    await withSessionLock(jobId, async () => {
+      let session;
+      try { session = await readSession(jobId); }
+      catch (err) {
+        lockErr = { status: 500, error: `readSession failed: ${String(err?.message ?? err).slice(0, 200)}` };
+        return;
+      }
+      if (!session) {
+        lockErr = { status: 404, error: `no session found for jobId ${jobId}` };
+        return;
+      }
+      located = _locateField(session, body.ref);
+      if (!located) {
+        lockErr = { status: 404, error: `ref ${body.ref} not found in any step draft` };
+        return;
+      }
+      prevStatus = located.field.verify_status ?? null;
+      located.field.verify_status = 'skipped_by_user';
+      await writeSession(jobId, session);
+    });
+  } catch (err) {
+    return {
+      status: 500,
+      error: `skip persist failed: ${String(err?.message ?? err).slice(0, 200)}`,
+    };
+  }
+  if (lockErr) return lockErr;
+
+  return {
+    status: 202,
+    sessionId: jobId,
+    ref: body.ref,
+    stepIdx: located.stepIdx,
+    prev_status: prevStatus,
+    new_status: 'skipped_by_user',
+  };
+}
 
 /**
  * Inspect the in-memory machine registry. For smoke + diagnostics.

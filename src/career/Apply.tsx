@@ -15,7 +15,7 @@
 //   6. POST .../resume to continue a paused session
 //   7. POST /apply/submitted            → mark the application Applied
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -35,8 +35,16 @@ import {
   Hand,
   ChevronDown,
   ChevronUp,
+  Clipboard,
+  Crosshair,
+  RotateCw,
 } from 'lucide-react'
 import { buildTriageState, CHIP_KINDS } from './apply/triage.mjs'
+import {
+  deriveTriedLadder,
+  applySseEvent,
+  DEFAULT_LADDER_NAMES as LADDER_NAMES,
+} from './apply/cardActions.mjs'
 import './apply.css'
 
 type Job = {
@@ -119,6 +127,14 @@ type Pending = {
   requested_at: string
 }
 
+type SubmitAttempt = {
+  attempt: number
+  started_at: string
+  form_errors: Array<{ field: string; error_code: string; error_msg: string }>
+  fixes_tried: Array<{ field: string; fix_name: string; result: string }>
+  outcome: string
+}
+
 type Session = {
   jobId: string
   site_adapter: string
@@ -130,6 +146,8 @@ type Session = {
   status: 'active' | 'paused' | 'abandoned' | 'completed'
   started_at: string
   last_activity_at: string
+  // m9: submit-first loop log; cards consume fixes_tried for their Tried row.
+  submit_attempts?: SubmitAttempt[]
 }
 
 type Machine = {
@@ -173,11 +191,22 @@ export default function Apply() {
   const [busy, setBusy] = useState(false)
   const [marking, setMarking] = useState(false)
   const [markToast, setMarkToast] = useState<string | null>(null)
+  // m9: per-refId verify_status overlay driven by SSE events. Wins over
+  // the polled session value so the card flips green/yellow instantly
+  // when the user types in the Chromium window.
+  const [sseOverlay, setSseOverlay] = useState<Record<string, string>>({})
+  // m9: per-refId card-action loading state (refId → 'focus'|'retry'|'skip')
+  const [actionBusy, setActionBusy] = useState<Record<string, string>>({})
+  // m9: transient toasts for action feedback
+  const [actionToast, setActionToast] = useState<string | null>(null)
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Identifies the currently-displayed pending draft so we re-seed `edits`
   // only when a genuinely new approval gate arrives (not every poll tick).
   const pendingKeyRef = useRef<string | null>(null)
+  // m9: latest status snapshot, kept fresh by polling; SSE callbacks read
+  // through here to avoid stale closure.
+  const statusRef = useRef<StatusResp | null>(null)
 
   // ── Initial load: job metadata + adopt any existing session ───────────
   useEffect(() => {
@@ -235,8 +264,101 @@ export default function Apply() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
+  // ── m9: SSE event subscription ────────────────────────────────────────
+  //
+  // Connect once per active session. Browser auto-reconnects on transient
+  // network failure via EventSource's built-in retry. The hub's replay
+  // buffer covers the missed-events gap on reconnect.
+  useEffect(() => {
+    if (!jobId) return
+    if (phase !== 'active' && phase !== 'done') return
+
+    const url = api(`/applier/multi-step/${encodeURIComponent(jobId)}/events`)
+    let es: EventSource | null = null
+    try {
+      es = new EventSource(url)
+    } catch {
+      // EventSource constructor failed (rare — bad URL); silently skip.
+      return
+    }
+
+    // Use a fields snapshot from CURRENT status — captured at subscribe
+    // time + refreshed on poll updates via the closure below. Caller
+    // uses applySseEvent which only needs the field with the matching
+    // refId.
+    const handleEvent = (eventName: string) => (e: MessageEvent) => {
+      // Defensive parse — broken JSON should not crash the page.
+      let payload: { ref?: string; field_ref?: string; value?: string; new_status?: string } = {}
+      try {
+        payload = JSON.parse(e.data ?? '{}')
+      } catch {
+        return
+      }
+      const targetRef = payload.ref ?? payload.field_ref ?? ''
+      if (!targetRef) return
+
+      // [review M7] If statusRef hasn't been populated by the initial
+      // /status fetch yet, drop the event rather than verify against
+      // suggested_value='' — that would force a 'stale' false-flag.
+      // Action broadcasts (field_skip) carry new_status so they don't
+      // need the field lookup; let them through.
+      const session = statusRef.current?.session
+      let field: { refId: string; suggested_value: string | null } | null = null
+      if (session) {
+        for (const step of Object.values(session.per_step_draft ?? {})) {
+          for (const f of step.fields ?? []) {
+            if (f.refId === targetRef) {
+              field = {
+                refId: f.refId ?? targetRef,
+                suggested_value: f.suggested_value ?? '',
+              }
+              break
+            }
+          }
+          if (field) break
+        }
+      }
+      const isActionEvent =
+        eventName === 'field_skip' ||
+        eventName === 'field_focus' ||
+        eventName === 'field_retry'
+      if (!field && !isActionEvent) {
+        // Observer event with no resolved session — would yield a
+        // false 'stale'. Drop and wait for the next poll to catch up.
+        return
+      }
+      if (!field) {
+        field = { refId: targetRef, suggested_value: '' }
+      }
+      const r = applySseEvent(field as any, eventName, payload as any)
+      if (!r || !r.verify_status) return
+      setSseOverlay((prev) => {
+        if (prev[targetRef] === r.verify_status) return prev
+        return { ...prev, [targetRef]: r.verify_status }
+      })
+    }
+
+    // Observer events
+    es.addEventListener('field_input', handleEvent('field_input') as EventListener)
+    es.addEventListener('field_change', handleEvent('field_change') as EventListener)
+    // Action broadcasts (from our own endpoints)
+    es.addEventListener('field_skip', handleEvent('field_skip') as EventListener)
+    es.addEventListener('field_focus', handleEvent('field_focus') as EventListener)
+    es.addEventListener('field_retry', handleEvent('field_retry') as EventListener)
+
+    es.onerror = () => {
+      // EventSource auto-reconnects; we just log a single warning.
+      // Don't surface to the user — polling continues to work.
+    }
+
+    return () => {
+      try { es?.close() } catch { /* */ }
+    }
+  }, [jobId, phase])
+
   // Decide the phase from a freshly-fetched status snapshot.
   function adoptStatus(s: StatusResp) {
+    statusRef.current = s
     const m = s.machine
     if (m.state === 'done') {
       setPhase('done')
@@ -273,6 +395,7 @@ export default function Apply() {
       const r = await fetch(api(`/applier/multi-step/${encodeURIComponent(jobId)}/status`))
       if (!r.ok) return // transient — keep polling
       const s = (await r.json()) as StatusResp
+      statusRef.current = s
       setStatus(s)
       maybeSeedEdits(s.machine.pending)
       // First successful poll graduates 'starting' → 'active'; a settled
@@ -407,6 +530,122 @@ export default function Apply() {
     pendingKeyRef.current = null
     setPhase('idle')
     setBusy(false)
+  }
+
+  // m9: per-field card actions. All three send POST + listen for the
+  // SSE broadcast (the response also flips local state for instant
+  // feedback). Errors land in the action toast — they don't block other
+  // actions because the field still exists.
+  const showToast = useCallback((msg: string) => {
+    setActionToast(msg)
+    window.setTimeout(() => setActionToast((cur) => (cur === msg ? null : cur)), 2500)
+  }, [])
+
+  async function focusFieldAction(refId: string) {
+    if (!jobId) return
+    setActionBusy((prev) => ({ ...prev, [refId]: 'focus' }))
+    try {
+      const r = await fetch(
+        api(`/applier/multi-step/${encodeURIComponent(jobId)}/focus-field`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref: refId }),
+        },
+      )
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error ?? `Focus failed (HTTP ${r.status})`)
+      showToast(j.pending_wire
+        ? `Focus queued — scroll to "${j.label ?? refId}" in the browser.`
+        : `Focused "${j.label ?? refId}".`)
+    } catch (e) {
+      showToast((e as Error).message ?? 'Focus failed')
+    } finally {
+      setActionBusy((prev) => {
+        const next = { ...prev }
+        delete next[refId]
+        return next
+      })
+    }
+  }
+
+  async function retryFieldAction(refId: string, strategy?: string) {
+    if (!jobId) return
+    setActionBusy((prev) => ({ ...prev, [refId]: 'retry' }))
+    try {
+      const r = await fetch(
+        api(`/applier/multi-step/${encodeURIComponent(jobId)}/retry-field`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(strategy ? { ref: refId, strategy } : { ref: refId }),
+        },
+      )
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error ?? `Retry failed (HTTP ${r.status})`)
+      showToast(j.pending_wire
+        ? `Retry queued for "${j.label ?? refId}".`
+        : `Retried "${j.label ?? refId}".`)
+    } catch (e) {
+      showToast((e as Error).message ?? 'Retry failed')
+    } finally {
+      setActionBusy((prev) => {
+        const next = { ...prev }
+        delete next[refId]
+        return next
+      })
+    }
+  }
+
+  async function skipFieldAction(refId: string) {
+    if (!jobId) return
+    setActionBusy((prev) => ({ ...prev, [refId]: 'skip' }))
+    // [review H3] Apply overlay BEFORE the POST so the UI flips
+    // immediately, but record the previous overlay value so we can
+    // revert if the server rejects the request.
+    let prevOverlayValue: string | undefined
+    setSseOverlay((prev) => {
+      prevOverlayValue = prev[refId]
+      return { ...prev, [refId]: 'skipped_by_user' }
+    })
+    try {
+      const r = await fetch(
+        api(`/applier/multi-step/${encodeURIComponent(jobId)}/skip-field`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref: refId }),
+        },
+      )
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error ?? `Skip failed (HTTP ${r.status})`)
+      showToast('Skipped.')
+    } catch (e) {
+      // Revert optimistic overlay on failure.
+      setSseOverlay((prev) => {
+        const next = { ...prev }
+        if (prevOverlayValue === undefined) delete next[refId]
+        else next[refId] = prevOverlayValue
+        return next
+      })
+      showToast((e as Error).message ?? 'Skip failed')
+    } finally {
+      setActionBusy((prev) => {
+        const next = { ...prev }
+        delete next[refId]
+        return next
+      })
+    }
+  }
+
+  async function copyValueAction(refId: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      showToast(`Copied "${value.length > 30 ? value.slice(0, 30) + '…' : value}".`)
+    } catch {
+      showToast('Copy failed — your browser blocked clipboard access.')
+    }
+    void refId  // kept in signature for symmetry / future telemetry
   }
 
   // [review C4] Pause keeps the session alive (status='paused') so the
@@ -585,10 +824,22 @@ export default function Apply() {
           {session && (phase === 'active' || phase === 'done') && (
             <StatusBoard
               session={session}
+              sseOverlay={sseOverlay}
+              submitAttempts={session.submit_attempts ?? []}
               onPause={pauseApply}
               onCancel={cancelApply}
+              onFocus={focusFieldAction}
+              onRetry={retryFieldAction}
+              onSkip={skipFieldAction}
+              onCopy={copyValueAction}
+              actionBusy={actionBusy}
               busy={busy}
             />
+          )}
+          {actionToast && (
+            <div className="ap-toast-ok ap-m2-action-toast">
+              {actionToast}
+            </div>
           )}
 
           {/* IDLE — no session: start panel */}
@@ -1081,20 +1332,57 @@ const CHIP_META: Record<
 
 function StatusBoard({
   session,
+  sseOverlay,
+  submitAttempts,
   onPause,
   onCancel,
+  onFocus,
+  onRetry,
+  onSkip,
+  onCopy,
+  actionBusy,
   busy,
 }: {
   session: Session
+  sseOverlay: Record<string, string>
+  submitAttempts: SubmitAttempt[]
   onPause: () => void
   onCancel: () => void
+  onFocus: (refId: string) => void
+  onRetry: (refId: string, strategy?: string) => void
+  onSkip: (refId: string) => void
+  onCopy: (refId: string, value: string) => void
+  actionBusy: Record<string, string>
   busy: boolean
 }) {
   // [P3-OQ6] derive on every render — buildTriageState is pure and cheap
   // enough on the field counts a normal application emits (<200).
+  // m9: overlay SSE-driven verify_status on top of polled session before
+  // deriving — flips card colors instantly when user types in browser.
+  // [review H2/M2] Overlay only applies when the polled session value is
+  // NOT a terminal-truth state (verified / skipped_by_user). Once the
+  // poll catches up to terminal truth, the overlay defers — prevents
+  // stale 'stale' from sticking after the operator has actually fixed
+  // the field through some other path.
+  const TERMINAL_VERIFY_STATES = new Set(['verified', 'skipped_by_user'])
+  const overlaidSession = useMemo(() => {
+    if (!sseOverlay || Object.keys(sseOverlay).length === 0) return session
+    const next = { ...session, per_step_draft: { ...session.per_step_draft } }
+    for (const [k, v] of Object.entries(next.per_step_draft)) {
+      const fields = (v?.fields ?? []).map((f) => {
+        if (!f.refId) return f
+        if (TERMINAL_VERIFY_STATES.has(f.verify_status ?? '')) return f
+        const override = sseOverlay[f.refId]
+        if (!override) return f
+        return { ...f, verify_status: override }
+      })
+      next.per_step_draft[k] = { ...v, fields }
+    }
+    return next
+  }, [session, sseOverlay])
   const { entries, counts } = useMemo(
-    () => buildTriageState(session),
-    [session],
+    () => buildTriageState(overlaidSession),
+    [overlaidSession],
   )
   const [expanded, setExpanded] = useState(false)
 
@@ -1169,31 +1457,55 @@ function StatusBoard({
           )
         })}
       </div>
-      {expanded && <TriageView entries={entries} />}
+      {expanded && (
+        <TriageView
+          entries={entries}
+          submitAttempts={submitAttempts}
+          onFocus={onFocus}
+          onRetry={onRetry}
+          onSkip={onSkip}
+          onCopy={onCopy}
+          actionBusy={actionBusy}
+        />
+      )}
     </div>
   )
 }
 
-type TriageEntry =
-  | {
-      kind: 'group'
-      groupKey: string
-      fields: Array<{ refId: string; label: string; verify_status: string | null; verify_detail: string | null; required: boolean; stepIdx: number }>
-      batch_hint: string | null
-    }
-  | {
-      kind: 'standalone'
-      field: {
-        refId: string
-        label: string
-        verify_status: string | null
-        verify_detail: string | null
-        required: boolean
-        stepIdx: number
-      }
-    }
+type TriageField = {
+  refId: string
+  label: string
+  class: string
+  suggested_value: string | null
+  verify_status: string | null
+  verify_detail: string | null
+  required: boolean
+  stepIdx: number
+  role: string | null
+  control_fingerprint: { ancestors?: string[]; tag?: string; role?: string } | null
+}
 
-function TriageView({ entries }: { entries: TriageEntry[] }) {
+type TriageEntry =
+  | { kind: 'group'; groupKey: string; fields: TriageField[]; batch_hint: string | null }
+  | { kind: 'standalone'; field: TriageField }
+
+function TriageView({
+  entries,
+  submitAttempts,
+  onFocus,
+  onRetry,
+  onSkip,
+  onCopy,
+  actionBusy,
+}: {
+  entries: TriageEntry[]
+  submitAttempts: SubmitAttempt[]
+  onFocus: (refId: string) => void
+  onRetry: (refId: string, strategy?: string) => void
+  onSkip: (refId: string) => void
+  onCopy: (refId: string, value: string) => void
+  actionBusy: Record<string, string>
+}) {
   if (entries.length === 0) {
     return (
       <div className="ap-m2-triage-empty">
@@ -1206,9 +1518,6 @@ function TriageView({ entries }: { entries: TriageEntry[] }) {
       {entries.map((e) => {
         if (e.kind === 'group') {
           return (
-            // [review M3] groupKey is unique within a single triage build —
-            // no `i` index needed; that would force re-mount on every sort
-            // change and lose card-level state.
             <div
               key={`g-${e.groupKey}`}
               className="ap-m2-triage-card ap-m2-triage-group"
@@ -1226,57 +1535,196 @@ function TriageView({ entries }: { entries: TriageEntry[] }) {
               </div>
               <ul className="ap-m2-triage-members">
                 {e.fields.map((f) => (
-                  // [review H1] composite key — refId alone collides
-                  // across steps (`__captcha`, `__file_0`).
                   <li key={`${f.stepIdx}::${f.refId}`}>
-                    <strong>{f.label}</strong>
-                    {f.verify_status && (
-                      <span className="ap-m2-triage-status"> · {f.verify_status}</span>
-                    )}
-                    {!f.required && (
-                      <span className="ap-m2-triage-opt"> · optional</span>
-                    )}
+                    <FieldCard
+                      field={f}
+                      submitAttempts={submitAttempts}
+                      onFocus={onFocus}
+                      onRetry={onRetry}
+                      onSkip={onSkip}
+                      onCopy={onCopy}
+                      actionBusy={actionBusy}
+                      compact
+                    />
                   </li>
                 ))}
               </ul>
-              <div className="ap-m2-triage-foot">
-                <button
-                  type="button"
-                  className="ap-action-btn"
-                  disabled
-                  title="Per-field card actions land in m9"
-                >
-                  Batch retry (m9)
-                </button>
-              </div>
             </div>
           )
         }
         const f = e.field
         return (
-          <div
+          <FieldCard
             key={`s-${f.stepIdx}::${f.refId}`}
-            className="ap-m2-triage-card ap-m2-triage-standalone"
-            role="listitem"
-          >
-            <div className="ap-m2-triage-head">
-              <span className="ap-m2-triage-icon" aria-hidden="true">◇</span>
-              <span className="ap-m2-triage-title">
-                <strong>{f.label}</strong>
-                {f.verify_status && (
-                  <span className="ap-m2-triage-status"> · {f.verify_status}</span>
-                )}
-                {!f.required && (
-                  <span className="ap-m2-triage-opt"> · optional</span>
-                )}
-              </span>
-            </div>
-            {f.verify_detail && (
-              <p className="ap-m2-triage-detail">{f.verify_detail}</p>
-            )}
-          </div>
+            field={f}
+            submitAttempts={submitAttempts}
+            onFocus={onFocus}
+            onRetry={onRetry}
+            onSkip={onSkip}
+            onCopy={onCopy}
+            actionBusy={actionBusy}
+          />
         )
       })}
     </div>
   )
 }
+
+// ── m9: per-field FieldCard ─────────────────────────────────────────────
+//
+// Header: status icon + label · class badge + verify status
+// KV rows: Expected / Form has / Control
+// Tried row: 5-slot ladder showing per-strategy result
+// Actions: [Copy] [Focus] [Retry] [Skip]
+// `compact` skips the KV / Tried rows for group members where the parent
+// card already shows the common signal.
+
+const LADDER_ICON: Record<string, string> = {
+  verified: '✓',
+  fail: '✗',
+  pending: '⏸',
+  unknown: '?',
+}
+
+function FieldCard({
+  field,
+  submitAttempts,
+  onFocus,
+  onRetry,
+  onSkip,
+  onCopy,
+  actionBusy,
+  compact,
+}: {
+  field: TriageField
+  submitAttempts: SubmitAttempt[]
+  onFocus: (refId: string) => void
+  onRetry: (refId: string, strategy?: string) => void
+  onSkip: (refId: string) => void
+  onCopy: (refId: string, value: string) => void
+  actionBusy: Record<string, string>
+  compact?: boolean
+}) {
+  const busyKind = actionBusy[field.refId] ?? null
+  const isVerified = field.verify_status === 'verified'
+  const isSkipped = field.verify_status === 'skipped_by_user'
+  const isStale = field.verify_status === 'stale'
+  const isFailed = field.verify_status === 'mismatch' || field.verify_status === 'fill_error'
+
+  const headIcon = isVerified ? '✓' : isSkipped ? '✋' : isStale ? '⚠' : '✗'
+  const headTone = isVerified ? 'ok' : isStale ? 'warn' : isSkipped ? 'mute' : 'err'
+
+  const tried = useMemo(
+    () => deriveTriedLadder(field, submitAttempts),
+    [field, submitAttempts],
+  )
+
+  return (
+    <div
+      className={`ap-m2-triage-card ap-m2-field-card ap-m2-field-card-${headTone} ${compact ? 'ap-m2-field-card-compact' : ''}`}
+      role={compact ? undefined : 'listitem'}
+    >
+      <div className="ap-m2-fc-head">
+        <span className={`ap-m2-fc-icon ap-m2-fc-icon-${headTone}`} aria-hidden="true">{headIcon}</span>
+        <span className="ap-m2-fc-label">{field.label}</span>
+        <span className="ap-m2-fc-class">{field.class}</span>
+        {field.verify_status && (
+          <span className={`ap-m2-fc-status ap-m2-fc-status-${headTone}`}>
+            {field.verify_status}
+          </span>
+        )}
+        {!field.required && <span className="ap-m2-fc-opt">optional</span>}
+      </div>
+
+      {!compact && (
+        <div className="ap-m2-fc-kv-rows">
+          <div className="ap-m2-fc-kv">
+            <span className="ap-m2-fc-kv-k">Expected</span>
+            <code className="ap-m2-fc-kv-v">
+              {field.suggested_value !== null && field.suggested_value !== ''
+                ? field.suggested_value
+                : '(none)'}
+            </code>
+          </div>
+          {field.verify_detail && (
+            <div className="ap-m2-fc-kv">
+              <span className="ap-m2-fc-kv-k">Detail</span>
+              <span className="ap-m2-fc-kv-v">{field.verify_detail}</span>
+            </div>
+          )}
+          {field.role && (
+            <div className="ap-m2-fc-kv">
+              <span className="ap-m2-fc-kv-k">Control</span>
+              <span className="ap-m2-fc-kv-v">{field.role}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!compact && (
+        <div className="ap-m2-fc-tried" aria-label="Strategy ladder">
+          <span className="ap-m2-fc-tried-head">Tried:</span>
+          {tried.map((t) => (
+            <span
+              key={t.name}
+              className={`ap-m2-fc-tried-slot ap-m2-fc-tried-${t.state}`}
+              title={`${t.name}: ${t.state}`}
+            >
+              <span aria-hidden="true">{LADDER_ICON[t.state]}</span> {t.name}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="ap-m2-fc-actions">
+        <button
+          type="button"
+          className="ap-action-btn"
+          disabled={!field.suggested_value || busyKind != null}
+          onClick={() => onCopy(field.refId, field.suggested_value ?? '')}
+          title="Copy expected value to clipboard"
+        >
+          <Clipboard size={11} aria-hidden="true" /> Copy
+        </button>
+        <button
+          type="button"
+          className="ap-action-btn"
+          disabled={busyKind != null || isSkipped}
+          onClick={() => onFocus(field.refId)}
+          title="Scroll to this field in the browser"
+        >
+          {busyKind === 'focus' ? <Loader2 size={11} className="ap-spin" /> : <Crosshair size={11} aria-hidden="true" />} Focus
+        </button>
+        <button
+          type="button"
+          className="ap-action-btn"
+          disabled={busyKind != null || isSkipped}
+          onClick={() => {
+            // Pick the first pending strategy as a hint; falls back to
+            // server default (full ladder) when none — keyboard_input
+            // is often the next sensible escalation when click strategies
+            // failed.
+            const nextPending = tried.find((t) => t.state === 'pending')
+            onRetry(field.refId, nextPending?.name)
+          }}
+          title="Retry filling this field"
+        >
+          {busyKind === 'retry' ? <Loader2 size={11} className="ap-spin" /> : <RotateCw size={11} aria-hidden="true" />} Retry
+        </button>
+        <button
+          type="button"
+          className="ap-action-btn ap-m2-fc-skip"
+          disabled={busyKind != null || isSkipped}
+          onClick={() => onSkip(field.refId)}
+          title="Mark this field as user-handled"
+        >
+          {busyKind === 'skip' ? <Loader2 size={11} className="ap-spin" /> : <Hand size={11} aria-hidden="true" />} Skip
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Reference LADDER_NAMES import for type-narrowing; the actual ladder
+// labels come from triage.mjs via deriveTriedLadder.
+void LADDER_NAMES

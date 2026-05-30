@@ -591,7 +591,23 @@ milestones:
 
   - id: "m9-per-field-card-actions-observer-glue"
     name: "Per-field card(4 actions)+ SSE observer callback → 卡片自动 re-verify"
-    status: pending
+    status: completed
+    files:
+      - "src/career/applier/multistep/sseHub.mjs"       # NEW (in-process SSE hub)
+      - "src/career/applier/multistep/endpoint.mjs"     # +~150 LOC focusField/retryField/skipField + schemas
+      - "src/career/apply/cardActions.mjs"              # NEW (pure helpers)
+      - "src/career/Apply.tsx"                          # +~370 LOC FieldCard + SSE subscribe + 3 actions + statusRef
+      - "src/career/apply.css"                          # +~150 LOC FieldCard styles
+      - "server.mjs"                                    # +~80 LOC 4 routes (3 POST + 1 SSE GET) via _handleFieldAction
+      - "scripts/smoke-apply-ui-field-cards.mjs"        # NEW (25 fixture asserts)
+    commit_hash: "PENDING"
+    review:
+      - "Plan agent: 1 CRITICAL + 2 HIGH + 4 MEDIUM + 9 LOW"
+      - "Applied: C1 (skipField read+write now INSIDE withSessionLock — concurrent skip vs machine.mjs persist no longer last-write-wins on stale snapshot; smoke case 6d locks 2-concurrent-skip-on-distinct-fields-both-persist) + H2/M2 (overlay precedence — overlay defers when polled session is in TERMINAL_VERIFY_STATES verified/skipped_by_user, prevents stuck-stale after operator fixes through other path) + H3 (optimistic skip overlay reverts on POST failure — captures previous overlay value before mutate, restores in catch block) + M4 (sseSubscribe /events route passes replay:false — fresh tabs don't receive stale 10-min-old field_input replays that would corrupt overlay) + M7 (observer events with no statusRef.current are DROPPED — would otherwise verify against suggested_value='' and force a false 'stale'; action broadcasts pass through since they carry new_status directly)"
+      - "Defer: H4 (concern 4 confirmed safe by re-read — pending_wire only on focus/retry; skip omits), M5 (unknown ladder strategy names → currently silently 'pending', add 'Also tried' line in m11+), M6 (_locateField duplicate refIds across steps → add optional stepIdx in body in Phase 6 site-adapter wiring milestone), L8 (SSE GET CSRF — verified safe), L9 (_replayByJob unbounded growth — replay disabled at route level moots most of this; full reaper in self-iteration cleanup), L10 (additional smoke gaps — partial coverage via case 6d), L12 (unskip — P3-OQ3 locked)"
+      - "Manual browser test: NOT performed. FieldCard renders only when session has triage entries (active/done phases with failing fields). Smoke + TSC + Vite build verify shape; live render path exercises through real Mode 2 session in Phase 6 e2e."
+      - "Cross-Room: focusField/retryField endpoints are THIN — they validate body + locate field + return {pending_wire:true, queued:true} + broadcast SSE. Live wiring to Phase 2/m6 focusField (against active Playwright Page) and Phase 2/m4 fillWithFallback (single-strategy invocation) is a separate Phase 6 site-adapter glue milestone. UI honestly renders 'Focus queued — scroll to … in the browser' toast for pending_wire=true."
+      - "skipField is FULLY wired — mutates session.per_step_draft[..].fields[i].verify_status='skipped_by_user' under withSessionLock, persists via writeSession. Adds 'skipped_by_user' as a new verify_status value (free-form z.string().max(40) — no schema migration needed). chipKindFor in m8's triage.mjs does NOT route this value yet; routed via overlay precedence + the polled session never showing it as a chip."
     estimated_files:
       - "src/career/Apply.tsx"                          # +~250 LOC
       - "src/career/apply.css"                          # +~40 LOC

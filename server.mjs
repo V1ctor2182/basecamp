@@ -99,7 +99,15 @@ import {
   getStatus as multiStepGetStatus,
   // m7: user-driven escalation route (post-fill-handoff-ux §4.5/4.6)
   cancelMachine as multiStepCancel,
+  // m9: per-field UI actions (post-fill-handoff-ux §4.3 — focus/retry/skip)
+  focusField as multiStepFocusField,
+  retryField as multiStepRetryField,
+  skipField as multiStepSkipField,
+  FieldActionBodySchema,
+  RetryFieldBodySchema,
 } from './src/career/applier/multistep/endpoint.mjs';
+// m9: SSE event hub — broadcast observer/state events to the Apply.tsx UI.
+import { subscribe as sseSubscribe, broadcast as sseBroadcast } from './src/career/applier/multistep/sseHub.mjs';
 import { JOB_ID_RE as APPLY_SESSIONS_JOB_ID_RE } from './src/career/applier/multistep/applySessionsStore.mjs';
 // 07-applier/07-self-iteration/02-data-flywheel m3 — approve/reject seam
 // for Haiku-induced proposals. Importing this module runs its top-level
@@ -5777,6 +5785,99 @@ app.post('/api/career/applier/multi-step/:jobId/reveal', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+});
+
+// ── m9: per-field UI actions + SSE event stream ────────────────────────
+//
+// All three POST routes are same-origin-guarded (CSRF protection) the
+// same way /cancel is — operator action targeting an in-flight session
+// must originate from the dashboard or vite-dev origin.
+//
+// The 3 POST handlers in endpoint.mjs validate the body, locate the
+// field by refId across the session's per-step drafts, and either
+// (skipField) mutate state or (focus/retry) acknowledge — live wiring
+// to Phase 2/m6 + Phase 2/m4 awaits the cross-Room glue milestone.
+
+function _handleFieldAction(req, res, schema, handler, methodLabel) {
+  try {
+    if (!isSameOriginWrite(req)) {
+      return res.status(403).json({
+        error: `cross-origin ${methodLabel} rejected (same-origin policy)`,
+      });
+    }
+    const { jobId } = req.params;
+    if (!MULTI_STEP_JOB_ID_RE.test(jobId)) {
+      return res.status(400).json({ error: 'jobId must match 12-hex' });
+    }
+    let body;
+    try {
+      body = schema.parse(req.body || {});
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid body', details: e.issues });
+    }
+    // Returning a Promise from inside try means the inner await happens
+    // inside the route handler closure — broadcast on success.
+    return Promise.resolve(handler(jobId, body))
+      .then((result) => {
+        if (result.error) {
+          return res.status(result.status || 500).json({ error: result.error });
+        }
+        // Side-effect: SSE-broadcast the action so other dashboard tabs
+        // see it land in near-real-time without waiting for the next poll.
+        try {
+          sseBroadcast(jobId, `field_${methodLabel}`, {
+            ref: result.ref,
+            ...(result.strategy != null ? { strategy: result.strategy } : {}),
+            ...(result.new_status ? { new_status: result.new_status } : {}),
+            pending_wire: result.pending_wire === true,
+          });
+        } catch { /* hub failures must never break the response */ }
+        return res.status(result.status || 202).json(result);
+      })
+      .catch((err) => {
+        res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+      });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+  }
+}
+
+app.post('/api/career/applier/multi-step/:jobId/focus-field', (req, res) => {
+  _handleFieldAction(req, res, FieldActionBodySchema, multiStepFocusField, 'focus');
+});
+
+app.post('/api/career/applier/multi-step/:jobId/retry-field', (req, res) => {
+  _handleFieldAction(req, res, RetryFieldBodySchema, multiStepRetryField, 'retry');
+});
+
+app.post('/api/career/applier/multi-step/:jobId/skip-field', (req, res) => {
+  _handleFieldAction(req, res, FieldActionBodySchema, multiStepSkipField, 'skip');
+});
+
+// SSE event stream — used by Apply.tsx to render live observer events
+// (Phase 2/m6 attachFormObserver pushes through here once cross-Room
+// wiring lands) AND the field-action broadcasts above so other tabs
+// see actions immediately. GET — no body, no CSRF concern, though the
+// route still validates the jobId shape.
+app.get('/api/career/applier/multi-step/:jobId/events', (req, res) => {
+  try {
+    const { jobId } = req.params;
+    if (!MULTI_STEP_JOB_ID_RE.test(jobId)) {
+      return res.status(400).json({ error: 'jobId must match 12-hex' });
+    }
+    // The sseSubscribe call writes its own headers + initial hello.
+    // Returning without writing a response body keeps the connection
+    // open. Cleanup is wired via res.on('close') inside the hub.
+    // [review M4] replay:false — a fresh tab connecting AFTER previous
+    // events landed should NOT re-receive stale field_input/field_skip
+    // broadcasts; the polled session already reflects them and replaying
+    // would flip overlay state to outdated values.
+    sseSubscribe(jobId, res, { replay: false });
+  } catch (err) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
+    }
   }
 });
 

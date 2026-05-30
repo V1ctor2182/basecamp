@@ -26,8 +26,11 @@ const TO_RETRY_STATUSES = new Set(['mismatch', 'fill_error']);
 /** verify_status values that go into the manual chip — fields the
  *  state machine bailed out of (`'manual'`) and fields it never even
  *  attempted (`'not_seen'`). Both need the operator's hand on the
- *  Chromium window. [review C2/H4] */
-const MANUAL_STATUSES = new Set(['manual', 'not_seen']);
+ *  Chromium window. [review C2/H4]
+ *  m9 adds 'skipped_by_user' — operator explicitly Skipped via the
+ *  per-field card. Treated as manual since they're handling it
+ *  themselves. */
+const MANUAL_STATUSES = new Set(['manual', 'not_seen', 'skipped_by_user']);
 
 /** Field classes that ALWAYS land in the manual chip regardless of
  *  verify_status — file uploads + CAPTCHA-like blockers are intrinsic
