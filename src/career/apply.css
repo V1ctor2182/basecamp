@@ -617,3 +617,198 @@
   margin-top: 20px;
   font-size: 12px;
 }
+
+/* ── m8: Status board + Triage view ────────────────────────────────── */
+
+.ap-m2-status-board {
+  position: sticky;
+  top: 8px;
+  z-index: 20;
+  background: #fefdf9;
+  border: 1px solid #e7e5e4;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
+}
+
+.ap-m2-sb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ap-m2-sb-counts {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.ap-m2-sb-ratio {
+  font-size: 14px;
+  color: #1c1917;
+}
+.ap-m2-sb-ratio strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+.ap-m2-sb-slash,
+.ap-m2-sb-suffix {
+  color: #78716c;
+  font-weight: 400;
+}
+.ap-m2-sb-pct {
+  font-size: 12px;
+  color: #57534e;
+  background: #f5f5f4;
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+
+.ap-m2-sb-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ap-m2-sb-actions .ap-action-btn {
+  font-size: 12px;
+}
+.ap-m2-sb-cancel {
+  color: #b91c1c;
+}
+.ap-m2-sb-cancel:hover:not(:disabled) {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.ap-m2-sb-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.ap-m2-sb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  border: 1px solid #e7e5e4;
+  color: #44403c;
+  background: #fafaf9;
+}
+.ap-m2-sb-chip strong {
+  font-weight: 600;
+}
+.ap-m2-sb-chip-warn {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+.ap-m2-sb-chip-info {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+.ap-m2-sb-chip-hand {
+  background: #fef9c3;
+  border-color: #fde68a;
+  color: #854d0e;
+}
+.ap-m2-sb-chip-zero {
+  opacity: 0.55;
+  background: #f5f5f4;
+  border-color: #e7e5e4;
+  color: #78716c;
+}
+
+/* triage view (expanded after Start clean-up) */
+.ap-m2-triage {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px dashed #e7e5e4;
+  padding-top: 10px;
+}
+
+.ap-m2-triage-empty {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #57534e;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ap-m2-triage-card {
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #ffffff;
+}
+
+.ap-m2-triage-group {
+  border-left: 3px solid #ea580c;
+}
+.ap-m2-triage-standalone {
+  border-left: 3px solid #94a3b8;
+}
+
+.ap-m2-triage-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.ap-m2-triage-icon {
+  color: #57534e;
+  font-size: 13px;
+}
+.ap-m2-triage-title {
+  color: #1c1917;
+}
+.ap-m2-triage-root {
+  font-size: 11px;
+  background: #f5f5f4;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: #292524;
+}
+.ap-m2-triage-hint {
+  font-size: 11px;
+  color: #78716c;
+  font-style: italic;
+}
+.ap-m2-triage-status {
+  color: #b45309;
+}
+.ap-m2-triage-opt {
+  color: #78716c;
+  font-style: italic;
+}
+.ap-m2-triage-members {
+  list-style: none;
+  margin: 6px 0 0;
+  padding-left: 14px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ap-m2-triage-members li {
+  color: #44403c;
+}
+.ap-m2-triage-detail {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #57534e;
+}
+.ap-m2-triage-foot {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-end;
+}

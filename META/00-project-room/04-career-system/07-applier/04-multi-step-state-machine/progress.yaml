@@ -537,7 +537,19 @@ milestones:
 
   - id: "m8-status-board-triage-view"
     name: "Apply.tsx 顶部 Status board + Triage view(envelope-driven render)"
-    status: pending
+    status: completed
+    files:
+      - "src/career/apply/triage.mjs"                   # NEW (pure helpers)
+      - "src/career/Apply.tsx"                          # +~280 LOC StatusBoard/TriageView + pauseApply + cancel→/cancel
+      - "src/career/apply.css"                          # +~180 LOC sticky board + chips + triage cards
+      - "scripts/smoke-apply-ui-status-triage.mjs"      # NEW (23 fixture asserts)
+    commit_hash: "PENDING"
+    review:
+      - "Plan agent: 4 CRITICAL + 5 HIGH + 10 MEDIUM + 6 LOW"
+      - "Applied: C1 (MANUAL_CLASSES = ['file','manual'] — dropped dead 'captcha'/'signature' that backend never emits) + C2 (not_seen + manual verify_status routed to manual chip — no dark counts) + C3 (unified classifier — computeStatusCounts agrees with verifySummary on every emitted value) + C4 (separate pauseApply hits /pause keeping session active for Resume; cancelApply hits /cancel for terminal escalation with /pause fallback) + H1 (composite stepIdx::refId React keys + sort tiebreak — synthetic refs like __file_0 / __captcha collide across steps) + H3 (toggle button disabled only when noWork AND collapsed — can still close an expanded panel when work clears) + H4 (covered by C2) + M1 (Math.min defensive guard on empty group) + M3 (groupKey React key without index — no remount on sort change) + M5 (skip non-finite step_idx) + L1 (chips aria-label + Icon aria-hidden) + L5 (aria-expanded on toggle button) + smoke gaps M7 (empty per_step_draft) + M8 (null/undefined session) + M9 (all 6 real verify_status values from machine.mjs) + M10 (composability — counts.total ≡ verified + chipSum)"
+      - "Defer: H5 (TriageEntry type drift — cosmetic), L2 (cancel button visual distinction — moved to m11 design polish), L3 (sort allocation perf — non-issue at scale), L4 (StatusBoard skeleton during starting), L6 (POLL_MS env override)"
+      - "Manual browser test: NOT performed — StatusBoard only renders for sessions with phase ∈ {active, done} and requires a live Mode 2 session that can't be cheaply seeded. Vite build + tsc --noEmit + 23/23 fixture smoke + 77/77 backend regression (endpoint 40 + machine 37) verify the rendering inputs and outputs. m9 will exercise the live render path."
+      - "Cross-Room dependency on control_fingerprint: m8 ships the consumer side as optional DraftField field; server-side population by snapshot phase is a separate (future) cross-Room concern. Smoke fixtures populate it. Until backend adds it, all triage entries appear as standalone — no batch groups."
     estimated_files:
       - "src/career/Apply.tsx"                          # +~280 LOC
       - "src/career/apply.css"                          # +~80 LOC

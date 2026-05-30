@@ -15,7 +15,7 @@
 //   6. POST .../resume to continue a paused session
 //   7. POST /apply/submitted            → mark the application Applied
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -29,7 +29,14 @@ import {
   ExternalLink,
   Send,
   ShieldCheck,
+  Pause,
+  ListChecks,
+  Sparkles,
+  Hand,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
+import { buildTriageState, CHIP_KINDS } from './apply/triage.mjs'
 import './apply.css'
 
 type Job = {
@@ -59,6 +66,16 @@ type DraftField = {
   // unverifiable. Set once the field has been through FILL+VERIFY.
   verify_status?: string
   verify_detail?: string
+  // m8: whether the field is required. Defaults to true (most ATS fields
+  // are mandatory); optional fields explicitly opt out.
+  required?: boolean
+  // m8: shared-ancestor signature for the Triage view same-root grouping.
+  // Populated upstream by the snapshot phase; absent until then.
+  control_fingerprint?: {
+    ancestors?: string[]
+    tag?: string
+    role?: string
+  }
 }
 
 type Control = 'dropdown' | 'radio' | 'checkbox' | 'file' | 'text'
@@ -128,7 +145,10 @@ type StatusResp = { sessionId: string; session: Session; machine: Machine }
 
 type Phase = 'idle' | 'starting' | 'active' | 'done'
 
-const POLL_MS = 1500
+// [P3-OQ6] Poll cadence — 2s for the m8 status board (was 1.5s). SSE is
+// the eventual ladder rung but defer to a later phase; 2s polling is
+// the simple version that fits the Mode 2 budget.
+const POLL_MS = 2000
 
 function api(path: string) {
   return `/api/career${path}`
@@ -364,9 +384,20 @@ export default function Apply() {
     setError(null)
     if (jobId) {
       try {
-        await fetch(api(`/applier/multi-step/${encodeURIComponent(jobId)}/pause`), {
-          method: 'POST',
-        })
+        // [review C4] Cancel = ESCALATE the session (terminal). Hits the
+        // dedicated /cancel endpoint (different from /pause). Falls back
+        // to /pause if /cancel is unavailable on older servers.
+        const r = await fetch(
+          api(`/applier/multi-step/${encodeURIComponent(jobId)}/cancel`),
+          { method: 'POST' },
+        )
+        if (!r.ok && r.status === 404) {
+          // Older server without /cancel — fall back so we don't strand
+          // the browser process.
+          await fetch(api(`/applier/multi-step/${encodeURIComponent(jobId)}/pause`), {
+            method: 'POST',
+          })
+        }
       } catch {
         // ignore — resetting the page is what matters
       }
@@ -376,6 +407,30 @@ export default function Apply() {
     pendingKeyRef.current = null
     setPhase('idle')
     setBusy(false)
+  }
+
+  // [review C4] Pause keeps the session alive (status='paused') so the
+  // operator can Resume later — distinct from Cancel above. Doesn't
+  // reset local UI; renders via the existing terminal-paused branch.
+  async function pauseApply() {
+    if (!jobId) return
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await fetch(
+        api(`/applier/multi-step/${encodeURIComponent(jobId)}/pause`),
+        { method: 'POST' },
+      )
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error ?? `Pause failed (HTTP ${r.status})`)
+      // Land on the paused terminal screen (Resume button renders there).
+      setPhase('done')
+      setTimeout(poll, 300)
+    } catch (e) {
+      setError((e as Error).message ?? 'Pause failed')
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function resumeMachine() {
@@ -523,6 +578,18 @@ export default function Apply() {
         <>
           {/* Progress bar — shown whenever a session exists */}
           {session && <ProgressBar session={session} machine={machine!} />}
+
+          {/* m8: Status board — sticky top, envelope-driven counts/chips.
+              Only show during active/done — idle has no session signal,
+              and starting is the launch spinner. */}
+          {session && (phase === 'active' || phase === 'done') && (
+            <StatusBoard
+              session={session}
+              onPause={pauseApply}
+              onCancel={cancelApply}
+              busy={busy}
+            />
+          )}
 
           {/* IDLE — no session: start panel */}
           {phase === 'idle' && (
@@ -993,4 +1060,223 @@ function flattenSessionFields(session: Session) {
     out.push({ label: 'Auto-fill', final_answer: 'Completed via auto-fill', class: 'open' })
   }
   return out
+}
+
+// ── Status board + Triage view (m8) ─────────────────────────────────────
+//
+// The status board is sticky at the top of the active view: a verified/
+// total ratio + chip counts (to_retry / unlabeled / manual) + actions
+// (Start clean-up / Pause / Cancel). Clicking "Start clean-up" expands
+// the Triage view below, which groups same-root failing fields and lists
+// standalone failures (per-field cards land in m9).
+
+const CHIP_META: Record<
+  (typeof CHIP_KINDS)[number],
+  { label: string; tone: 'warn' | 'info' | 'hand'; Icon: typeof ListChecks }
+> = {
+  to_retry: { label: 'To retry', tone: 'warn', Icon: ListChecks },
+  unlabeled: { label: 'Unlabeled', tone: 'info', Icon: Sparkles },
+  manual: { label: 'Manual', tone: 'hand', Icon: Hand },
+}
+
+function StatusBoard({
+  session,
+  onPause,
+  onCancel,
+  busy,
+}: {
+  session: Session
+  onPause: () => void
+  onCancel: () => void
+  busy: boolean
+}) {
+  // [P3-OQ6] derive on every render — buildTriageState is pure and cheap
+  // enough on the field counts a normal application emits (<200).
+  const { entries, counts } = useMemo(
+    () => buildTriageState(session),
+    [session],
+  )
+  const [expanded, setExpanded] = useState(false)
+
+  const noWork =
+    counts.chips.to_retry === 0 &&
+    counts.chips.unlabeled === 0 &&
+    counts.chips.manual === 0
+
+  return (
+    <div className="ap-m2-status-board" aria-label="Status board">
+      <div className="ap-m2-sb-head">
+        <div className="ap-m2-sb-counts">
+          <span className="ap-m2-sb-ratio">
+            <strong>{counts.verified}</strong>
+            <span className="ap-m2-sb-slash"> / </span>
+            <strong>{counts.total}</strong>
+            <span className="ap-m2-sb-suffix"> verified</span>
+          </span>
+          {counts.pct !== null && (
+            <span className="ap-m2-sb-pct">{counts.pct}%</span>
+          )}
+        </div>
+        <div className="ap-m2-sb-actions">
+          <button
+            type="button"
+            className="ap-action-btn"
+            onClick={() => setExpanded((v) => !v)}
+            // [review H3] Allow toggling closed even after work clears
+            // mid-triage — otherwise the user is trapped with an open
+            // empty panel they can't dismiss.
+            disabled={busy || (noWork && !expanded)}
+            aria-expanded={expanded}
+            title={noWork && !expanded ? 'Nothing to clean up — all fields are verified.' : 'Show triage view'}
+          >
+            <ListChecks size={12} />
+            {expanded ? 'Hide clean-up' : 'Start clean-up'}
+            {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+          <button
+            type="button"
+            className="ap-action-btn"
+            onClick={onPause}
+            disabled={busy}
+          >
+            <Pause size={12} /> Pause
+          </button>
+          <button
+            type="button"
+            className="ap-action-btn ap-m2-sb-cancel"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            <X size={12} /> Cancel
+          </button>
+        </div>
+      </div>
+      <div className="ap-m2-sb-chips">
+        {CHIP_KINDS.map((kind) => {
+          const meta = CHIP_META[kind]
+          const n = counts.chips[kind]
+          const Icon = meta.Icon
+          return (
+            <span
+              key={kind}
+              className={`ap-m2-sb-chip ap-m2-sb-chip-${meta.tone} ${n === 0 ? 'ap-m2-sb-chip-zero' : ''}`}
+              // [review L1] explicit aria-label so SRs hear "To retry: 5"
+              // instead of "ListChecks To retry: 5".
+              aria-label={`${meta.label}: ${n}`}
+            >
+              <Icon size={11} aria-hidden="true" /> {meta.label}: <strong>{n}</strong>
+            </span>
+          )
+        })}
+      </div>
+      {expanded && <TriageView entries={entries} />}
+    </div>
+  )
+}
+
+type TriageEntry =
+  | {
+      kind: 'group'
+      groupKey: string
+      fields: Array<{ refId: string; label: string; verify_status: string | null; verify_detail: string | null; required: boolean; stepIdx: number }>
+      batch_hint: string | null
+    }
+  | {
+      kind: 'standalone'
+      field: {
+        refId: string
+        label: string
+        verify_status: string | null
+        verify_detail: string | null
+        required: boolean
+        stepIdx: number
+      }
+    }
+
+function TriageView({ entries }: { entries: TriageEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <div className="ap-m2-triage-empty">
+        <Check size={13} /> Nothing to triage — all fields are verified or in progress.
+      </div>
+    )
+  }
+  return (
+    <div className="ap-m2-triage" role="list">
+      {entries.map((e) => {
+        if (e.kind === 'group') {
+          return (
+            // [review M3] groupKey is unique within a single triage build —
+            // no `i` index needed; that would force re-mount on every sort
+            // change and lose card-level state.
+            <div
+              key={`g-${e.groupKey}`}
+              className="ap-m2-triage-card ap-m2-triage-group"
+              role="listitem"
+            >
+              <div className="ap-m2-triage-head">
+                <span className="ap-m2-triage-icon" aria-hidden="true">▣</span>
+                <span className="ap-m2-triage-title">
+                  {e.fields.length} fields share root{' '}
+                  <code className="ap-m2-triage-root">{e.groupKey}</code>
+                </span>
+                {e.batch_hint && (
+                  <span className="ap-m2-triage-hint">{e.batch_hint}</span>
+                )}
+              </div>
+              <ul className="ap-m2-triage-members">
+                {e.fields.map((f) => (
+                  // [review H1] composite key — refId alone collides
+                  // across steps (`__captcha`, `__file_0`).
+                  <li key={`${f.stepIdx}::${f.refId}`}>
+                    <strong>{f.label}</strong>
+                    {f.verify_status && (
+                      <span className="ap-m2-triage-status"> · {f.verify_status}</span>
+                    )}
+                    {!f.required && (
+                      <span className="ap-m2-triage-opt"> · optional</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <div className="ap-m2-triage-foot">
+                <button
+                  type="button"
+                  className="ap-action-btn"
+                  disabled
+                  title="Per-field card actions land in m9"
+                >
+                  Batch retry (m9)
+                </button>
+              </div>
+            </div>
+          )
+        }
+        const f = e.field
+        return (
+          <div
+            key={`s-${f.stepIdx}::${f.refId}`}
+            className="ap-m2-triage-card ap-m2-triage-standalone"
+            role="listitem"
+          >
+            <div className="ap-m2-triage-head">
+              <span className="ap-m2-triage-icon" aria-hidden="true">◇</span>
+              <span className="ap-m2-triage-title">
+                <strong>{f.label}</strong>
+                {f.verify_status && (
+                  <span className="ap-m2-triage-status"> · {f.verify_status}</span>
+                )}
+                {!f.required && (
+                  <span className="ap-m2-triage-opt"> · optional</span>
+                )}
+              </span>
+            </div>
+            {f.verify_detail && (
+              <p className="ap-m2-triage-detail">{f.verify_detail}</p>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
