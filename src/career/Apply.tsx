@@ -45,6 +45,13 @@ import {
   applySseEvent,
   DEFAULT_LADDER_NAMES as LADDER_NAMES,
 } from './apply/cardActions.mjs'
+import {
+  requiredVerifyState,
+  loopProgressState,
+  escalationState,
+  autoMarkDecision,
+  missingSummary,
+} from './apply/submitGate.mjs'
 import './apply.css'
 
 type Job = {
@@ -150,16 +157,36 @@ type Session = {
   submit_attempts?: SubmitAttempt[]
 }
 
+type EscalationReason = {
+  code: string
+  detail?: string | null
+  triggered_by?: 'user' | 'machine' | string
+}
+
 type Machine = {
   state: 'idle' | 'starting' | 'running' | 'awaiting-approval' | 'done'
-  lastOutcome: 'completed' | 'paused' | 'error' | null
+  // m6/m7: 'escalated' is the new outcome when the submit-first loop
+  // exhausts the policy gates or the user cancels.
+  lastOutcome: 'completed' | 'paused' | 'error' | 'escalated' | null
   lastError: string | null
   pending: Pending | null
   lastDraftInfo: Pending | null
+  // m7: escalation diagnostics surfaced by endpoint.mjs getStatus.
+  escalationReason?: EscalationReason | null
+  submitAttemptsRun?: number | null
   autoApprove: { enabled: boolean; count: number; log: unknown[] }
 }
 
-type StatusResp = { sessionId: string; session: Session; machine: Machine }
+type StatusResp = {
+  sessionId: string
+  session: Session
+  machine: Machine
+  // m10: future cross-Room field — populated by Phase 2/m5's
+  // detectSubmitSuccess once wired into the live machine. Optional
+  // for forward-compat — undefined means "no signal", which keeps the
+  // existing manual Mark Applied flow.
+  submitDetectedBy?: 'url_pattern' | 'thank_you_text' | 'network_signal' | 'user_fallback' | null
+}
 
 type Phase = 'idle' | 'starting' | 'active' | 'done'
 
@@ -207,6 +234,9 @@ export default function Apply() {
   // m9: latest status snapshot, kept fresh by polling; SSE callbacks read
   // through here to avoid stale closure.
   const statusRef = useRef<StatusResp | null>(null)
+  // m10: single-shot guard so autoMarkDecision triggers at most ONCE per
+  // session lifecycle (prevents repeated navigation on subsequent polls).
+  const autoMarkedRef = useRef(false)
 
   // ── Initial load: job metadata + adopt any existing session ───────────
   useEffect(() => {
@@ -402,6 +432,59 @@ export default function Apply() {
       // machine goes to 'done'. Without this the page would stay stuck on
       // the "Launching browser…" spinner even after the machine reports.
       setPhase(s.machine.state === 'done' ? 'done' : 'active')
+
+      // m10: auto-Mark decision based on detectSubmitSuccess signal.
+      // [P3-OQ5] strong signal → navigate; user_fallback → confirm.
+      // alreadyHandled guard prevents repeated triggers across polls.
+      const decision = autoMarkDecision(
+        s.machine,
+        s.submitDetectedBy ?? null,
+        autoMarkedRef.current,
+      )
+      if (decision === 'auto_redirect') {
+        autoMarkedRef.current = true
+        try {
+          const fields = flattenSessionFields(s.session)
+          const submitR = await fetch(api('/apply/submitted'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jobId, fields }),
+          })
+          // [review C1] Surface errors instead of silently navigating.
+          // If POST fails, re-arm the guard so the user can retry via
+          // the manual Mark button.
+          if (!submitR.ok) {
+            const j = await submitR.json().catch(() => ({}))
+            autoMarkedRef.current = false
+            const status = (j as { current_status?: string }).current_status
+            const allowed = (j as { allowed_next?: string[] }).allowed_next
+            if (status && Array.isArray(allowed)) {
+              setError(`${(j as { error?: string }).error}. Current status: ${status}. Next: ${allowed.join(', ')}`)
+            } else {
+              setError((j as { error?: string }).error ?? `Auto-mark failed (HTTP ${submitR.status})`)
+            }
+            return
+          }
+        } catch (e) {
+          autoMarkedRef.current = false
+          setError((e as Error).message ?? 'Auto-mark failed')
+          return
+        }
+        setMarkToast('Applied! Redirecting…')
+        setTimeout(() => navigate('/career/applied'), 1200)
+      } else if (decision === 'confirm_fallback') {
+        autoMarkedRef.current = true
+        const ok = window.confirm(
+          'I detected you switched away from the browser, but I couldn\'t confirm the submit landed. ' +
+          'Did the form actually accept the submission?\n\n' +
+          'OK → mark Applied. Cancel → I\'ll keep the session open.',
+        )
+        if (ok) {
+          // [review C2/M1] skipConfirm=true — confirm_fallback IS the
+          // affirmation; markApplied's secondary confirm is redundant.
+          void markApplied(true)
+        }
+      }
     } catch {
       // network blip — keep polling
     }
@@ -424,6 +507,7 @@ export default function Apply() {
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error ?? `Start failed (HTTP ${r.status})`)
       pendingKeyRef.current = null
+      autoMarkedRef.current = false  // m10: re-arm for the new session
       setPhase('starting')
       // Kick an immediate poll so the UI updates before the first interval.
       setTimeout(poll, 300)
@@ -699,14 +783,20 @@ export default function Apply() {
 
   // Mark the application Applied. Flattens every filled field across all
   // steps into the /apply/submitted contract (history.jsonl + status flip).
-  async function markApplied() {
+  // [review C2] skipConfirm=true is used by SubmitGate (the gate's green
+  // state IS the affirmation) and by confirm_fallback (the user already
+  // OK'd the auto-mark prompt). The legacy form-filled panel and the
+  // escalation path pass false (default) — they keep the prompt.
+  async function markApplied(skipConfirm = false) {
     if (!jobId || !status) return
-    const ok = window.confirm(
-      'Did you click Submit in the Chromium window?\n\n' +
-        'This marks the application as Applied and records the filled fields. ' +
-        'It does not submit the form for you.',
-    )
-    if (!ok) return
+    if (!skipConfirm) {
+      const ok = window.confirm(
+        'Did you click Submit in the Chromium window?\n\n' +
+          'This marks the application as Applied and records the filled fields. ' +
+          'It does not submit the form for you.',
+      )
+      if (!ok) return
+    }
     setMarking(true)
     setError(null)
     try {
@@ -752,11 +842,16 @@ export default function Apply() {
   const outcome = machine?.lastOutcome ?? null
   // Terminal display: prefer the live machine outcome; fall back to the
   // persisted session status (server-restart / old-session case).
+  // m10: 'escalated' is a distinct terminal — render the escalation panel
+  // instead of the form-filled or error one.
   const terminal =
     phase === 'done'
       ? outcome ?? (session?.status === 'completed' ? 'completed' : session?.status === 'paused' ? 'paused' : 'error')
       : null
   const vsum = verifySummary(session)
+  // m10: escalation can also fire while phase is active (machine outcome
+  // flips to escalated mid-loop before /status reports state='done').
+  const escalation = machine ? escalationState(machine) : null
 
   return (
     <div className="c-page ap-page">
@@ -834,6 +929,16 @@ export default function Apply() {
               onCopy={copyValueAction}
               actionBusy={actionBusy}
               busy={busy}
+            />
+          )}
+          {/* m10: Loop progress stepper — visible while submit-first
+              loop has logged ≥ 1 attempt. Sits between the status
+              board and the form panel so the operator can follow
+              attempt → fix → attempt → ... in real time. */}
+          {session && session.submit_attempts && session.submit_attempts.length > 0 && machine && (
+            <LoopProgress
+              attempts={session.submit_attempts}
+              machine={machine}
             />
           )}
           {actionToast && (
@@ -998,22 +1103,33 @@ export default function Apply() {
                   </p>
                 )}
               </div>
-              <div className="ap-m2-panel-actions">
-                {job?.url && (
-                  <a className="ap-action-btn" href={job.url} target="_blank" rel="noreferrer">
-                    <ExternalLink size={12} /> Open posting
-                  </a>
-                )}
-                <button
-                  type="button"
-                  className="ap-submit-btn"
-                  onClick={markApplied}
-                  disabled={marking}
-                >
-                  <Send size={14} /> {marking ? 'Marking…' : 'Mark applied'}
-                </button>
-              </div>
+              {/* m10: Submit gate replaces the bare "Mark applied" button.
+                  Gray (disabled + tooltip) while required fields outstanding;
+                  green with [Open Chromium] + [Mark applied] when ready. */}
+              {session && (
+                <SubmitGate
+                  session={session}
+                  jobUrl={job?.url ?? null}
+                  onReveal={revealBrowser}
+                  // [review C2] skip the redundant confirm — gate's green
+                  // state already affirms readiness.
+                  onMark={() => void markApplied(true)}
+                  marking={marking}
+                />
+              )}
             </div>
+          )}
+
+          {/* m10: Escalation panel — machine bailed out of the submit
+              loop. Surface the reason and route the user to m9 cards. */}
+          {phase === 'done' && terminal === 'escalated' && escalation && (
+            <EscalationPanel
+              escalation={escalation}
+              // Keep the secondary confirm — the gate never showed green
+              // in this path; we want the explicit affirmation.
+              onMark={() => void markApplied()}
+              marking={marking}
+            />
           )}
 
           {phase === 'done' && terminal === 'paused' && (
@@ -1728,3 +1844,193 @@ function FieldCard({
 // Reference LADDER_NAMES import for type-narrowing; the actual ladder
 // labels come from triage.mjs via deriveTriedLadder.
 void LADDER_NAMES
+
+// ── m10: SubmitGate, LoopProgress, EscalationPanel ──────────────────────
+//
+// SubmitGate — gray (disabled + tooltip) when required fields outstanding;
+// green ([Open Chromium] + [Mark applied]) when ready. Stays VISIBLE in
+// both states (P3-OQ4 — never hide; tooltip explains).
+//
+// LoopProgress — horizontal stepper showing auto-fill → submit attempt →
+// auto-fix → next attempt across the m6 submit-first loop. Visible when
+// session.submit_attempts has ≥ 1 entry.
+//
+// EscalationPanel — shown when the loop has bailed (machine.lastOutcome
+// = 'escalated'). Surface escalation_reason + guide the user to m9 field
+// cards as the fallback path.
+
+function SubmitGate({
+  session,
+  jobUrl,
+  onReveal,
+  onMark,
+  marking,
+}: {
+  session: Session
+  jobUrl: string | null
+  onReveal: () => void
+  onMark: () => void
+  marking: boolean
+}) {
+  const state = useMemo(() => requiredVerifyState(session), [session])
+  const tooltip = useMemo(() => missingSummary(state), [state])
+  const tone = state.ready ? 'ok' : 'gray'
+
+  return (
+    <div
+      className={`ap-m2-submit-gate ap-m2-submit-gate-${tone}`}
+      role="region"
+      aria-label="Mark application as applied"
+    >
+      <div className="ap-m2-sg-body">
+        {state.ready ? (
+          <>
+            <strong>
+              <Check size={14} /> All required fields verified.
+            </strong>
+            <p className="ap-m2-sg-note">
+              Switch to the Chromium window, click <em>Submit</em> on the form,
+              then mark it applied here. I&apos;ll auto-detect the page change
+              when the submit-success wiring lands.
+            </p>
+          </>
+        ) : (
+          <>
+            <strong>
+              <AlertTriangle size={14} /> {state.missing.length} required field
+              {state.missing.length === 1 ? '' : 's'} still need
+              {state.missing.length === 1 ? 's' : ''} attention.
+            </strong>
+            {tooltip && <p className="ap-m2-sg-note">{tooltip}</p>}
+          </>
+        )}
+        <p className="ap-m2-sg-counts">
+          <strong>{state.verified}</strong> / <strong>{state.total}</strong>{' '}
+          required verified.
+        </p>
+      </div>
+      <div className="ap-m2-sg-actions">
+        {jobUrl && (
+          <a className="ap-action-btn" href={jobUrl} target="_blank" rel="noreferrer">
+            <ExternalLink size={12} /> Open posting
+          </a>
+        )}
+        <button
+          type="button"
+          className="ap-action-btn"
+          onClick={onReveal}
+          disabled={marking}
+          title="Bring the Chromium window to the front"
+        >
+          <Monitor size={12} /> Open Chromium
+        </button>
+        <button
+          type="button"
+          className="ap-submit-btn"
+          onClick={onMark}
+          disabled={marking || !state.ready}
+          title={state.ready
+            ? 'Mark this application as Applied'
+            : (tooltip ?? 'Finish all required fields before marking applied')}
+        >
+          <Send size={14} /> {marking ? 'Marking…' : 'Mark applied'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function LoopProgress({
+  attempts,
+  machine,
+}: {
+  attempts: SubmitAttempt[]
+  machine: Machine
+}) {
+  const state = useMemo(
+    () => loopProgressState(attempts, machine),
+    [attempts, machine],
+  )
+  if (!state) return null
+  // [review M6] Header reads "attempt N+1" when there's a pending tail
+  // step (next attempt about to run); otherwise reads the current count.
+  const hasPending = state.steps.some((s) => s.status === 'pending')
+  const displayAttempt = hasPending
+    ? Math.min(state.currentAttempt + 1, state.maxAttempts)
+    : Math.min(state.currentAttempt, state.maxAttempts)
+  return (
+    <div className="ap-m2-loop-progress" aria-label="Submit loop progress">
+      <div className="ap-m2-lp-head">
+        <strong>
+          Submit attempt {displayAttempt} of {state.maxAttempts}
+          {state.finalized ? '' : ' · in progress'}
+        </strong>
+      </div>
+      <ol className="ap-m2-lp-stepper">
+        {state.steps.map((s, i) => (
+          <li
+            key={`${s.kind}-${i}`}
+            className={`ap-m2-lp-step ap-m2-lp-step-${s.status}`}
+          >
+            <span className="ap-m2-lp-dot" aria-hidden="true">
+              {s.status === 'done' ? '●' : s.status === 'in_progress' ? '◐' : '○'}
+            </span>
+            <span className="ap-m2-lp-step-body">
+              <span className="ap-m2-lp-step-label">{s.label}</span>
+              {s.detail && (
+                <span className="ap-m2-lp-step-detail"> · {s.detail}</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
+function EscalationPanel({
+  escalation,
+  onMark,
+  marking,
+}: {
+  escalation: { code: string; detail: string | null; triggered_by: string; attempts_run: number | null }
+  onMark: () => void
+  marking: boolean
+}) {
+  const isUserCancel = escalation.code === 'user_cancel'
+  return (
+    <div className="ap-m2-panel ap-m2-panel-warn ap-m2-escalation">
+      <div className="ap-m2-panel-body">
+        <strong>
+          <AlertTriangle size={15} /> Auto-fill handed control back to you.
+        </strong>
+        <p className="ap-m2-escalation-reason">
+          <code className="ap-m2-escalation-code">{escalation.code}</code>
+          {escalation.detail && <> · {escalation.detail}</>}
+        </p>
+        {escalation.attempts_run !== null && escalation.attempts_run > 0 && (
+          <p className="ap-m2-note">
+            Tried <strong>{escalation.attempts_run}</strong> submit attempt
+            {escalation.attempts_run === 1 ? '' : 's'} before stopping.
+          </p>
+        )}
+        <p>
+          {isUserCancel
+            ? 'You cancelled this session. Finish in the Chromium window if you want — then mark applied below.'
+            : 'Use the field cards above to focus, retry, or skip the remaining fields, then click Submit yourself in the Chromium window.'}
+        </p>
+      </div>
+      <div className="ap-m2-panel-actions">
+        <button
+          type="button"
+          className="ap-submit-btn"
+          onClick={onMark}
+          disabled={marking}
+          title="Mark this application as Applied — only after you've manually clicked Submit"
+        >
+          <Send size={14} /> {marking ? 'Marking…' : 'Mark applied'}
+        </button>
+      </div>
+    </div>
+  )
+}

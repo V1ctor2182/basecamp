@@ -981,3 +981,133 @@ code.ap-m2-fc-kv-v {
   font-size: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
+
+/* ── m10: Submit gate ─────────────────────────────────────────────── */
+
+.ap-m2-submit-gate {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid #e7e5e4;
+}
+.ap-m2-submit-gate-ok {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+.ap-m2-submit-gate-gray {
+  background: #fafaf9;
+  border-color: #e7e5e4;
+}
+.ap-m2-sg-body {
+  flex: 1;
+  font-size: 13px;
+  color: #1c1917;
+}
+.ap-m2-sg-body strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ap-m2-sg-note {
+  margin: 4px 0 0;
+  color: #44403c;
+  font-size: 12px;
+}
+.ap-m2-sg-counts {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #57534e;
+}
+.ap-m2-sg-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  align-items: stretch;
+}
+
+/* ── m10: Loop progress stepper ───────────────────────────────────── */
+
+.ap-m2-loop-progress {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #e7e5e4;
+  border-radius: 8px;
+}
+.ap-m2-lp-head strong {
+  font-size: 13px;
+  color: #1c1917;
+}
+.ap-m2-lp-stepper {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ap-m2-lp-step {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  color: #57534e;
+}
+.ap-m2-lp-dot {
+  display: inline-block;
+  width: 16px;
+  text-align: center;
+  font-size: 13px;
+}
+.ap-m2-lp-step-done .ap-m2-lp-dot {
+  color: #16a34a;
+}
+.ap-m2-lp-step-in_progress .ap-m2-lp-dot {
+  color: #ea580c;
+  animation: ap-pulse 1.4s ease-in-out infinite;
+}
+.ap-m2-lp-step-pending {
+  opacity: 0.65;
+}
+.ap-m2-lp-step-pending .ap-m2-lp-dot {
+  color: #94a3b8;
+}
+.ap-m2-lp-step-label {
+  color: #1c1917;
+  font-weight: 500;
+}
+.ap-m2-lp-step-detail {
+  color: #78716c;
+}
+
+@keyframes ap-pulse {
+  0%,
+  100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+/* [review M4] Respect prefers-reduced-motion — vestibular-sensitivity
+ * users get a steady dot instead of the pulse. */
+@media (prefers-reduced-motion: reduce) {
+  .ap-m2-lp-step-in_progress .ap-m2-lp-dot { animation: none; }
+}
+
+/* ── m10: Escalation panel ─────────────────────────────────────────── */
+
+.ap-m2-escalation .ap-m2-escalation-reason {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: #44403c;
+}
+.ap-m2-escalation-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: #fef2f2;
+  color: #991b1b;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
