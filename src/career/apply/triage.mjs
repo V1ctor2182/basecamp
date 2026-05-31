@@ -83,13 +83,16 @@ export function aggregateFields(session) {
         refId: f.refId,
         label: String(f.label ?? f.refId),
         class: String(f.class ?? 'unknown'),
+        // [review H1] Plumb subclass through so m11's recovery.mjs
+        // altFormatLadder lookup can find phone/date ladders — the
+        // classifier emits class='hard' + subclass='phone', so
+        // gating on class alone fails to ever fire Recovery 2 in prod.
+        subclass: f.subclass ?? null,
         suggested_value: f.suggested_value ?? null,
         verify_status: f.verify_status ?? null,
         verify_detail: f.verify_detail ?? null,
         confidence: f.confidence ?? null,
         role: f.role ?? null,
-        // "required" defaults to true — most ATS fields are required;
-        // optional fields explicitly opt out via `required: false`.
         required: f.required !== false,
         control_fingerprint: f.control_fingerprint ?? null,
       });

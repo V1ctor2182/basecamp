@@ -28,6 +28,7 @@ import {
   JOB_ID_RE,
   SITE_ADAPTERS,
   ABANDON_AFTER_MS,
+  MAX_USER_HINTS,      // m11: cap on user_hints[] for SESSION_MAX_USER_HINTS error
 } from './applySessionsStore.mjs';
 // Field-classifier LLM context. The open-ended + file fillers need a
 // client / pricing / identity injected via classifierCtx — without them
@@ -140,6 +141,38 @@ export const RetryFieldBodySchema = z
   .object({
     ref: z.string().min(1).max(64),
     strategy: z.string().max(64).optional(),
+  })
+  .strict();
+
+// m11: Phase 4 recovery body schemas.
+//
+// Recovery 1 (resume compress) — no body fields beyond ref (the file
+// field). Recovery 2 (alt formats) — ref + an opt picked from the
+// ladder (server can also receive the whole ladder via `alternatives`).
+// Recovery 3 (identify ATS) — operator chose from RECOVERY_ATSES.
+// Recovery 4 (user hint) — ref + free-text hint.
+export const RecoverResumeCompressBodySchema = z
+  .object({ ref: z.string().min(1).max(64) })
+  .strict();
+
+export const RecoverAltFormatsBodySchema = z
+  .object({
+    ref: z.string().min(1).max(64),
+    chosen: z.string().max(500).optional(),
+    alternatives: z.array(z.string().max(500)).max(20).optional(),
+  })
+  .strict();
+
+export const RecoverIdentifyAtsBodySchema = z
+  .object({
+    ats: z.enum(['greenhouse', 'lever', 'workday', 'icims', 'unknown', 'skip']),
+  })
+  .strict();
+
+export const RecoverUserHintBodySchema = z
+  .object({
+    ref: z.string().min(1).max(64),
+    hint: z.string().min(1).max(500),
   })
   .strict();
 
@@ -1043,6 +1076,180 @@ export async function skipField(jobId, body) {
     stepIdx: located.stepIdx,
     prev_status: prevStatus,
     new_status: 'skipped_by_user',
+  };
+}
+
+// ── m11: Phase 4 recovery handlers ────────────────────────────────────
+//
+// All four follow the same pattern as m9's skipField:
+//   1. Read+modify+write session inside withSessionLock (atomic against
+//      concurrent machine.mjs persistence).
+//   2. Append to session.user_hints[] with the appropriate `kind`.
+//   3. Recovery 1/2/3 mark `pending_wire: true` because the cross-Room
+//      runtime glue (resume compress render endpoint / Phase 2/m4
+//      value_alternatives / adapter swap+reload) is a future milestone.
+//      Recovery 4 (user hint) is FULLY WIRED: parses the hint via the
+//      shared recovery.mjs helper and records the parsed strategy +
+//      result enum.
+
+import { parseUserHint as _parseUserHint } from '../../apply/recovery.mjs';
+
+async function _appendUserHint(jobId, hintEntry) {
+  let appendErr = null;
+  try {
+    await withSessionLock(jobId, async () => {
+      let session;
+      try { session = await readSession(jobId); }
+      catch (err) {
+        appendErr = { status: 500, error: `readSession failed: ${String(err?.message ?? err).slice(0, 200)}` };
+        return;
+      }
+      if (!session) {
+        appendErr = { status: 404, error: `no session found for jobId ${jobId}` };
+        return;
+      }
+      // [review M3] Immutable spread — avoids in-place mutation of
+      // the parsed session array reference. Also matches the style of
+      // appendSubmitAttempt's append pattern.
+      const prior = Array.isArray(session.user_hints) ? session.user_hints : [];
+      // [review L3] Surface cap-overflow with a coded error before
+      // writeSession hits the Zod schema's array().max() and produces
+      // a generic 500 — same pattern as appendSubmitAttempt.
+      if (prior.length >= MAX_USER_HINTS) {
+        const err = new Error(
+          `user_hints cap reached (${MAX_USER_HINTS}); cannot record further hints — refresh the session.`,
+        );
+        err.code = 'SESSION_MAX_USER_HINTS';
+        throw err;
+      }
+      session.user_hints = [...prior, hintEntry];
+      await writeSession(jobId, session);
+    });
+  } catch (err) {
+    return { status: 500, error: `persist failed: ${String(err?.message ?? err).slice(0, 200)}` };
+  }
+  return appendErr;
+}
+
+/**
+ * Recovery 1 — Re-render resume at compressed quality + retry the
+ * upload. Live wiring to 04-renderer/01-html-template m3
+ * (?quality=low render) is a future cross-Room milestone. m11 records
+ * the operator's request so the flywheel can bucket recovery attempts.
+ */
+export async function recoverResumeCompress(jobId, body) {
+  if (!JOB_ID_RE.test(jobId)) return { status: 400, error: 'invalid jobId' };
+  const err = await _appendUserHint(jobId, {
+    kind: 'resume_compress',
+    field_ref: body.ref,
+    hint: 're-render resume at compressed quality and retry',
+    timestamp: new Date().toISOString(),
+    attempted_strategy: null,
+    result: 'pending_wire',
+  });
+  if (err) return err;
+  return {
+    status: 202,
+    sessionId: jobId,
+    ref: body.ref,
+    queued: true,
+    pending_wire: true,
+    kind: 'resume_compress',
+  };
+}
+
+/**
+ * Recovery 2 — Try alternative formats. The retry queue / runtime
+ * wiring needs Phase 2/m4 fillWithFallback to accept value_alternatives;
+ * m11 records the operator's chosen ladder so the future glue can
+ * walk it.
+ */
+export async function recoverAltFormats(jobId, body) {
+  if (!JOB_ID_RE.test(jobId)) return { status: 400, error: 'invalid jobId' };
+  const hintText = body.chosen
+    ? `chose: ${body.chosen}`
+    : Array.isArray(body.alternatives)
+      ? `ladder: ${body.alternatives.slice(0, 5).join(' | ')}`
+      : 'alt formats (ladder TBD)';
+  const err = await _appendUserHint(jobId, {
+    kind: 'alt_format_choice',
+    field_ref: body.ref,
+    hint: hintText.slice(0, 500),
+    timestamp: new Date().toISOString(),
+    attempted_strategy: null,
+    result: 'pending_wire',
+  });
+  if (err) return err;
+  return {
+    status: 202,
+    sessionId: jobId,
+    ref: body.ref,
+    chosen: body.chosen ?? null,
+    alternatives: body.alternatives ?? null,
+    queued: true,
+    pending_wire: true,
+    kind: 'alt_format_choice',
+  };
+}
+
+/**
+ * Recovery 3 — Identify ATS. Records the operator's choice for future
+ * adapter-swap glue (which needs site_adapter enum extension +
+ * adapter loader cache invalidation). 'unknown' / 'skip' are stored
+ * but don't intend a re-run.
+ */
+export async function recoverIdentifyAts(jobId, body) {
+  if (!JOB_ID_RE.test(jobId)) return { status: 400, error: 'invalid jobId' };
+  const err = await _appendUserHint(jobId, {
+    kind: 'ats_identification',
+    field_ref: null,
+    hint: `ats=${body.ats}`,
+    timestamp: new Date().toISOString(),
+    attempted_strategy: null,
+    result: 'pending_wire',
+  });
+  if (err) return err;
+  return {
+    status: 202,
+    sessionId: jobId,
+    ats: body.ats,
+    queued: true,
+    pending_wire: true,
+    kind: 'ats_identification',
+  };
+}
+
+/**
+ * Recovery 4 — Operator free-text hint. FULLY WIRED — parses via the
+ * shared helper and records both the raw hint and the parsed strategy
+ * + result enum. The actual strategy invocation against the live
+ * Playwright Page is future Phase 6 glue; m11 ships the record path.
+ */
+export async function recoverUserHint(jobId, body) {
+  if (!JOB_ID_RE.test(jobId)) return { status: 400, error: 'invalid jobId' };
+  const parsed = _parseUserHint(body.hint);
+  const err = await _appendUserHint(jobId, {
+    kind: 'free_text',
+    field_ref: body.ref,
+    hint: body.hint,
+    timestamp: new Date().toISOString(),
+    attempted_strategy: parsed?.strategy ?? null,
+    // If we parsed a strategy, the future glue will mark it
+    // strategy_tried_ok/fail; for now we use recorded_only when there's
+    // nothing to try, and pending_wire when parsing succeeded.
+    result: parsed ? 'pending_wire' : 'recorded_only',
+  });
+  if (err) return err;
+  return {
+    status: 202,
+    sessionId: jobId,
+    ref: body.ref,
+    parsed_strategy: parsed?.strategy ?? null,
+    parse_confidence: parsed?.confidence ?? null,
+    queued: true,
+    pending_wire: parsed != null,
+    kind: 'free_text',
+    result: parsed ? 'pending_wire' : 'recorded_only',
   };
 }
 

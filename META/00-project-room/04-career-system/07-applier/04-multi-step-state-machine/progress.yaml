@@ -736,7 +736,23 @@ milestones:
 
   - id: "m11-recovery-buttons-ui-endpoints"
     name: "4 个 Recovery 按钮(resume-compress / try-formats / identify-ats / user-hint)"
-    status: pending
+    status: completed
+    files:
+      - "src/career/apply/recovery.mjs"                     # NEW (pure helpers — shouldShow* + altFormatLadder + parseUserHint + fieldRecoveryAffordances)
+      - "src/career/applier/multistep/applySessionsStore.mjs" # +~50 LOC user_hints[] + UserHintSchema + USER_HINT_KINDS/RESULTS + MAX_USER_HINTS=120
+      - "src/career/applier/multistep/endpoint.mjs"         # +~210 LOC 4 handlers + _appendUserHint + 4 Zod schemas
+      - "server.mjs"                                        # +~30 LOC 4 routes via _handleFieldAction + SSE broadcast extended payload
+      - "src/career/Apply.tsx"                              # +~200 LOC 4 action handlers + StatusBoard ATS row + FieldCard recovery <details> + subclass plumbing
+      - "src/career/apply/triage.mjs"                       # +1 LOC subclass plumbing (H1 fix — Recovery 2 now reaches prod fields)
+      - "src/career/apply.css"                              # +~100 LOC recovery row + ATS context + <details> summary
+      - "scripts/smoke-apply-recovery.mjs"                  # NEW (23 fixture + integration asserts)
+    commit_hash: "PENDING"
+    review:
+      - "Plan agent: 0 CRITICAL + 3 HIGH + 6 MEDIUM + 5 LOW"
+      - "Applied: H1 (Recovery 2 phone/date ladder never triggered in prod — classifier emits class='hard' + subclass='phone' but aggregateFields stripped subclass; now plumbed through triage.mjs + DraftField + TriageField types so altFormatLadder fires for real fields) + H2 (Recovery 1 unattributed too_large errors now only match the resume slot — refId='__file_0' OR subclass='resume' — passport uploads no longer claim the resume-compress button) + H3 (Recovery rows wrapped in <details> — defaults open ONLY when userHint affordance is present, keeps 5-row stack collapsed otherwise) + M1 (parseUserHint regex tightened: 'click somewhere first' no longer high-confidence false-positive; explicit double-click/right-click → null fallthrough; 'click first' requires option-noun) + M3 (immutable spread instead of in-place push for session.user_hints) + M4 (SSE broadcast uses uniform `!= null` checks across all spread fields — empty strings no longer silently dropped) + M5 (Recovery 3 ATS row hides after first ats_identification recorded; shows 'detected as: <adapter>' context) + M6 (actionBusy key namespaced to '__recovery_ats' — reserved prefix can't collide with snapshot refIds) + L1 (UserHint input submits on Enter) + L3 (user_hints cap → SESSION_MAX_USER_HINTS coded error instead of generic 500)"
+      - "Defer: M2 (`_appendUserHint` return contract — refactor to throw-or-resolve later), L2 (skip toast wording polish), L4 (visual contrast palette), L5 (smoke cleanup symmetry)"
+      - "Cross-Room reality: Recovery 1 (resume re-render) + Recovery 2 (alt format retry) + Recovery 3 (adapter swap+reload) are THIN — they validate input + persist to user_hints[] + return {pending_wire:true}. Live wiring waits for 04-renderer/01-html-template m3 (?quality=low option), Phase 2/m4 value_alternatives extension, site_adapter enum bump + loader cache invalidation respectively. Recovery 4 (user hint) is FULLY WIRED — parses via shared parseUserHint, records parsed strategy + result enum, future glue invokes the parsed strategy against live Playwright Page."
+      - "Manual browser test: NOT performed. UI surfaces (StatusBoard ATS row + FieldCard recovery <details>) render conditionally on session shape — requires live Mode 2 session with failing fields. Smoke + TSC + Vite + 167/167 regression verify rendering inputs/outputs."
     estimated_files:
       - "src/career/Apply.tsx"                              # +~300 LOC
       - "src/career/apply.css"                              # +~30 LOC

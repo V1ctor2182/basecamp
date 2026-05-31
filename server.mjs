@@ -105,6 +105,15 @@ import {
   skipField as multiStepSkipField,
   FieldActionBodySchema,
   RetryFieldBodySchema,
+  // m11: Phase 4 recovery actions
+  recoverResumeCompress as multiStepRecoverResumeCompress,
+  recoverAltFormats as multiStepRecoverAltFormats,
+  recoverIdentifyAts as multiStepRecoverIdentifyAts,
+  recoverUserHint as multiStepRecoverUserHint,
+  RecoverResumeCompressBodySchema,
+  RecoverAltFormatsBodySchema,
+  RecoverIdentifyAtsBodySchema,
+  RecoverUserHintBodySchema,
 } from './src/career/applier/multistep/endpoint.mjs';
 // m9: SSE event hub — broadcast observer/state events to the Apply.tsx UI.
 import { subscribe as sseSubscribe, broadcast as sseBroadcast } from './src/career/applier/multistep/sseHub.mjs';
@@ -5825,11 +5834,20 @@ function _handleFieldAction(req, res, schema, handler, methodLabel) {
         }
         // Side-effect: SSE-broadcast the action so other dashboard tabs
         // see it land in near-real-time without waiting for the next poll.
+        // m11: include kind + ats + chosen + parsed_strategy when present
+        // so recovery events are usable by other tabs without re-fetching.
         try {
+          // [review M4] Uniform `!= null` checks so empty-string / 0
+          // values don't get silently dropped from the broadcast.
           sseBroadcast(jobId, `field_${methodLabel}`, {
-            ref: result.ref,
+            ...(result.ref != null ? { ref: result.ref } : {}),
             ...(result.strategy != null ? { strategy: result.strategy } : {}),
-            ...(result.new_status ? { new_status: result.new_status } : {}),
+            ...(result.new_status != null ? { new_status: result.new_status } : {}),
+            ...(result.kind != null ? { kind: result.kind } : {}),
+            ...(result.ats != null ? { ats: result.ats } : {}),
+            ...(result.chosen != null ? { chosen: result.chosen } : {}),
+            ...(result.parsed_strategy != null ? { parsed_strategy: result.parsed_strategy } : {}),
+            ...(result.result != null ? { result: result.result } : {}),
             pending_wire: result.pending_wire === true,
           });
         } catch { /* hub failures must never break the response */ }
@@ -5853,6 +5871,26 @@ app.post('/api/career/applier/multi-step/:jobId/retry-field', (req, res) => {
 
 app.post('/api/career/applier/multi-step/:jobId/skip-field', (req, res) => {
   _handleFieldAction(req, res, FieldActionBodySchema, multiStepSkipField, 'skip');
+});
+
+// m11: Phase 4 recovery routes — same shape as the m9 actions
+// (_handleFieldAction wraps origin guard + body validation + SSE
+// broadcast). The methodLabel ('resume_compress' etc.) becomes the
+// SSE event name `field_<label>`.
+app.post('/api/career/applier/multi-step/:jobId/recover/resume-compress', (req, res) => {
+  _handleFieldAction(req, res, RecoverResumeCompressBodySchema, multiStepRecoverResumeCompress, 'resume_compress');
+});
+
+app.post('/api/career/applier/multi-step/:jobId/recover/alt-formats', (req, res) => {
+  _handleFieldAction(req, res, RecoverAltFormatsBodySchema, multiStepRecoverAltFormats, 'alt_formats');
+});
+
+app.post('/api/career/applier/multi-step/:jobId/recover/identify-ats', (req, res) => {
+  _handleFieldAction(req, res, RecoverIdentifyAtsBodySchema, multiStepRecoverIdentifyAts, 'identify_ats');
+});
+
+app.post('/api/career/applier/multi-step/:jobId/recover/user-hint', (req, res) => {
+  _handleFieldAction(req, res, RecoverUserHintBodySchema, multiStepRecoverUserHint, 'user_hint');
 });
 
 // SSE event stream — used by Apply.tsx to render live observer events

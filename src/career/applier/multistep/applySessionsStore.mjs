@@ -127,6 +127,35 @@ const PerStepDraftSchema = z
 const FIELD_MEMORY_MAX_ENTRIES = 500;
 const MAX_STEPS_IN_SESSION = 50;
 
+// m11: user_hints[] — operator-supplied recovery hints. Append-only.
+// `kind` discriminates the four Phase 4 recovery channels so smoke +
+// flywheel can bucket them without parsing free-text. Cap matches the
+// per-step field cap.
+export const USER_HINT_KINDS = Object.freeze([
+  'resume_compress',     // Recovery 1 — re-render compressed + retry file
+  'alt_format_choice',   // Recovery 2 — operator picked one of the alt values
+  'ats_identification',  // Recovery 3 — operator identified the ATS
+  'free_text',           // Recovery 4 — operator typed a hint
+]);
+export const USER_HINT_RESULTS = Object.freeze([
+  'recorded_only',         // hint stored, no strategy attempted
+  'strategy_tried_ok',     // hint parsed → strategy ran + verified
+  'strategy_tried_fail',   // hint parsed → strategy ran + failed
+  'pending_wire',          // backend stub awaiting cross-Room glue
+]);
+export const MAX_USER_HINTS = 120;
+
+const UserHintSchema = z
+  .object({
+    kind: z.enum(USER_HINT_KINDS),
+    field_ref: z.string().max(64).nullable(),
+    hint: z.string().max(500),
+    timestamp: z.string().datetime({ offset: true }),
+    attempted_strategy: z.string().max(120).nullable().optional(),
+    result: z.enum(USER_HINT_RESULTS),
+  })
+  .strict();
+
 // m5: submit-attempt sub-schemas.
 //
 // A form error is what the ATS form ITSELF reports (not our verify guess).
@@ -219,6 +248,15 @@ export const ApplySessionSchema = z
       .max(
         MAX_SUBMIT_ATTEMPTS,
         { message: `submit_attempts cap is ${MAX_SUBMIT_ATTEMPTS} entries` },
+      )
+      .default([]),
+    // m11: per-Phase-4 recovery telemetry + free-text operator hints.
+    // Default [] so pre-m11 sessions load without migration.
+    user_hints: z
+      .array(UserHintSchema)
+      .max(
+        MAX_USER_HINTS,
+        { message: `user_hints cap is ${MAX_USER_HINTS} entries` },
       )
       .default([]),
   })

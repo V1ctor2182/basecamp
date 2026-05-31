@@ -1096,6 +1096,123 @@ code.ap-m2-fc-kv-v {
   .ap-m2-lp-step-in_progress .ap-m2-lp-dot { animation: none; }
 }
 
+/* ── m11: Phase 4 Recovery — ATS row + FieldCard recovery row ──────── */
+
+.ap-m2-sb-recovery {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #fde68a;
+  background: #fffbeb;
+  border-radius: 4px;
+  padding: 8px;
+}
+.ap-m2-sb-recovery-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #92400e;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ap-m2-sb-recovery-context {
+  margin-left: 6px;
+  font-size: 10px;
+  color: #b45309;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ap-m2-sb-recovery-context code {
+  background: #fff7ed;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.ap-m2-sb-recovery-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.ap-m2-sb-recovery-row .ap-action-btn {
+  font-size: 11px;
+  padding: 3px 7px;
+  text-transform: capitalize;
+}
+
+.ap-m2-fc-recovery-wrap {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed #fde68a;
+}
+.ap-m2-fc-recovery-summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: #92400e;
+  list-style: none;
+  padding: 2px 0;
+}
+.ap-m2-fc-recovery-summary::-webkit-details-marker { display: none; }
+.ap-m2-fc-recovery-summary::before {
+  content: '⌵ ';
+  display: inline-block;
+  margin-right: 4px;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+details[open] > .ap-m2-fc-recovery-summary::before {
+  transform: rotate(0);
+}
+.ap-m2-fc-recovery {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ap-m2-fc-recovery-btn {
+  font-size: 11px;
+  padding: 3px 7px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+}
+.ap-m2-fc-recovery-btn:hover:not(:disabled) {
+  background: #ffedd5;
+  color: #7c2d12;
+}
+.ap-m2-fc-alt-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.ap-m2-fc-alt-label {
+  font-size: 11px;
+  color: #92400e;
+}
+.ap-m2-fc-alt-btn {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.ap-m2-fc-hint-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.ap-m2-fc-hint-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid #e7e5e4;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.ap-m2-fc-hint-input:focus {
+  outline: 2px solid #fed7aa;
+  outline-offset: -1px;
+}
+
 /* ── m10: Escalation panel ─────────────────────────────────────────── */
 
 .ap-m2-escalation .ap-m2-escalation-reason {

@@ -52,6 +52,11 @@ import {
   autoMarkDecision,
   missingSummary,
 } from './apply/submitGate.mjs'
+import {
+  fieldRecoveryAffordances,
+  shouldShowIdentifyAts,
+  RECOVERY_ATSES,
+} from './apply/recovery.mjs'
 import './apply.css'
 
 type Job = {
@@ -67,6 +72,10 @@ type DraftField = {
   refId?: string
   label: string
   class: string
+  // [review H1] subclass plumbing for Recovery 2 (phone/date alt-format
+  // ladders). The classifier emits class='hard' + subclass='phone';
+  // without this field, recovery.mjs altFormatLadder cannot ever fire.
+  subclass?: string | null
   suggested_value?: string | null
   confidence?: string
   source_ref?: string
@@ -142,6 +151,15 @@ type SubmitAttempt = {
   outcome: string
 }
 
+type UserHint = {
+  kind: 'resume_compress' | 'alt_format_choice' | 'ats_identification' | 'free_text'
+  field_ref: string | null
+  hint: string
+  timestamp: string
+  attempted_strategy?: string | null
+  result: 'recorded_only' | 'strategy_tried_ok' | 'strategy_tried_fail' | 'pending_wire'
+}
+
 type Session = {
   jobId: string
   site_adapter: string
@@ -155,6 +173,8 @@ type Session = {
   last_activity_at: string
   // m9: submit-first loop log; cards consume fixes_tried for their Tried row.
   submit_attempts?: SubmitAttempt[]
+  // m11: per-Phase-4 recovery telemetry — operator-supplied hints.
+  user_hints?: UserHint[]
 }
 
 type EscalationReason = {
@@ -732,6 +752,75 @@ export default function Apply() {
     void refId  // kept in signature for symmetry / future telemetry
   }
 
+  // m11: Phase 4 recovery handlers. Same shape as m9 actions —
+  // optimistic action-busy + toast feedback.
+  async function _postRecovery(path: string, body: object, refIdForBusy: string, label: string) {
+    if (!jobId) return null
+    setActionBusy((prev) => ({ ...prev, [refIdForBusy]: label }))
+    try {
+      const r = await fetch(
+        api(`/applier/multi-step/${encodeURIComponent(jobId)}/recover/${path}`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      )
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error ?? `Recovery failed (HTTP ${r.status})`)
+      return j
+    } catch (e) {
+      showToast((e as Error).message ?? 'Recovery failed')
+      return null
+    } finally {
+      setActionBusy((prev) => {
+        const next = { ...prev }
+        delete next[refIdForBusy]
+        return next
+      })
+    }
+  }
+
+  async function recoverResumeCompressAction(refId: string) {
+    const j = await _postRecovery('resume-compress', { ref: refId }, refId, 'resume_compress')
+    if (j) {
+      showToast(j.pending_wire
+        ? 'Resume compression queued — live re-upload wiring lands in a future milestone.'
+        : 'Resume re-rendered & re-uploaded.')
+    }
+  }
+
+  async function recoverAltFormatsAction(refId: string, chosen: string) {
+    const j = await _postRecovery('alt-formats', { ref: refId, chosen }, refId, 'alt_formats')
+    if (j) {
+      showToast(j.pending_wire
+        ? `Alt format "${chosen}" recorded — live retry lands in a future milestone.`
+        : `Retried with "${chosen}".`)
+    }
+  }
+
+  async function recoverIdentifyAtsAction(ats: string) {
+    // [review M6] Reserved keyspace prefix '__recovery_ats' that cannot
+    // collide with a real refId (no snapshot ever emits this name).
+    const j = await _postRecovery('identify-ats', { ats }, '__recovery_ats', 'identify_ats')
+    if (j) {
+      showToast(ats === 'skip'
+        ? 'Skipped — won\'t ask again this session.'
+        : `ATS recorded: ${ats}. Adapter reload lands in a future milestone.`)
+    }
+  }
+
+  async function recoverUserHintAction(refId: string, hint: string) {
+    const j = await _postRecovery('user-hint', { ref: refId, hint }, refId, 'user_hint')
+    if (j) {
+      if (j.parsed_strategy) {
+        showToast(`Hint parsed → ${j.parsed_strategy} (${j.parse_confidence}). Live retry queued.`)
+      } else {
+        showToast('Hint recorded — couldn\'t parse a strategy. Flywheel will see it.')
+      }
+    }
+  }
+
   // [review C4] Pause keeps the session alive (status='paused') so the
   // operator can Resume later — distinct from Cancel above. Doesn't
   // reset local UI; renders via the existing terminal-paused branch.
@@ -927,6 +1016,10 @@ export default function Apply() {
               onRetry={retryFieldAction}
               onSkip={skipFieldAction}
               onCopy={copyValueAction}
+              onResumeCompress={recoverResumeCompressAction}
+              onAltFormats={recoverAltFormatsAction}
+              onIdentifyAts={recoverIdentifyAtsAction}
+              onUserHint={recoverUserHintAction}
               actionBusy={actionBusy}
               busy={busy}
             />
@@ -1456,6 +1549,10 @@ function StatusBoard({
   onRetry,
   onSkip,
   onCopy,
+  onResumeCompress,
+  onAltFormats,
+  onIdentifyAts,
+  onUserHint,
   actionBusy,
   busy,
 }: {
@@ -1468,6 +1565,10 @@ function StatusBoard({
   onRetry: (refId: string, strategy?: string) => void
   onSkip: (refId: string) => void
   onCopy: (refId: string, value: string) => void
+  onResumeCompress: (refId: string) => void
+  onAltFormats: (refId: string, chosen: string) => void
+  onIdentifyAts: (ats: string) => void
+  onUserHint: (refId: string, hint: string) => void
   actionBusy: Record<string, string>
   busy: boolean
 }) {
@@ -1573,6 +1674,35 @@ function StatusBoard({
           )
         })}
       </div>
+      {/* m11: Recovery 3 — Identify ATS row. Sits at the top of the
+          board when the loaded adapter is generic/unknown AND the
+          operator hasn't already recorded an ATS identification this
+          session. [review M5] Once recorded, collapse the row so
+          duplicate clicks don't pile up user_hints entries. */}
+      {shouldShowIdentifyAts(session) &&
+        !(session.user_hints ?? []).some((h) => h.kind === 'ats_identification') && (
+        <div className="ap-m2-sb-recovery" role="region" aria-label="Identify ATS">
+          <span className="ap-m2-sb-recovery-head">
+            <AlertTriangle size={11} aria-hidden="true" /> Which ATS is this?
+            <span className="ap-m2-sb-recovery-context">
+              (detected as: <code>{session.site_adapter}</code>)
+            </span>
+          </span>
+          <div className="ap-m2-sb-recovery-row">
+            {RECOVERY_ATSES.map((ats) => (
+              <button
+                key={ats}
+                type="button"
+                className="ap-action-btn"
+                disabled={actionBusy['__recovery_ats'] != null}
+                onClick={() => onIdentifyAts(ats)}
+              >
+                {ats === 'unknown' ? "I don't know" : ats === 'skip' ? 'Skip' : ats}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {expanded && (
         <TriageView
           entries={entries}
@@ -1581,6 +1711,9 @@ function StatusBoard({
           onRetry={onRetry}
           onSkip={onSkip}
           onCopy={onCopy}
+          onResumeCompress={onResumeCompress}
+          onAltFormats={onAltFormats}
+          onUserHint={onUserHint}
           actionBusy={actionBusy}
         />
       )}
@@ -1592,6 +1725,9 @@ type TriageField = {
   refId: string
   label: string
   class: string
+  // [review H1] subclass propagates classifier hints (e.g. 'phone' /
+  // 'date' / 'resume') that the recovery.mjs altFormatLadder needs.
+  subclass: string | null
   suggested_value: string | null
   verify_status: string | null
   verify_detail: string | null
@@ -1612,6 +1748,9 @@ function TriageView({
   onRetry,
   onSkip,
   onCopy,
+  onResumeCompress,
+  onAltFormats,
+  onUserHint,
   actionBusy,
 }: {
   entries: TriageEntry[]
@@ -1620,6 +1759,9 @@ function TriageView({
   onRetry: (refId: string, strategy?: string) => void
   onSkip: (refId: string) => void
   onCopy: (refId: string, value: string) => void
+  onResumeCompress: (refId: string) => void
+  onAltFormats: (refId: string, chosen: string) => void
+  onUserHint: (refId: string, hint: string) => void
   actionBusy: Record<string, string>
 }) {
   if (entries.length === 0) {
@@ -1659,6 +1801,9 @@ function TriageView({
                       onRetry={onRetry}
                       onSkip={onSkip}
                       onCopy={onCopy}
+                      onResumeCompress={onResumeCompress}
+                      onAltFormats={onAltFormats}
+                      onUserHint={onUserHint}
                       actionBusy={actionBusy}
                       compact
                     />
@@ -1678,6 +1823,9 @@ function TriageView({
             onRetry={onRetry}
             onSkip={onSkip}
             onCopy={onCopy}
+            onResumeCompress={onResumeCompress}
+            onAltFormats={onAltFormats}
+            onUserHint={onUserHint}
             actionBusy={actionBusy}
           />
         )
@@ -1709,6 +1857,9 @@ function FieldCard({
   onRetry,
   onSkip,
   onCopy,
+  onResumeCompress,
+  onAltFormats,
+  onUserHint,
   actionBusy,
   compact,
 }: {
@@ -1718,6 +1869,9 @@ function FieldCard({
   onRetry: (refId: string, strategy?: string) => void
   onSkip: (refId: string) => void
   onCopy: (refId: string, value: string) => void
+  onResumeCompress: (refId: string) => void
+  onAltFormats: (refId: string, chosen: string) => void
+  onUserHint: (refId: string, hint: string) => void
   actionBusy: Record<string, string>
   compact?: boolean
 }) {
@@ -1725,7 +1879,6 @@ function FieldCard({
   const isVerified = field.verify_status === 'verified'
   const isSkipped = field.verify_status === 'skipped_by_user'
   const isStale = field.verify_status === 'stale'
-  const isFailed = field.verify_status === 'mismatch' || field.verify_status === 'fill_error'
 
   const headIcon = isVerified ? '✓' : isSkipped ? '✋' : isStale ? '⚠' : '✗'
   const headTone = isVerified ? 'ok' : isStale ? 'warn' : isSkipped ? 'mute' : 'err'
@@ -1734,6 +1887,14 @@ function FieldCard({
     () => deriveTriedLadder(field, submitAttempts),
     [field, submitAttempts],
   )
+
+  // m11: per-field recovery affordances (Recovery 1/2/4). Recovery 3
+  // (identify ATS) is rendered in StatusBoard, not per-field.
+  const aff = useMemo(
+    () => fieldRecoveryAffordances(field, submitAttempts),
+    [field, submitAttempts],
+  )
+  const [hintDraft, setHintDraft] = useState('')
 
   return (
     <div
@@ -1837,6 +1998,87 @@ function FieldCard({
           {busyKind === 'skip' ? <Loader2 size={11} className="ap-spin" /> : <Hand size={11} aria-hidden="true" />} Skip
         </button>
       </div>
+
+      {/* m11: Phase 4 recovery affordances — conditional per error_code
+          / verify_status. Hidden when compact (group members inherit
+          their parent's affordances) or when the field is already
+          terminal (skipped / verified).
+          [review H3] Wrap in <details> so the recovery row doesn't pile
+          5 stacked rows per failing field. The user-hint affordance
+          requires a terminal-failed state (fill_error / all_strategies_failed)
+          so when it shows we OPEN the panel by default; otherwise the
+          softer "tried a few things, want help?" affordances stay collapsed.
+          [review L1] Enter submits the hint input. */}
+      {!compact && !isSkipped && !isVerified && (aff.resumeCompress || aff.altFormats || aff.userHint) && (
+        <details className="ap-m2-fc-recovery-wrap" open={aff.userHint}>
+          <summary className="ap-m2-fc-recovery-summary">
+            Recovery options
+            {aff.resumeCompress && ' · resume compress'}
+            {aff.altFormats && ' · alt formats'}
+            {aff.userHint && ' · hint'}
+          </summary>
+          <div className="ap-m2-fc-recovery">
+            {aff.resumeCompress && (
+              <button
+                type="button"
+                className="ap-action-btn ap-m2-fc-recovery-btn"
+                disabled={busyKind != null}
+                onClick={() => onResumeCompress(field.refId)}
+                title="Re-render the resume at compressed quality and retry the upload"
+              >
+                {busyKind === 'resume_compress' ? <Loader2 size={11} className="ap-spin" /> : '⚡'} Re-render compressed
+              </button>
+            )}
+            {aff.altFormats && aff.altLadder && (
+              <div className="ap-m2-fc-alt-row">
+                <span className="ap-m2-fc-alt-label">⚡ Try alt format:</span>
+                {aff.altLadder.slice(0, 4).map((alt: string) => (
+                  <button
+                    key={alt}
+                    type="button"
+                    className="ap-action-btn ap-m2-fc-recovery-btn ap-m2-fc-alt-btn"
+                    disabled={busyKind != null}
+                    onClick={() => onAltFormats(field.refId, alt)}
+                    title={`Retry with ${alt}`}
+                  >
+                    {alt}
+                  </button>
+                ))}
+              </div>
+            )}
+            {aff.userHint && (
+              <div className="ap-m2-fc-hint-row">
+                <input
+                  type="text"
+                  className="ap-m2-fc-hint-input"
+                  placeholder="Tell me what worked for you in the browser…"
+                  value={hintDraft}
+                  onChange={(e) => setHintDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && hintDraft.trim().length > 0 && busyKind == null) {
+                      onUserHint(field.refId, hintDraft.trim())
+                      setHintDraft('')
+                    }
+                  }}
+                  disabled={busyKind != null}
+                  maxLength={500}
+                />
+                <button
+                  type="button"
+                  className="ap-action-btn ap-m2-fc-recovery-btn"
+                  disabled={busyKind != null || hintDraft.trim().length === 0}
+                  onClick={() => {
+                    onUserHint(field.refId, hintDraft.trim())
+                    setHintDraft('')
+                  }}
+                >
+                  {busyKind === 'user_hint' ? <Loader2 size={11} className="ap-spin" /> : '📤'} Send hint
+                </button>
+              </div>
+            )}
+          </div>
+        </details>
+      )}
     </div>
   )
 }
