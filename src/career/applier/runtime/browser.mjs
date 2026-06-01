@@ -24,6 +24,7 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { chromium as chromiumExtra } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 
@@ -83,10 +84,113 @@ const CLOSE_TIMEOUT_MS = 5_000;
 /** @type {WeakMap<import('playwright').BrowserContext, { expectingClose: boolean, handlerFired: boolean }>} */
 const _ctxState = new WeakMap();
 
+// ── Zombie sweep ────────────────────────────────────────────────────────
+//
+// Finding #1 from integration-findings-2026-06-01.md: ctx.close() returns
+// success but Playwright sometimes fails to terminate the underlying
+// chromium child processes on macOS — especially with launchPersistentContext
+// + headless. The orphaned processes hold the persistent profile lock,
+// causing the next launchPersistentContext to hang past its 30s timeout.
+//
+// findZombieChromiumPids() uses pgrep to find any chromium / chrome-
+// headless-shell process whose CLI args reference OUR user-data-dir.
+// killZombieChromium() SIGTERMs them; called both before launch (clean
+// any leftover) and after close (defensive). Cross-platform: no-op on
+// non-POSIX (Windows uses different process management).
+
+/** Escape a string for safe use as a literal in pgrep's -f regex.
+ *  [review H1] macOS pgrep treats the pattern as an extended regex
+ *  by default — `.` would match any character. A profile path like
+ *  `data/career/.playwright/profile` would inadvertently match
+ *  `data/career/Xplaywright/profile` (different worktree) and kill
+ *  the wrong processes. Belt-and-suspenders against accidental
+ *  collateral damage. */
+function escapePgrepPattern(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Return an array of PIDs (numbers) whose CLI matches our profile path. */
+function findZombieChromiumPids() {
+  if (process.platform === 'win32') return [];
+  try {
+    const pattern = `user-data-dir=${escapePgrepPattern(USER_DATA_DIR)}`;
+    const raw = execFileSync('pgrep', ['-f', pattern], {
+      encoding: 'utf8',
+      timeout: 2_000,
+    });
+    return raw
+      .trim()
+      .split('\n')
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isFinite(n) && n !== process.pid);
+  } catch {
+    // pgrep exits 1 when no matches — treat as empty.
+    return [];
+  }
+}
+
+/** SIGTERM all zombie chromium processes for our profile. Returns the
+ *  count that we attempted to kill. Up to 2s wait between TERM and KILL.
+ *
+ *  [review H2] DESTRUCTIVE: if a concurrent server (e.g. `npm run dev`)
+ *  has a healthy chromium open on the same profile path, this kills it
+ *  too. The persistent profile is single-tenant by design (Playwright
+ *  cannot share `launchPersistentContext` between two processes), so
+ *  two simultaneous servers ARE conflicting — but a healthy dev session
+ *  isn't broken UNTIL we kill it. The trade-off is acceptable for the
+ *  smoke environment; we warn before killing so the user sees what's
+ *  happening if they're running a dev cockpit in parallel.
+ *
+ *  [review M2] async setTimeout instead of synchronous busy-spin —
+ *  burning CPU between pgrep checks added no value beyond what the OS
+ *  scheduler already provides. */
+async function killZombieChromium() {
+  if (process.platform === 'win32') return 0;
+  const pids = findZombieChromiumPids();
+  if (pids.length === 0) return 0;
+  // [review H2] Warn loudly so a user with a dev session sees what
+  // we're about to kill.
+  console.warn(
+    `[applier/runtime] About to SIGTERM ${pids.length} chromium process(es) ` +
+      `holding the persistent profile lock (PIDs: ${pids.join(', ')}). ` +
+      `If you have a separate dev server with an open browser, it will be ` +
+      `disrupted — the profile is single-tenant.`,
+  );
+  for (const pid of pids) {
+    try { process.kill(pid, 'SIGTERM'); }
+    catch { /* already gone */ }
+  }
+  // Async wait — give SIGTERM a chance before SIGKILL.
+  const deadline = Date.now() + 2_000;
+  let remaining = pids;
+  while (remaining.length > 0 && Date.now() < deadline) {
+    remaining = findZombieChromiumPids().filter((p) => pids.includes(p));
+    if (remaining.length === 0) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  // Force-kill survivors.
+  for (const pid of remaining) {
+    try { process.kill(pid, 'SIGKILL'); }
+    catch { /* already gone */ }
+  }
+  return pids.length;
+}
+
+/** Diagnostic — count of zombies tied to our profile. Exported so smoke
+ *  tests can assert "no zombies after closeBrowser". */
+export function _countZombieChromium() {
+  return findZombieChromiumPids().length;
+}
+
 // ── Internal launch ──────────────────────────────────────────────────────
 
 async function launch() {
   await fs.mkdir(USER_DATA_DIR, { recursive: true });
+
+  // [integration-finding #1] Sweep any zombie chromium processes still
+  // holding our persistent profile lock. Without this, launchPersistentContext
+  // hangs past its 30s timeout if a prior process didn't clean up.
+  await killZombieChromium();
 
   const ctx = await chromiumExtra.launchPersistentContext(USER_DATA_DIR, {
     headless: HEADLESS,
@@ -295,6 +399,11 @@ export async function closeBrowser() {
       // Best-effort cleanup; Playwright sometimes throws on already-closed
       // contexts or hangs on Linux. Swallow — singleton is already cleared.
     }
+    // [integration-finding #1] ctx.close() returns success but the
+    // underlying chromium child processes sometimes survive on macOS
+    // (Playwright issue, particularly with headless persistent contexts).
+    // Sweep any survivors so the NEXT launch doesn't hang on the lock.
+    await killZombieChromium();
   })();
 
   try {

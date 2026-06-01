@@ -691,6 +691,9 @@ export default function Apply() {
         if (j.reason === 'machine_busy') {
           throw new Error('The machine is filling — wait for the next approval gate.')
         }
+        if (j.reason === 'ref_not_in_draft') {
+          throw new Error('Field has been removed from the draft — refresh the cockpit.')
+        }
         if (j.reason === 'field_not_on_page') {
           throw new Error(`"${j.label ?? refId}" isn't on the current page — refresh the form, then try again.`)
         }
@@ -728,6 +731,9 @@ export default function Apply() {
         }
         if (j.reason === 'machine_busy') {
           throw new Error('The machine is filling — wait for the next approval gate.')
+        }
+        if (j.reason === 'ref_not_in_draft') {
+          throw new Error('Field has been removed from the draft — refresh the cockpit.')
         }
         if (j.reason === 'field_skipped') {
           throw new Error(j.error ?? 'Field is marked skipped.')

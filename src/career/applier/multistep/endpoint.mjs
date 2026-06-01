@@ -1156,7 +1156,11 @@ export async function focusField(jobId, body, deps = {}) {
   }
 
   const located = _locateField(session, body.ref);
-  if (!located) return { status: 404, error: `ref ${body.ref} not found in any step draft` };
+  if (!located) return {
+    status: 404,
+    error: `ref ${body.ref} not found in any step draft`,
+    reason: 'ref_not_in_draft',
+  };
 
   // Resolve the locator via the shared waterfall. [review M3] Pass
   // null errorRecord — focusField has no error context.
@@ -1257,7 +1261,11 @@ export async function retryField(jobId, body, deps = {}) {
   }
 
   const located = _locateField(session, body.ref);
-  if (!located) return { status: 404, error: `ref ${body.ref} not found in any step draft` };
+  if (!located) return {
+    status: 404,
+    error: `ref ${body.ref} not found in any step draft`,
+    reason: 'ref_not_in_draft',
+  };
 
   // [review H3] Refuse to silently overwrite a skip. Operator must
   // explicitly un-skip (a future m14 UI affordance) before retry.
@@ -1343,7 +1351,11 @@ export async function skipField(jobId, body) {
       }
       located = _locateField(session, body.ref);
       if (!located) {
-        lockErr = { status: 404, error: `ref ${body.ref} not found in any step draft` };
+        lockErr = {
+          status: 404,
+          error: `ref ${body.ref} not found in any step draft`,
+          reason: 'ref_not_in_draft',
+        };
         return;
       }
       prevStatus = located.field.verify_status ?? null;

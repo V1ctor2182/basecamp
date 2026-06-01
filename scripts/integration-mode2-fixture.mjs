@@ -32,10 +32,47 @@ delete process.env.http_proxy;
 delete process.env.HTTP_PROXY;
 
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import path from 'node:path';
 import http from 'node:http';
 import fs from 'node:fs/promises';
+
+// ── Pre-flight cleanup ──────────────────────────────────────────────
+//
+// Integration smokes share the apply-sessions/ + persistent profile with
+// any prior run that didn't clean up. Wipe our JOB_ID + kill any chromium
+// processes still holding the profile lock before spawning the server.
+
+const JOB_ID_PRECLEAN = 'aabbccddeeff';
+const APPLY_SESSIONS = path.resolve('data/career/apply-sessions');
+const PROFILE_PATH = path.resolve('data/career/.playwright/profile');
+
+try {
+  await fs.unlink(path.join(APPLY_SESSIONS, `${JOB_ID_PRECLEAN}.json`));
+  console.log('[pre-flight] removed stale session file');
+} catch { /* didn't exist */ }
+
+// [review H1/H3] pgrep treats the pattern as regex — escape special
+// chars in the profile path so we don't accidentally match a sibling
+// worktree's profile and SIGTERM the wrong processes.
+const escapedProfile = PROFILE_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+try {
+  const raw = execFileSync('pgrep', ['-f', `user-data-dir=${escapedProfile}`], {
+    encoding: 'utf8',
+    timeout: 2_000,
+  });
+  const pids = raw.trim().split('\n').filter(Boolean);
+  if (pids.length) {
+    console.log(`[pre-flight] WARNING: about to kill ${pids.length} chromium process(es) ` +
+      `(PIDs: ${pids.join(', ')}). If you have a parallel dev cockpit open, it WILL die.`);
+  }
+  for (const pid of pids) {
+    try { process.kill(Number(pid), 'SIGTERM'); } catch { /* */ }
+  }
+  if (pids.length) {
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
+} catch { /* no matches */ }
 
 const APPLY_PORT = 4598;
 const FIXTURE_PORT = 4599;

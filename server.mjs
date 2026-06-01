@@ -5667,7 +5667,14 @@ app.get('/api/career/applier/multi-step/:jobId/status', async (req, res) => {
     if (result.error) {
       return res.status(result.status || 500).json({ error: result.error });
     }
-    res.json({ sessionId: result.sessionId, session: result.session, machine: result.machine });
+    // m14 [integration-finding #4]: same C2-pattern bug as m13 — earlier
+    // the route picked {sessionId, session, machine} only, STRIPPING the
+    // top-level submitDetectedBy field. Forward the whole result minus
+    // the internal `status` field. [review M3] Consistent with the
+    // `_handleFieldAction` C2 pattern. `error` is already returned via
+    // the early-return branch above so it won't appear in the spread.
+    const { status: _s, ...payload } = result;
+    res.json(payload);
   } catch (err) {
     res.status(500).json({ error: String(err?.message ?? err).slice(0, 300) });
   }

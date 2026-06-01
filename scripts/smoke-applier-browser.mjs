@@ -22,6 +22,7 @@ import {
   getJobId,
   closeBrowser,
   _hasWarmContext,
+  _countZombieChromium,
   USER_DATA_DIR,
   PLAYWRIGHT_DIR,
 } from '../src/career/applier/runtime/browser.mjs';
@@ -128,6 +129,34 @@ try {
     assert.ok(!_hasWarmContext(), 'expected _hasWarmContext() false after close');
     await closeBrowser(); // 2nd call should be a noop
     assert.ok(!_hasWarmContext(), 'still false after 2nd close');
+  });
+
+  // ── 4b. closeBrowser() actually terminates child chromium processes ──
+  //
+  // [integration-finding #1] Before the killZombieChromium fix, ctx.close()
+  // returned success but left 4-5 chrome-headless-shell child processes
+  // alive on macOS. They held the persistent profile lock and hung the
+  // next launchPersistentContext. Locks the fix.
+  await test('closeBrowser() leaves zero zombie chromium child processes', async () => {
+    // Launch fresh
+    await getBrowser();
+    // Make sure SOMETHING is in the process tree
+    const aliveDuringSession = _countZombieChromium();
+    assert.ok(aliveDuringSession > 0,
+      'sanity: expected chromium processes alive during session');
+    // Close
+    await closeBrowser();
+    // Allow up to 3s grace — ctx.close + zombie sweep may overlap
+    const deadline = Date.now() + 3_000;
+    let remaining;
+    while (Date.now() < deadline) {
+      remaining = _countZombieChromium();
+      if (remaining === 0) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    assert.equal(remaining, 0,
+      `closeBrowser left ${remaining} zombie chromium process(es) ` +
+      `holding the persistent profile lock`);
   });
 
   // ── 5. After close, getBrowser() launches a fresh context ─────────────
