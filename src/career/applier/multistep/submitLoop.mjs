@@ -166,10 +166,22 @@ export async function runSubmitLoop({ jobId, session, page, siteAdapter, deps })
         outcome: 'no_errors',
       };
       finalSession = await _append(jobId, attempt);
+      // [m14] Identify the success signal — url_pattern / thank_you_text /
+      // network_signal — so the cockpit's autoMark decision can choose
+      // between auto_redirect (strong signal) and confirm_fallback (no
+      // signal but submit completed). Falls back to null when no detector
+      // is wired (default deps).
+      let detectedBy = null;
+      if (typeof deps._detectSubmitSuccess === 'function') {
+        try {
+          detectedBy = await deps._detectSubmitSuccess(page, siteAdapter);
+        } catch { /* detector errors must not derail the success path */ }
+      }
       return {
         outcome: 'submitted',
         attempts_run: attemptsRun,
         final_session: finalSession,
+        submit_detected_by: detectedBy,
       };
     }
 

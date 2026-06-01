@@ -1385,6 +1385,11 @@ function dispatchLoopOutcome(loopRes) {
   if (loopRes.outcome === 'submitted') {
     if (session) session.status = 'completed';
     outcome = OUTCOME.COMPLETED;
+    // [m14] forward the success signal so endpoint.mjs can surface
+    // ctrl.submitDetectedBy → m10's autoMarkDecision.
+    if (loopRes.submit_detected_by !== undefined) {
+      loopOutcomeMeta = { submit_detected_by: loopRes.submit_detected_by };
+    }
   } else if (loopRes.outcome === 'escalated') {
     if (session) session.status = 'paused';
     outcome = OUTCOME.ESCALATED;
@@ -1432,6 +1437,8 @@ async function defaultFixField() {
 
 // Re-export internals that smoke + m4 need
 export { runStep, classifyEntries, tupleSetFromTable, entryTuple, stepNeedsApproval };
+// [m14] dispatchLoopOutcome exported for smoke + flywheel sub-loop testing.
+export { dispatchLoopOutcome };
 // M1 + M2 verification layer — exported for the verify smoke.
 export { verifyStep, verifyValueMatches, readFieldValue };
 export { captureCoverageGaps, detectManualBlockers, _labelsSameField };

@@ -354,12 +354,17 @@ export function inferErrorCode(msg) {
 }
 
 /**
- * Detect whether the application was successfully submitted.
+ * Detect whether the application was successfully submitted AND
+ * identify which signal triggered the detection. Returns the signal
+ * name (e.g. 'url_pattern') or `null` when no signal matched. The
+ * signal name flows into m10's `submitDetectedBy` field so the
+ * cockpit's autoMark decision can fire `auto_redirect` vs
+ * `confirm_fallback`.
  *
  * @param {import('playwright').Page} page
  * @param {{ success_url_patterns?: RegExp[], success_text?: string[] }} [adapter]
  * @param {{ networkSignal?: () => boolean }} [opts]  - pre-installed listener
- * @returns {Promise<boolean>}
+ * @returns {Promise<'url_pattern' | 'thank_you_text' | 'network_signal' | null>}
  */
 export async function detectSubmitSuccess(page, adapter = {}, opts = {}) {
   if (!page) throw new Error('detectSubmitSuccess: page required');
@@ -368,12 +373,12 @@ export async function detectSubmitSuccess(page, adapter = {}, opts = {}) {
   const url = page.url();
   const patterns = adapter?.success_url_patterns || DEFAULT_SUCCESS_URL_PATTERNS;
   for (const p of patterns) {
-    if (p instanceof RegExp && p.test(url)) return true;
-    if (typeof p === 'string' && url.includes(p)) return true;
+    if (p instanceof RegExp && p.test(url)) return 'url_pattern';
+    if (typeof p === 'string' && url.includes(p)) return 'url_pattern';
   }
 
   // ── (2) Thank-you body text ───────────────────────────────────
-  // [review H5] Iterate ALL matches and return true on the FIRST
+  // [review H5] Iterate ALL matches and return on the FIRST
   // visible one — first() can land on a hidden modal even when a
   // visible success banner exists later in DOM order.
   const texts = adapter?.success_text || DEFAULT_SUCCESS_TEXT;
@@ -382,7 +387,7 @@ export async function detectSubmitSuccess(page, adapter = {}, opts = {}) {
       const matches = await page.getByText(t, { exact: false }).all();
       for (const m of matches) {
         try {
-          if (await m.isVisible()) return true;
+          if (await m.isVisible()) return 'thank_you_text';
         } catch { /* element disposed — skip */ }
       }
     } catch { /* selector edge — keep going */ }
@@ -391,11 +396,18 @@ export async function detectSubmitSuccess(page, adapter = {}, opts = {}) {
   // ── (3) Network signal (pre-installed by caller) ──────────────
   if (typeof opts.networkSignal === 'function') {
     try {
-      if (opts.networkSignal()) return true;
+      if (opts.networkSignal()) return 'network_signal';
     } catch { /* signal threw — treat as false */ }
   }
 
-  return false;
+  return null;
+}
+
+/** Backward-compat boolean helper for callers that just want to know
+ *  "did it succeed?" without the signal source. */
+export async function isSubmitSuccess(page, adapter = {}, opts = {}) {
+  const by = await detectSubmitSuccess(page, adapter, opts);
+  return by !== null;
 }
 
 /**

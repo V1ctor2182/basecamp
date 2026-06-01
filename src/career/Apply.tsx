@@ -201,10 +201,12 @@ type StatusResp = {
   sessionId: string
   session: Session
   machine: Machine
-  // m10: future cross-Room field — populated by Phase 2/m5's
-  // detectSubmitSuccess once wired into the live machine. Optional
-  // for forward-compat — undefined means "no signal", which keeps the
-  // existing manual Mark Applied flow.
+  // m10: populated by Phase 2/m5's detectSubmitSuccess (wired in m14).
+  // Placed at TOP LEVEL (not nested under `machine`) intentionally —
+  // autoMarkDecision in submitGate.mjs reads it directly off the
+  // response without unwrapping the machine block. Inconsistent with
+  // machine.escalationReason (nested) but kept for m10's readable
+  // status.submitDetectedBy access pattern.
   submitDetectedBy?: 'url_pattern' | 'thank_you_text' | 'network_signal' | 'user_fallback' | null
 }
 
@@ -354,18 +356,41 @@ export default function Apply() {
       // need the field lookup; let them through.
       const session = statusRef.current?.session
       let field: { refId: string; suggested_value: string | null } | null = null
+      const normTarget = targetRef.toLowerCase()
       if (session) {
-        for (const step of Object.values(session.per_step_draft ?? {})) {
+        // First pass: strict refId match — handles refIds snapshot
+        // minted directly from the input's name attr.
+        outer: for (const step of Object.values(session.per_step_draft ?? {})) {
           for (const f of step.fields ?? []) {
             if (f.refId === targetRef) {
               field = {
                 refId: f.refId ?? targetRef,
                 suggested_value: f.suggested_value ?? '',
               }
-              break
+              break outer
             }
           }
-          if (field) break
+        }
+        // [m14 review H1] Second pass: label-substring fallback. Useful
+        // for synthetic refIds (__file_0, __captcha) and for snapshot-
+        // minted refIds that diverge from the form's name attr (Workday
+        // data-automation-id). Without this fallback the observer's
+        // broadcast field_ref (which comes from name/id/aria-label) wouldn't
+        // match the synthetic DraftField.refId.
+        if (!field) {
+          outerL: for (const step of Object.values(session.per_step_draft ?? {})) {
+            for (const f of step.fields ?? []) {
+              const labelNorm = (f.label ?? '').toLowerCase()
+              if (!labelNorm || !normTarget) continue
+              if (labelNorm.includes(normTarget) || normTarget.includes(labelNorm)) {
+                field = {
+                  refId: f.refId ?? targetRef,
+                  suggested_value: f.suggested_value ?? '',
+                }
+                break outerL
+              }
+            }
+          }
         }
       }
       const isActionEvent =

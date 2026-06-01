@@ -52,12 +52,18 @@ import { nonstandardFillField } from '../nonstandard/nonstandardFillField.mjs';
 import {
   submitForm as _submitFormImplBase,
   parseFormErrors as _parseFormErrorsImplBase,
+  detectSubmitSuccess as _detectSubmitSuccessImplBase,
 } from '../runtime/submitFlow.mjs';
 import { buildFixFieldAdapter, resolveFieldLocator } from './fixFieldAdapter.mjs';
 // m13: live wiring for focusField/retryField endpoints — Phase 2/m6
 // focusField against the active Playwright Page + Phase 2/m4
 // fillWithFallback via the same adapter the submit loop uses.
 import { focusField as _interactFocusField } from '../runtime/interact.mjs';
+// m14: live wiring for attachFormObserver — broadcasts user form
+// interaction events through the SSE hub so Apply.tsx's overlay
+// state flips instantly when the operator types in the browser.
+import { attachFormObserver } from '../runtime/observer.mjs';
+import { broadcast as sseBroadcast } from './sseHub.mjs';
 import '../nonstandard/strategies/datePickers.mjs';
 import '../nonstandard/strategies/addressControls.mjs';
 import '../nonstandard/strategies/selectionControls.mjs';
@@ -281,6 +287,42 @@ export async function startMachine(body, deps = {}) {
         error: `navigation to jobUrl failed: ${String(err?.message ?? err).slice(0, 200)}`,
       };
     }
+    // [m14] Attach the form observer so operator interactions with the
+    // live Chromium window flow through SSE to Apply.tsx. Best-effort:
+    // if the form selector misses (lazy-loaded SPA, custom wrapper),
+    // we warn and continue — the rest of the machine doesn't depend
+    // on the observer. exposeBinding requires a real Playwright Page;
+    // smoke pages without it are skipped via typeof guard.
+    // [review H2] Wait up to 5s for the form to mount — humanNavigate
+    // resolves on DCL but React/Vue mounts run AFTER DCL. Without this
+    // wait, ~0% of Workday/Greenhouse sessions get the observer attached.
+    if (typeof page.exposeBinding === 'function') {
+      try {
+        if (typeof page.waitForSelector === 'function') {
+          await page.waitForSelector('form', { timeout: 5_000 }).catch(() => null);
+        }
+        ctrl.detachObserver = await attachFormObserver(page, 'form', (event) => {
+          try {
+            // Phase 2/m6 observer fires field_input + field_change.
+            // Apply.tsx's cardActions.applySseEvent routes these onto
+            // the verify_status overlay so card colors flip live.
+            const eventName = event?.event_type === 'change'
+              ? 'field_change'
+              : 'field_input';
+            sseBroadcast(jobId, eventName, {
+              field_ref: event?.field_ref ?? null,
+              value: event?.value ?? '',
+              event_type: event?.event_type ?? 'input',
+            });
+          } catch { /* hub errors must never break the observer */ }
+        });
+      } catch (err) {
+        console.warn(
+          'startMachine: attachFormObserver failed — Apply.tsx live overlay will be poll-driven only:',
+          String(err?.message ?? err).slice(0, 200),
+        );
+      }
+    }
   }
 
   const approve = (approvalReq) => {
@@ -406,6 +448,10 @@ export async function startMachine(body, deps = {}) {
         : {};
       const _submitFormImpl = (page) => _submitFormImplBase(page, submitFlowAdapter);
       const _parseFormErrorsImpl = (page) => _parseFormErrorsImplBase(page, submitFlowAdapter);
+      // [m14] success-signal detector — submitLoop calls this after
+      // submitForm reports 'submitted'. Result threads through
+      // dispatchLoopOutcome → ctrl.lastSubmitDetectedBy → getStatus.
+      const _detectSubmitSuccessImpl = (page) => _detectSubmitSuccessImplBase(page, submitFlowAdapter);
       // Per-fix session re-read: cheap JSON load, avoids closure
       // mutation hazards from runStep persisting between fix attempts.
       // [review H4] SnapshotError propagation: the adapter rethrows
@@ -424,6 +470,7 @@ export async function startMachine(body, deps = {}) {
         _submitForm: _submitFormImpl,
         _parseFormErrors: _parseFormErrorsImpl,
         _fixField: _fixFieldImpl,
+        _detectSubmitSuccess: _detectSubmitSuccessImpl,
         ...(deps._machineDeps || {}),
       };
       // Build the field-classifier context. The open-ended (LLM) and
@@ -471,9 +518,38 @@ export async function startMachine(body, deps = {}) {
         ctrl.lastSubmitAttemptsRun = typeof result.submit_attempts_run === 'number'
           ? result.submit_attempts_run
           : null;
+        // [m14] surface submit-success signal so m10's autoMarkDecision
+        // can fire 'auto_redirect' (strong signal) instead of 'none'.
+        // null preserves the "no detector wired" default.
+        // [review M2] Warn when a non-null value is dropped to null so
+        // future Phase 6 detector extensions don't silently lose data.
+        const knownSubmitSignals = new Set([
+          'url_pattern', 'thank_you_text', 'network_signal', 'user_fallback',
+        ]);
+        if (
+          result.submit_detected_by != null
+          && !knownSubmitSignals.has(result.submit_detected_by)
+        ) {
+          console.warn(
+            `startMachine: dropping unknown submit_detected_by value "${result.submit_detected_by}" — ` +
+              `add to the enum + update m10's autoMarkDecision STRONG_SUBMIT_SIGNALS if it should auto-redirect`,
+          );
+        }
+        ctrl.lastSubmitDetectedBy = knownSubmitSignals.has(result.submit_detected_by)
+          ? result.submit_detected_by
+          : null;
       }
       ctrl.lastError = result.error || null;
       ctrl.state = 'done';
+      // [m14] Detach the form observer — the machine has settled, no
+      // more SSE broadcasts will come from this session. Best-effort
+      // — the page may already be closed (browser SIGTERM during
+      // shutdown).
+      if (typeof ctrl.detachObserver === 'function') {
+        try { await ctrl.detachObserver(); }
+        catch { /* page closed — listener will GC */ }
+        ctrl.detachObserver = null;
+      }
       // REVIEW C1 (adv) fix CRITICAL: runMachine reports MOST internal
       // errors via `result.outcome === OUTCOME.ERROR` WITHOUT throwing
       // (max-steps, Next-click failed, persist failed, etc.). Without
@@ -725,6 +801,17 @@ export async function cancelMachine(jobId) {
       // gate (if reached before the async loop notices) auto-declines.
       ctrl.pauseRequested = true;
     }
+    // [review C1] Detach the m14 observer immediately on cancel. The
+    // fire-and-forget closure also detaches on settle, but if runMachine
+    // is wedged on a long Playwright wait, the closure won't reach its
+    // detach for many seconds — meanwhile the observer keeps broadcasting
+    // through the still-bound page. Idempotent: detachObserver internally
+    // dedupes via WeakMap removal.
+    if (typeof ctrl.detachObserver === 'function') {
+      try { await ctrl.detachObserver(); }
+      catch { /* page closed or never bound — fine */ }
+      ctrl.detachObserver = null;
+    }
   }
 
   // Persist session.status='paused' even without ctrl (cold-cancel path)
@@ -854,6 +941,10 @@ export async function getStatus(jobId) {
     sessionId: jobId,
     session: redactSession(session),
     machine,
+    // [m14] Top-level submitDetectedBy mirrors m10's StatusResp stub.
+    // Apply.tsx autoMarkDecision reads s.submitDetectedBy directly.
+    // null when no submit has happened yet OR no detector was wired.
+    submitDetectedBy: ctrl?.lastSubmitDetectedBy ?? null,
   };
 }
 

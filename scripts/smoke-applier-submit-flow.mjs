@@ -309,44 +309,43 @@ await test('parseFormErrors: adapter.error_selectors override picks Greenhouse-s
 
 // ── detectSubmitSuccess: URL pattern match ──────────────────────────
 
-await test('detectSubmitSuccess: URL pattern → true', async () => {
+await test('detectSubmitSuccess: URL pattern → "url_pattern"', async () => {
   const page = await freshPage(`<html><body>Nothing here</body></html>`);
-  // Force URL via hash (pushState blocked on about:blank). Add /thank-you to
-  // hash + custom matcher so URL pattern test logic still exercises.
   await page.evaluate(() => { location.hash = '#/thank-you?id=42'; });
-  const ok = await detectSubmitSuccess(page);
-  assert.equal(ok, true);
+  const by = await detectSubmitSuccess(page);
+  // [m14] detectSubmitSuccess returns the SIGNAL NAME (string) instead
+  // of bool so callers can surface submitDetectedBy to the cockpit.
+  assert.equal(by, 'url_pattern');
 });
 
 // ── detectSubmitSuccess: thank-you text match ───────────────────────
 
-await test('detectSubmitSuccess: thank-you body text → true', async () => {
+await test('detectSubmitSuccess: thank-you body text → "thank_you_text"', async () => {
   const page = await freshPage(`
     <html><body>
       <h1>Thank you for applying!</h1>
       <p>We'll be in touch.</p>
     </body></html>
   `);
-  const ok = await detectSubmitSuccess(page);
-  assert.equal(ok, true);
+  const by = await detectSubmitSuccess(page);
+  assert.equal(by, 'thank_you_text');
 });
 
-// ── detectSubmitSuccess: network signal → true ──────────────────────
+// ── detectSubmitSuccess: network signal → "network_signal" ──────────
 
-await test('detectSubmitSuccess: network signal (pre-installed listener)', async () => {
+await test('detectSubmitSuccess: network signal → "network_signal"', async () => {
   const page = await freshPage(`<html><body><p>still on form</p></body></html>`);
-  // Simulate caller manually setting the network signal flag
   let flag = false;
-  const ok1 = await detectSubmitSuccess(page, {}, { networkSignal: () => flag });
-  assert.equal(ok1, false);
+  const by1 = await detectSubmitSuccess(page, {}, { networkSignal: () => flag });
+  assert.equal(by1, null);
   flag = true;
-  const ok2 = await detectSubmitSuccess(page, {}, { networkSignal: () => flag });
-  assert.equal(ok2, true);
+  const by2 = await detectSubmitSuccess(page, {}, { networkSignal: () => flag });
+  assert.equal(by2, 'network_signal');
 });
 
-// ── detectSubmitSuccess: all signals false → false ──────────────────
+// ── detectSubmitSuccess: all signals false → null ───────────────────
 
-await test('detectSubmitSuccess: all false → false', async () => {
+await test('detectSubmitSuccess: all signals miss → null', async () => {
   const page = await freshPage(`
     <html><body>
       <form>
@@ -355,8 +354,17 @@ await test('detectSubmitSuccess: all false → false', async () => {
       </form>
     </body></html>
   `);
-  const ok = await detectSubmitSuccess(page);
-  assert.equal(ok, false);
+  const by = await detectSubmitSuccess(page);
+  assert.equal(by, null);
+});
+
+// [m14] backward-compat isSubmitSuccess helper returns boolean
+await test('isSubmitSuccess: backward-compat boolean helper', async () => {
+  const { isSubmitSuccess } = await import('../src/career/applier/runtime/submitFlow.mjs');
+  const page = await freshPage(`<html><body><h1>Thank you</h1></body></html>`);
+  assert.equal(await isSubmitSuccess(page), true);
+  const page2 = await freshPage(`<html><body><form></form></body></html>`);
+  assert.equal(await isSubmitSuccess(page2), false);
 });
 
 // ── attachSubmitNetworkSignal: end-to-end via real navigation ───────
