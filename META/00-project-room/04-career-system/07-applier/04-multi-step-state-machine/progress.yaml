@@ -950,7 +950,7 @@ milestones:
       - "src/career/Apply.tsx"                                  # SSE handler label-substring fallback + StatusResp doc
       - "scripts/smoke-applier-submit-flow.mjs"                 # updated 4 cases for signal-name returns + 1 new isSubmitSuccess
       - "scripts/smoke-m14-submit-detected-by.mjs"              # NEW (8 cases for submitLoop → dispatch plumbing)
-    commit_hash: "PENDING"
+    commit_hash: "a29e87d"
     review:
       - "Plan agent: 1 CRITICAL + 3 HIGH + 4 MEDIUM + 3 LOW"
       - "Applied: C1 (cancelMachine detaches observer immediately — fire-and-forget closure's detach may wait minutes on wedged Playwright waits, leaking the SSE broadcast pipe in meantime) + H1 (Apply.tsx SSE handler label-substring fallback — observer broadcasts field_ref from input.name|id|aria-label, but DraftField.refId is snapshot-minted and often diverges; without fallback ~50%+ of broadcasts silently miss on Greenhouse/Workday) + H2 (page.waitForSelector('form', 5s) before attachFormObserver — humanNavigate resolves on DCL but React/Vue mounts fire AFTER; without wait ~0% of Workday/Greenhouse forms get the observer attached) + M2 (console.warn when unknown submit_detected_by signal value gets dropped to null — forward-compat for future Phase 6 detector extensions) + M3 (Apply.tsx StatusResp doc explains submitDetectedBy top-level placement vs nested machine.escalationReason)"
