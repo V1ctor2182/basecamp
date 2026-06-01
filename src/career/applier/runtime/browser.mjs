@@ -213,6 +213,38 @@ export function getJobId(page) {
 }
 
 /**
+ * m13 (Phase 6 wiring): accessExistingPage looks up the Page previously
+ * tagged with the given jobId, WITHOUT creating a new one. Used by the
+ * focusField/retryField endpoints to act on the live cockpit page —
+ * `getPage` always opens a fresh blank tab, which would 404 every
+ * operator click. Throws a coded error when no tagged page exists so
+ * the endpoint can return a structured 409 with reason=no_live_page.
+ *
+ * @param {string} jobId
+ * @returns {Promise<import('playwright').Page>}
+ */
+export async function accessExistingPage(jobId) {
+  if (!jobId) {
+    const err = new Error('accessExistingPage: jobId required');
+    err.code = 'NO_JOB_ID';
+    throw err;
+  }
+  if (!_context) {
+    const err = new Error(`accessExistingPage: no applier browser open for jobId ${jobId}`);
+    err.code = 'NO_BROWSER';
+    throw err;
+  }
+  const pages = _context.pages();
+  const tagged = pages.find((p) => _pageJobIds.get(p) === jobId);
+  if (!tagged) {
+    const err = new Error(`accessExistingPage: no tagged page for jobId ${jobId}`);
+    err.code = 'NO_TAGGED_PAGE';
+    throw err;
+  }
+  return tagged;
+}
+
+/**
  * Graceful cleanup — close all pages + the context. Idempotent: callable
  * multiple times without throwing. SIGTERM / SIGINT auto-invokes this.
  *

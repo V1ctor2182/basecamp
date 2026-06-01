@@ -5830,7 +5830,12 @@ function _handleFieldAction(req, res, schema, handler, methodLabel) {
     return Promise.resolve(handler(jobId, body))
       .then((result) => {
         if (result.error) {
-          return res.status(result.status || 500).json({ error: result.error });
+          // [review C2] Forward the FULL structured failure payload so
+          // the client can branch on `reason` / `code` / `detail`. Before
+          // this fix the route stripped to {error} only, making Apply.tsx's
+          // `j.reason === 'no_live_page'` branches dead code.
+          const { status, ...rest } = result;
+          return res.status(status || 500).json(rest);
         }
         // Side-effect: SSE-broadcast the action so other dashboard tabs
         // see it land in near-real-time without waiting for the next poll.
@@ -5839,16 +5844,23 @@ function _handleFieldAction(req, res, schema, handler, methodLabel) {
         try {
           // [review M4] Uniform `!= null` checks so empty-string / 0
           // values don't get silently dropped from the broadcast.
+          // [m13 review H4] Forward retry outcome fields (success,
+          // fix_name, last_value) so other tabs see the retry result
+          // immediately and can update card state without waiting for
+          // the next poll.
           sseBroadcast(jobId, `field_${methodLabel}`, {
             ...(result.ref != null ? { ref: result.ref } : {}),
             ...(result.strategy != null ? { strategy: result.strategy } : {}),
+            ...(result.requested_strategy != null ? { requested_strategy: result.requested_strategy } : {}),
             ...(result.new_status != null ? { new_status: result.new_status } : {}),
             ...(result.kind != null ? { kind: result.kind } : {}),
             ...(result.ats != null ? { ats: result.ats } : {}),
             ...(result.chosen != null ? { chosen: result.chosen } : {}),
             ...(result.parsed_strategy != null ? { parsed_strategy: result.parsed_strategy } : {}),
             ...(result.result != null ? { result: result.result } : {}),
-            pending_wire: result.pending_wire === true,
+            ...(result.fix_name != null ? { fix_name: result.fix_name } : {}),
+            ...(result.success != null ? { success: result.success } : {}),
+            ...(result.last_value != null ? { last_value: result.last_value } : {}),
           });
         } catch { /* hub failures must never break the response */ }
         return res.status(result.status || 202).json(result);

@@ -53,7 +53,11 @@ import {
   submitForm as _submitFormImplBase,
   parseFormErrors as _parseFormErrorsImplBase,
 } from '../runtime/submitFlow.mjs';
-import { buildFixFieldAdapter } from './fixFieldAdapter.mjs';
+import { buildFixFieldAdapter, resolveFieldLocator } from './fixFieldAdapter.mjs';
+// m13: live wiring for focusField/retryField endpoints — Phase 2/m6
+// focusField against the active Playwright Page + Phase 2/m4
+// fillWithFallback via the same adapter the submit loop uses.
+import { focusField as _interactFocusField } from '../runtime/interact.mjs';
 import '../nonstandard/strategies/datePickers.mjs';
 import '../nonstandard/strategies/addressControls.mjs';
 import '../nonstandard/strategies/selectionControls.mjs';
@@ -892,10 +896,18 @@ function redactSession(session) {
 
 // Lazy-imported default for production; smoke always injects _getPage.
 // Tags the page with jobId so the "reveal browser" route can raise the
-// right tab later.
+// right tab later. Used by startMachine — creates the page.
 async function defaultGetPage(jobId) {
   const { getPage } = await import('../runtime/browser.mjs');
   return getPage(jobId);
+}
+
+// m13 (Phase 6 wiring): operator-driven endpoints (focus/retry) must
+// look up the EXISTING jobId-tagged Page rather than create a new
+// blank tab. defaultGetPage would 404 every click.
+async function defaultAccessExistingPage(jobId) {
+  const { accessExistingPage } = await import('../runtime/browser.mjs');
+  return accessExistingPage(jobId);
 }
 
 // Cost-ledger appender passed to the open-ended filler as ctx.recordCost.
@@ -993,19 +1005,35 @@ function _locateField(session, refId) {
 }
 
 /**
- * Acknowledge a "focus this field" request. The live wiring (Phase
- * 2/m6 focusField against the active Playwright Page) lands in a
- * future cross-Room milestone — m9 ships the contract + telemetry
- * trail.
+ * m13 (Phase 6 wiring): focus a field in the live Chromium window.
+ * Calls Phase 2/m6 focusField (scrollIntoView + outline + setFocus)
+ * against the active Page. When no live page is available (machine
+ * not running / paused / no session), returns 409 with a structured
+ * reason rather than silently failing — the UI surfaces this to the
+ * operator as "Open the Chromium window and click Resume".
  *
  * @param {string} jobId
  * @param {{ ref: string }} body
- * @returns {Promise<{ status, sessionId?, ref?, queued?, error? }>}
+ * @param {{ _getPage?: Function, _focusField?: Function, _resolveLocator?: Function }} [deps]
+ * @returns {Promise<{ status, sessionId?, ref?, label?, error? }>}
  */
-export async function focusField(jobId, body) {
+export async function focusField(jobId, body, deps = {}) {
   if (!JOB_ID_RE.test(jobId)) {
     return { status: 400, error: 'invalid jobId' };
   }
+  // [review C3] Block while the machine is actively mid-step — two
+  // concurrent Playwright actions on the same Page race each other.
+  // Operator can still focus during 'awaiting-approval' (which is
+  // the typical cockpit state) or after machine has settled.
+  const ctrl = _machines.get(jobId);
+  if (ctrl && ctrl.state === 'running' && !ctrl.pendingApproval) {
+    return {
+      status: 409,
+      error: `machine is mid-step for jobId ${jobId} — wait for the approval gate or pause`,
+      reason: 'machine_busy',
+    };
+  }
+
   let session;
   try { session = await readSession(jobId); }
   catch (err) {
@@ -1013,40 +1041,102 @@ export async function focusField(jobId, body) {
   }
   if (!session) return { status: 404, error: `no session found for jobId ${jobId}` };
 
+  // [review H2] Acquire live page BEFORE locating field so the operator
+  // sees the right diagnosis when the browser closed (no_live_page
+  // beats "ref not found in any step draft").
+  const getPage = deps._getPage || defaultAccessExistingPage;
+  let page;
+  try {
+    page = await getPage(jobId);
+  } catch (err) {
+    return {
+      status: 409,
+      error: `no live browser page for jobId ${jobId} — start or resume the machine first`,
+      reason: 'no_live_page',
+      detail: String(err?.message ?? err).slice(0, 200),
+    };
+  }
+  if (!page) {
+    return {
+      status: 409,
+      error: `no live browser page for jobId ${jobId}`,
+      reason: 'no_live_page',
+    };
+  }
+
   const located = _locateField(session, body.ref);
   if (!located) return { status: 404, error: `ref ${body.ref} not found in any step draft` };
 
-  // Future wiring: _machines.get(jobId)?.refTable.resolve(body.ref) →
-  // Locator, then call Phase 2/m6 focusField(page, locator). For now
-  // we return 202 acknowledged + the resolved field metadata so the
-  // UI can show "Focus requested" feedback and the operator can find
-  // it in the browser themselves.
+  // Resolve the locator via the shared waterfall. [review M3] Pass
+  // null errorRecord — focusField has no error context.
+  const resolveLocator = deps._resolveLocator || resolveFieldLocator;
+  let locator;
+  try {
+    locator = await resolveLocator(page, body.ref, null);
+  } catch (err) {
+    return {
+      status: 500,
+      error: `resolveLocator threw: ${String(err?.message ?? err).slice(0, 200)}`,
+      reason: 'resolve_threw',
+    };
+  }
+  if (!locator) {
+    return {
+      status: 404,
+      error: `field ref="${body.ref}" not found on the live page`,
+      reason: 'field_not_on_page',
+      stepIdx: located.stepIdx,
+      label: located.field.label ?? null,
+    };
+  }
+
+  // Call Phase 2/m6 focusField. Errors propagate as 500.
+  const focusImpl = deps._focusField || _interactFocusField;
+  try {
+    await focusImpl(page, locator);
+  } catch (err) {
+    return {
+      status: 500,
+      error: `could not focus "${located.field.label ?? body.ref}" — ${String(err?.message ?? err).slice(0, 150)}`,
+      reason: 'focus_threw',
+    };
+  }
+
   return {
     status: 202,
     sessionId: jobId,
     ref: body.ref,
     stepIdx: located.stepIdx,
     label: located.field.label ?? null,
-    queued: true,
-    // Mark the live-wiring gap explicitly so the UI can render an
-    // honest "scroll to field manually" hint until cross-Room glue lands.
-    pending_wire: true,
   };
 }
 
 /**
- * Acknowledge a "retry this field with strategy X" request. Live
- * wiring to Phase 2/m4 fillWithFallback is a future milestone; m9
- * ships the contract.
+ * m13 (Phase 6 wiring): retry filling a field via Phase 2/m4
+ * fillWithFallback. Uses buildFixFieldAdapter so the strategy ladder,
+ * expected-value lookup, and selector waterfall match the submit-first
+ * loop's retry path exactly. Returns the structured fix result —
+ * fix_name carries the winning strategy or 'all_strategies_failed'.
  *
  * @param {string} jobId
  * @param {{ ref: string, strategy?: string }} body
- * @returns {Promise<{ status, sessionId?, ref?, strategy?, queued?, error? }>}
+ * @param {{ _getPage?: Function, _runAdapter?: Function }} [deps]
+ * @returns {Promise<{ status, sessionId?, ref?, fix_name?, result?, success?, error? }>}
  */
-export async function retryField(jobId, body) {
+export async function retryField(jobId, body, deps = {}) {
   if (!JOB_ID_RE.test(jobId)) {
     return { status: 400, error: 'invalid jobId' };
   }
+  // [review C3] Machine-busy guard.
+  const ctrl = _machines.get(jobId);
+  if (ctrl && ctrl.state === 'running' && !ctrl.pendingApproval) {
+    return {
+      status: 409,
+      error: `machine is mid-step for jobId ${jobId} — wait for the approval gate or pause`,
+      reason: 'machine_busy',
+    };
+  }
+
   let session;
   try { session = await readSession(jobId); }
   catch (err) {
@@ -1054,18 +1144,76 @@ export async function retryField(jobId, body) {
   }
   if (!session) return { status: 404, error: `no session found for jobId ${jobId}` };
 
+  // [review H2] Live page first, then locate field.
+  const getPage = deps._getPage || defaultAccessExistingPage;
+  let page;
+  try {
+    page = await getPage(jobId);
+  } catch (err) {
+    return {
+      status: 409,
+      error: `no live browser page for jobId ${jobId} — start or resume the machine first`,
+      reason: 'no_live_page',
+      detail: String(err?.message ?? err).slice(0, 200),
+    };
+  }
+  if (!page) {
+    return {
+      status: 409,
+      error: `no live browser page for jobId ${jobId}`,
+      reason: 'no_live_page',
+    };
+  }
+
   const located = _locateField(session, body.ref);
   if (!located) return { status: 404, error: `ref ${body.ref} not found in any step draft` };
+
+  // [review H3] Refuse to silently overwrite a skip. Operator must
+  // explicitly un-skip (a future m14 UI affordance) before retry.
+  if (located.field.verify_status === 'skipped_by_user') {
+    return {
+      status: 409,
+      error: `field "${located.field.label ?? body.ref}" is marked skipped — un-skip first if you want to retry`,
+      reason: 'field_skipped',
+      stepIdx: located.stepIdx,
+      label: located.field.label ?? null,
+    };
+  }
+
+  // [review H1] Re-read session right before the adapter runs — the
+  // session at line above was loaded BEFORE getPage; runMachine may
+  // have persisted field_memory updates in between (e.g. an in-flight
+  // approveStep with operator edits). Fresh read keeps expected-value
+  // lookup current.
+  const freshSession = await readSession(jobId).catch(() => session);
+  const runAdapter = deps._runAdapter || buildFixFieldAdapter(freshSession);
+  let fixRes;
+  try {
+    fixRes = await runAdapter(page, body.ref, null);
+  } catch (err) {
+    // SnapshotError rethrows propagate here.
+    return {
+      status: 500,
+      error: `fillWithFallback threw: ${String(err?.message ?? err).slice(0, 200)}`,
+      reason: 'fillWithFallback_threw',
+      code: err?.code ?? null,
+    };
+  }
 
   return {
     status: 202,
     sessionId: jobId,
     ref: body.ref,
-    strategy: body.strategy ?? null,
+    // [review M4] requested_strategy — clarifies "what the operator asked for"
+    // vs `fix_name` which is "what actually ran". Until single-strategy
+    // invocation lands, requested_strategy is informational only.
+    requested_strategy: body.strategy ?? null,
     stepIdx: located.stepIdx,
     label: located.field.label ?? null,
-    queued: true,
-    pending_wire: true,
+    fix_name: fixRes.fix_name,
+    result: fixRes.result,
+    success: fixRes.success === true,
+    last_value: fixRes.last_value ?? null,
   };
 }
 

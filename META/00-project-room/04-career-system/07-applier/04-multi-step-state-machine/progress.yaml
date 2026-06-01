@@ -898,6 +898,47 @@ milestones:
       _machineDeps OVER the m12 injections, so production-path
       integration coverage is a m13 followup.
 
+  - id: "m13-phase6-wire-focus-retry-endpoints"
+    name: "Phase 6 wiring: focusField + retryField endpoints — live page actions"
+    status: completed
+    files:
+      - "src/career/applier/runtime/browser.mjs"                # +35 LOC accessExistingPage
+      - "src/career/applier/multistep/endpoint.mjs"             # ~150 LOC focusField + retryField rewrite + machine-busy guards
+      - "src/career/applier/multistep/fixFieldAdapter.mjs"      # resolveFieldLocator exported + null errorRecord handling
+      - "src/career/Apply.tsx"                                  # structured reason → toast UX
+      - "server.mjs"                                            # route forwards full structured response + SSE retry outcome
+      - "scripts/smoke-apply-ui-field-cards.mjs"                # 31 smoke (was 25 in m9, +6 m13 cases)
+    commit_hash: "PENDING"
+    review:
+      - "Plan agent: 3 CRITICAL + 4 HIGH + 5 MEDIUM + 3 LOW"
+      - "Applied: C1 (accessExistingPage looks up jobId-tagged Page instead of creating fresh blank tab — defaultGetPage would 404 every operator click in prod because newPage() doesn't return the existing form tab) + C2 (server.mjs route forwards FULL structured failure response {error, reason, code, detail, label, stepIdx} instead of stripping to {error} alone — Apply.tsx's j.reason branches were dead code before) + C3 (machine-busy guard returns 409 when state='running' AND no pendingApproval — prevents two concurrent Playwright actions racing the same Page) + H1 (retryField re-reads session right before adapter runs so field_memory updates from runMachine in flight are visible) + H2 (live-page check hoisted ABOVE field locate — operator sees correct diagnosis 'no_live_page' instead of confusing 'ref not found in draft' when browser closed) + H3 (retryField refuses skipped fields with 409 reason='field_skipped' — operator must explicit un-skip first) + H4 (SSE broadcast forwards success/fix_name/last_value/requested_strategy so other tabs see retry outcome immediately) + M3 (focus_threw message includes field label + truncates Playwright noise) + M4 (response field renamed strategy → requested_strategy to disambiguate operator hint from actual fix_name) + M5 (Apply.tsx ELEMENT_GONE wording 'refresh the form, then retry' — action-agnostic since Resume isn't always available)"
+      - "Defer: M1 (resolveFieldLocator overloaded signature — cosmetic), M2 (errorRecord field-name fallback for refId-vs-form-name mismatch — future polish), L1 (pending_wire stripped from SSE payload — already dropped via repeal of the field in handlers), L2 (mock adapter errorRecord assertion — trivial test gap), L3 (strategies_tried not in JSON response — future m14 polish)"
+      - "Manual browser test: NOT performed. Live endpoints activate when operator clicks Focus/Retry on a real Mode 2 session with the Chromium window open. Smoke covers all 31 branch combinations including no-live-page 409, machine-busy 409, field-skipped 409, field-not-on-page 404, adapter-throws ELEMENT_GONE 500."
+    estimated_lines: 250
+    depends_on:
+      - "m12-phase6-wire-fillWithFallback-submitFlow"  # adapter + page lookup
+      # 跨 Room: 02-playwright-runtime/m6 focusField ✅ 36c1d81
+    complexity_flags:
+      - "design_decisions"
+    open_questions: []
+    description: |
+      m12 wired the submit-first loop's internals (machine-driven retry).
+      m13 wires the OPERATOR-DRIVEN cockpit actions: Focus button calls
+      Phase 2/m6 focusField against the live page; Retry button calls
+      fillWithFallback via the same adapter the submit loop uses.
+
+      Critical fix: browser.mjs accessExistingPage looks up the jobId-
+      tagged Page via _pageJobIds WeakMap — getPage always creates a
+      fresh blank tab which would 404 every operator click.
+
+      Critical fix: server.mjs _handleFieldAction now forwards the FULL
+      structured response. Before this fix the route stripped to
+      {error} alone — Apply.tsx's j.reason branching was dead code.
+
+      Critical fix: machine-busy guard prevents two concurrent
+      Playwright actions racing the same Page when the operator clicks
+      during a runMachine fill step.
+
 commits:
   - hash: "778a7aa"
     date: "2026-05-13"

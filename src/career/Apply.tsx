@@ -658,10 +658,20 @@ export default function Apply() {
         },
       )
       const j = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(j.error ?? `Focus failed (HTTP ${r.status})`)
-      showToast(j.pending_wire
-        ? `Focus queued — scroll to "${j.label ?? refId}" in the browser.`
-        : `Focused "${j.label ?? refId}".`)
+      // m13: handle structured 409 / 404 reasons for cleaner UX.
+      if (!r.ok) {
+        if (j.reason === 'no_live_page') {
+          throw new Error('No live browser. Start or resume the apply first.')
+        }
+        if (j.reason === 'machine_busy') {
+          throw new Error('The machine is filling — wait for the next approval gate.')
+        }
+        if (j.reason === 'field_not_on_page') {
+          throw new Error(`"${j.label ?? refId}" isn't on the current page — refresh the form, then try again.`)
+        }
+        throw new Error(j.error ?? `Focus failed (HTTP ${r.status})`)
+      }
+      showToast(`Focused "${j.label ?? refId}" in the browser.`)
     } catch (e) {
       showToast((e as Error).message ?? 'Focus failed')
     } finally {
@@ -686,10 +696,32 @@ export default function Apply() {
         },
       )
       const j = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(j.error ?? `Retry failed (HTTP ${r.status})`)
-      showToast(j.pending_wire
-        ? `Retry queued for "${j.label ?? refId}".`
-        : `Retried "${j.label ?? refId}".`)
+      // m13: handle structured 409/500 reasons.
+      if (!r.ok) {
+        if (j.reason === 'no_live_page') {
+          throw new Error('No live browser. Start or resume the apply first.')
+        }
+        if (j.reason === 'machine_busy') {
+          throw new Error('The machine is filling — wait for the next approval gate.')
+        }
+        if (j.reason === 'field_skipped') {
+          throw new Error(j.error ?? 'Field is marked skipped.')
+        }
+        if (j.reason === 'fillWithFallback_threw') {
+          throw new Error(
+            j.code === 'ELEMENT_GONE'
+              ? `Element gone — refresh the form in the browser, then retry.`
+              : `Retry threw: ${j.error}`,
+          )
+        }
+        throw new Error(j.error ?? `Retry failed (HTTP ${r.status})`)
+      }
+      const label = j.label ?? refId
+      if (j.success) {
+        showToast(`Retried "${label}" — ${j.fix_name} succeeded.`)
+      } else {
+        showToast(`Retried "${label}" — ${j.fix_name ?? 'all strategies failed'}.`)
+      }
     } catch (e) {
       showToast((e as Error).message ?? 'Retry failed')
     } finally {

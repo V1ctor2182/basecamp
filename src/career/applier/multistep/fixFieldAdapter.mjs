@@ -189,13 +189,18 @@ function lookupExpectedValue(session, fieldRef, errorRecord) {
 
 /** Resolve the form field to a Locator. Best-effort: tries the
  *  refId then errorRecord.field across several attribute selectors.
+ *  Exported [m13] so focusField/retryField endpoint live wiring can
+ *  reuse the same waterfall without duplicating Workday/Greenhouse
+ *  selector knowledge.
  *  [review H1] data-automation-id added for Workday compatibility —
  *  was the dominant cause of "field_not_found_on_page" on Workday
  *  forms before this fix.
  *  [review M1] redundant `#id` selector dropped — `[id=]` handles
  *  the same case without escaping pitfalls (leading-digit ids etc.). */
-async function resolveFieldLocator(page, fieldRef, errorRecord) {
+export async function resolveFieldLocator(page, fieldRef, errorRecord) {
   const candidates = [fieldRef];
+  // errorRecord may be null (operator-driven focus/retry has no error
+  // context). Skip the second candidate when missing.
   if (errorRecord?.field && errorRecord.field !== fieldRef) {
     candidates.push(errorRecord.field);
   }
