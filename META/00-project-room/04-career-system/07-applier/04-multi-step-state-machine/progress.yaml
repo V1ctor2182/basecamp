@@ -840,6 +840,64 @@ milestones:
           11. hint 含 "scroll dropdown" → 后端解析 keyboardInput+scroll → 试 → 成功
           12. hint 无解析模式 → recorded_only
 
+  # ─────────────────────────────────────────────────────────────────────
+  # ROOM REOPEN extension — Phase 6 of post-fill-handoff-ux design
+  # (m12 — wire Phase 2 runtime primitives into the live machine)
+  # ─────────────────────────────────────────────────────────────────────
+
+  - id: "m12-phase6-wire-fillWithFallback-submitFlow"
+    name: "Phase 6 wiring: _submitForm + _parseFormErrors + _fixField production injection"
+    status: completed
+    files:
+      - "src/career/applier/multistep/fixFieldAdapter.mjs"  # NEW — bridges m6 flat shape → Phase 2/m4 nested shape
+      - "src/career/applier/multistep/endpoint.mjs"         # +~40 LOC startMachine machineDeps wiring + compiled adapter
+      - "scripts/smoke-fix-field-adapter.mjs"               # NEW (14 pure-Node smoke)
+    commit_hash: "PENDING"
+    review:
+      - "Plan agent: 1 CRITICAL + 5 HIGH + 4 MEDIUM + 3 LOW"
+      - "Applied: C1 (submitForm/parseFormErrors received STRING site_adapter but expect OBJECT — adapter overrides were silently dying; now binds submitFlowAdapter from getCompiledAdapter(jobUrl).flow.submit_button.name_hints) + H1 (added [data-automation-id=] to selector waterfall — Workday forms now resolve fields, was 100% failure before) + H2 (dropped dead errorRecord.expected_value branch — FormErrorSchema is .strict() so this could never reach the adapter; persistence would Zod-reject the extra key) + H3 (field_memory precedence flipped above per_step_draft — operator edits via approveStep now win on retry, not the original classifier value) + H4 (SnapshotError rethrows from adapter so submitLoop's catch chain routes ELEMENT_GONE/STALE_REF/IFRAME_DETACHED to fixer_threw — same-error-twice halts on next round instead of burning 3 wasted attempts on dead element) + H5 smoke (added cases asserting field_memory precedence + data-automation-id resolution + value-flows-through-adapter + all_strategies_failed sentinel) + L1 (fix_name = 'all_strategies_failed' sentinel matches the m6 guard's expected value when ladder exhausts) + M1 (dropped redundant #id row from waterfall — [id=] handles it without leading-digit escape pitfall) + M2 (dropped dead session_not_persisted_yet branch — buildFixFieldAdapter(null) handles cleanly via lookupExpectedValue returning null) + M3 (smoke tracks failed count + exits at end, not process.exit(1) on first fail)"
+      - "Defer: M4 (no production-path integration coverage — all 40 endpoint smokes spread _machineDeps over m12 injections so they pass without ever exercising the wired path; add a Node ESM module-mock smoke later) + L2 (.first() after count() — style nit) + L3 (getByLabel exact:false over-match — acceptable risk)"
+      - "Manual browser test: NOT performed. Production wiring activates inside the runMachine fire-and-forget closure when a real Mode 2 session reaches the submit step; verification requires a live Greenhouse/Workday form returning a parseable form_errors response. Smoke covers adapter unit, integration smoke is a m13 followup."
+    estimated_lines: 250  # 120 adapter + 40 endpoint + 90 smoke
+    depends_on:
+      - "m6-error-loop-state-machine-guards"  # Phase 1/m6 submit-first loop needs deps
+      # 跨 Room: 02-playwright-runtime/m4 fillWithFallback ✅ b6b95fe
+      # 跨 Room: 02-playwright-runtime/m5 submitForm/parseFormErrors ✅ e1f83de
+    complexity_flags:
+      - "first_of_kind"
+      - "design_decisions"
+    open_questions: []
+    description: |
+      Production injection of Phase 2/m4 fillWithFallback (via session-bound
+      adapter) + Phase 2/m5 submitForm/parseFormErrors (via compiled-adapter
+      bound calls) into the live state machine's runMachine. Before this:
+      submit-first loop threw the moment it tried to run in prod because
+      _submitForm/_parseFormErrors/_fixField had no real implementations
+      injected — guard-rail throws like '_submitForm not injected — Phase
+      2/m5 02-playwright-runtime/submitFlow.mjs is not yet wired'.
+
+      fixFieldAdapter.mjs bridges m6 submitLoop's `(page, fieldRef, errorRecord)
+      → {field, fix_name, result, success}` signature onto Phase 2/m4
+      fillWithFallback's `(page, locator, expected) → {strategies_tried, final}`.
+      Resolves expected value via field_memory → per_step_draft (operator
+      edits win); resolves Locator via 6-step selector waterfall including
+      Workday data-automation-id. Hard SnapshotError codes propagate via
+      throw so submitLoop's catch chain can route to fixer_threw.
+
+      Endpoint.mjs startMachine() now binds:
+        - submitFlowAdapter from getCompiledAdapter(jobUrl).flow.submit_button
+          so per-ATS submit hint YAML overrides reach submitForm
+        - _submitFormImpl / _parseFormErrorsImpl via closure ignoring
+          submitLoop's siteAdapter-string arg
+        - _fixFieldImpl that re-reads session per fix attempt
+          (cheap JSON load, avoids closure-mutation hazards)
+
+      Test scope: 14 fixture smoke cover the adapter unit. Existing
+      endpoint smoke (40) + machine smoke (37) confirm the injection
+      doesn't break ANY existing path — but all those tests spread
+      _machineDeps OVER the m12 injections, so production-path
+      integration coverage is a m13 followup.
+
 commits:
   - hash: "778a7aa"
     date: "2026-05-13"

@@ -45,6 +45,15 @@ import { runMachine as realRunMachine, OUTCOME } from './machine.mjs';
 // detection rules into the controlRouter as a side effect — this is
 // the single canonical entry point the application server uses.
 import { nonstandardFillField } from '../nonstandard/nonstandardFillField.mjs';
+// m12 (Phase 6 wiring): production injections for the submit-first loop.
+// _submitForm/_parseFormErrors come straight from Phase 2/m5; _fixField
+// is the adapter that bridges m6's flat shape onto Phase 2/m4's
+// fillWithFallback ladder.
+import {
+  submitForm as _submitFormImplBase,
+  parseFormErrors as _parseFormErrorsImplBase,
+} from '../runtime/submitFlow.mjs';
+import { buildFixFieldAdapter } from './fixFieldAdapter.mjs';
 import '../nonstandard/strategies/datePickers.mjs';
 import '../nonstandard/strategies/addressControls.mjs';
 import '../nonstandard/strategies/selectionControls.mjs';
@@ -368,8 +377,49 @@ export async function startMachine(body, deps = {}) {
       // m4 (05-non-standard-controls): inject nonstandardFillField as
       // the default _fillField. Smoke tests pass their own
       // _machineDeps._fillField which wins via spread order.
+      // m12 (Phase 6 wiring): inject _submitForm + _parseFormErrors
+      // (Phase 2/m5) + _fixField (Phase 2/m4 via buildFixFieldAdapter).
+      //
+      // [review C1] submitForm/parseFormErrors expect an adapter OBJECT
+      // with `submit_button.name_hints` etc. — submitLoop passes
+      // `siteAdapter` as a STRING enum (session.site_adapter). Without
+      // adapting the shape, every per-ATS YAML hint silently misses.
+      // We bind a `submitFlowAdapter` derived from the compiled adapter
+      // and ignore submitLoop's second arg via closure.
+      const compiledAdapter = (() => {
+        try { return getCompiledAdapter(jobUrl); }
+        catch { return null; }
+      })();
+      const submitFlowAdapter = compiledAdapter
+        ? {
+            submit_button: compiledAdapter.flow?.submit_button
+              ? { name_hints: [...(compiledAdapter.flow.submit_button.name_hints || [])] }
+              : undefined,
+            // error_selectors / next_step_selectors land when the YAML
+            // schema extends — defaults from submitFlow.mjs kick in
+            // until then.
+          }
+        : {};
+      const _submitFormImpl = (page) => _submitFormImplBase(page, submitFlowAdapter);
+      const _parseFormErrorsImpl = (page) => _parseFormErrorsImplBase(page, submitFlowAdapter);
+      // Per-fix session re-read: cheap JSON load, avoids closure
+      // mutation hazards from runStep persisting between fix attempts.
+      // [review H4] SnapshotError propagation: the adapter rethrows
+      // hard snapshot codes so submitLoop's catch chain can route
+      // them to a 'snapshot_stale' escalation instead of burning the
+      // remaining attempts on the same dead element.
+      const _fixFieldImpl = async (page, fieldRef, errorRecord) => {
+        const fixSession = await readSession(jobId).catch(() => null);
+        // [review M2] If readSession returned null, the session was
+        // never persisted — surface a structured failure (no escalation,
+        // submitLoop's same-error-twice will halt the loop).
+        return buildFixFieldAdapter(fixSession)(page, fieldRef, errorRecord);
+      };
       const machineDeps = {
         _fillField: nonstandardFillField,
+        _submitForm: _submitFormImpl,
+        _parseFormErrors: _parseFormErrorsImpl,
+        _fixField: _fixFieldImpl,
         ...(deps._machineDeps || {}),
       };
       // Build the field-classifier context. The open-ended (LLM) and
